@@ -4,6 +4,7 @@ import logging
 from typing import Type
 from uuid import UUID
 
+from infra_sys.exceptions import ISDuplicateNames
 from infra_sys.component_models import ComponentWithQuantities
 from infra_sys.time_series_models import (
     SingleTimeSeries,
@@ -30,6 +31,22 @@ class TimeSeriesManager:
 
     def add(self, time_series: TimeSeriesData, components: list[ComponentWithQuantities]) -> None:
         """Store a time series array for one or more components."""
+        ts_type = type(time_series)
+        metadata_type = ts_type.get_time_series_metadata_type()
+        metadata = metadata_type.from_data(time_series)
+        name = time_series.name
+
+        for component in components:
+            if component.has_time_series(name=name, time_series_type=ts_type):
+                msg = f"{component.summary} already has a time series with {ts_type} {name}"
+                raise ISDuplicateNames(msg)
+
+        for component in components:
+            self._storage.add_time_series(time_series)
+            if time_series.uuid not in self._time_series_ref_counts:
+                self._time_series_ref_counts[time_series.uuid] = 0
+            self._time_series_ref_counts[time_series.uuid] += 1
+            component.add_time_series_metadata(metadata)
 
     def get(
         self,
@@ -38,6 +55,8 @@ class TimeSeriesManager:
         time_series_type: Type = SingleTimeSeries,
     ) -> TimeSeriesData:
         """Return a time series array."""
+        metadata = component.get_time_series_metadata(name, time_series_type=time_series_type)
+        return self._storage.get_time_series(metadata.uuid)
 
     def get_by_uuid(self, uuid: UUID) -> TimeSeriesData:
         """Return a time series array."""

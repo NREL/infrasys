@@ -8,13 +8,19 @@ from pydantic import Field, field_serializer
 from typing_extensions import Annotated
 
 from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
-from infra_sys.exceptions import ISOperationNotAllowed, ISComponentNotAttached, ISAlreadyAttached
+from infra_sys.exceptions import (
+    ISNotStored,
+    ISOperationNotAllowed,
+    ISComponentNotAttached,
+    ISAlreadyAttached,
+)
 from infra_sys.models import (
     InfraSysBaseModel,
     InfraSysBaseModelWithIdentifers,
     SerializedTypeInfo,
 )
 from infra_sys.time_series_models import (
+    TimeSeriesMetadata,
     TimeSeriesMetadataUnion,
 )
 
@@ -84,11 +90,34 @@ class ComponentWithQuantities(Component):
     def has_time_series(self, name: str | None = None, time_series_type: Type = None) -> bool:
         """Return True if the component has time series data."""
         for metadata in self.time_series_metadata:
-            if (time_series_type is None or time_series_type == metadata.time_series_type) and (
-                name is None or name == metadata.name
-            ):
+            if (
+                time_series_type is None
+                or time_series_type == metadata.get_time_series_data_type()
+            ) and (name is None or name == metadata.name):
                 return True
         return False
+
+    def add_time_series_metadata(self, metadata: TimeSeriesMetadata):
+        """Add the metadata to the component. Caller must check for duplicates."""
+        self.time_series_metadata.append(metadata)
+        logger.debug("Added time series %s to %s", metadata.summary, self.summary)
+
+    def get_time_series_metadata(
+        self, name: str, time_series_type: Type = None
+    ) -> TimeSeriesMetadata:
+        """Return the time series metadata."""
+        for metadata in self.time_series_metadata:
+            if (
+                time_series_type is None
+                or time_series_type == metadata.get_time_series_data_type()
+            ) and (name is None or name == metadata.name):
+                return metadata
+
+        msg = (
+            f"No time series metadata with {time_series_type=} {name=} is attached to "
+            "{self.summary}"
+        )
+        raise ISNotStored(msg)
 
 
 class SerializedComponentReference(InfraSysBaseModel):

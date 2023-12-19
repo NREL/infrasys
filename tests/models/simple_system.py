@@ -38,6 +38,7 @@ class SimpleGenerator(ComponentWithQuantities):
 
     available: bool
     bus: SimpleBus
+    active_power: float
     rating: float
 
     @classmethod
@@ -46,6 +47,7 @@ class SimpleGenerator(ComponentWithQuantities):
             name="simple-gen",
             available=True,
             bus=SimpleBus.example(),
+            active_power=1.0,
             rating=0.0,
         )
 

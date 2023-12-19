@@ -2,13 +2,16 @@
 
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Literal, Type
+from typing import Iterable, Literal, Optional, Type
 
 import polars as pl
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Annotated
 
 from infra_sys.models import InfraSysBaseModelWithIdentifers
+
+TIME_COLUMN = "timestamp"
+VALUE_COLUMN = "value"
 
 
 class TimeSeriesStorageType(str, Enum):
@@ -30,6 +33,96 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers):
         return f"{self.__class__.__name__}.{self.name}"
 
 
+class SingleTimeSeries(TimeSeriesData):
+    """Defines a time array with a single dimension of floats."""
+
+    resolution: Optional[timedelta] = None
+    initial_time: Optional[datetime] = None
+    length: Optional[int] = None
+    data: pl.DataFrame
+
+    @field_validator("data")
+    @classmethod
+    def check_data(cls, df) -> pl.DataFrame:
+        """Check time series data."""
+        if len(df) < 3:
+            msg = f"SingleTimeSeries length must be at least 2: {len(df)}"
+            raise ValueError(msg)
+
+        if TIME_COLUMN not in df.columns:
+            msg = f"SingleTimeSeries dataframe must have the time column {TIME_COLUMN}"
+            raise ValueError(msg)
+
+        if VALUE_COLUMN not in df.columns:
+            msg = f"SingleTimeSeries dataframe must have the value column {VALUE_COLUMN}"
+            raise ValueError(msg)
+
+        return df
+
+    @model_validator(mode="after")
+    def assign_values(self) -> "SingleTimeSeries":
+        """Assign parameters by inspecting data."""
+        actual_res = self.data[TIME_COLUMN][1] - self.data[TIME_COLUMN][0]
+        actual_len = len(self.data)
+        actual_it = self.data[TIME_COLUMN][0]
+
+        if self.resolution is None:
+            self.resolution = actual_res
+        elif self.resolution != actual_res:
+            msg = f"resolution={self.resolution} does not match data resolution {actual_res}"
+            raise ValueError(msg)
+
+        if self.length is None:
+            self.length = actual_len
+        elif self.length != actual_len:
+            msg = f"length={self.length} does not match data length {actual_len}"
+            raise ValueError(msg)
+
+        if self.initial_time is None:
+            self.initial_time = actual_it
+        elif self.initial_time != actual_it:
+            msg = f"initial_time={self.initial_time} does not match data initial_time {actual_it}"
+            raise ValueError(msg)
+
+        return self
+
+    @classmethod
+    def from_array(
+        cls, data: Iterable, name: str, initial_time: datetime, resolution: timedelta
+    ) -> "SingleTimeSeries":
+        """Create a SingleTimeSeries from an iterable of data. Length is inferred from data."""
+        length = len(data)
+        end_time = initial_time + (length - 1) * resolution
+        df = pl.DataFrame(
+            {
+                TIME_COLUMN: pl.datetime_range(
+                    initial_time, end_time, interval=resolution, eager=True
+                ),
+                VALUE_COLUMN: data,
+            }
+        )
+        return SingleTimeSeries(name=name, data=df)
+
+    @classmethod
+    def from_time_array(
+        cls, df: pl.DataFrame, name: str, time_column=TIME_COLUMN, value_column=VALUE_COLUMN
+    ) -> "SingleTimeSeries":
+        """Create a SingleTimeSeries from a DataFrame with a time column."""
+        data = df.select(
+            pl.col(time_column).alias(TIME_COLUMN), pl.col(value_column).alias(VALUE_COLUMN)
+        )
+        return SingleTimeSeries(name=name, data=data)
+
+    @staticmethod
+    def get_time_series_metadata_type() -> Type:
+        """Return the metadata type associated with this time series type."""
+        return SingleTimeSeriesMetadata
+
+
+# TODO:
+# read CSV and Parquet and convert each column to a SingleTimeSeries
+
+
 class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers):
     """Defines common metadata for all time series."""
 
@@ -44,21 +137,22 @@ class SingleTimeSeriesMetadata(TimeSeriesMetadata):
     length: int
     type: Literal["SingleTimeSeries"] = "SingleTimeSeries"
 
+    @classmethod
+    def from_data(cls, time_series: SingleTimeSeries) -> "SingleTimeSeriesMetadata":
+        """Construct a SingleTimeSeriesMetadata from a SingleTimeSeries."""
+        return cls(
+            name=time_series.name,
+            uuid=time_series.uuid,
+            resolution=time_series.resolution,
+            initial_time=time_series.initial_time,
+            length=time_series.length,
+        )
 
-class SingleTimeSeries(SingleTimeSeriesMetadata):
-    """Defines a time array with a single dimension of floats."""
-
-    data: pl.DataFrame
+    @staticmethod
+    def get_time_series_data_type() -> Type:
+        """Return the data type associated with this metadata type."""
+        return SingleTimeSeries
 
 
 # This needs to be a Union if we add other time series types.
 TimeSeriesMetadataUnion = Annotated[SingleTimeSeriesMetadata, Field(discriminator="type")]
-
-
-def get_time_series_type_from_metadata(metadata: TimeSeriesMetadataUnion) -> Type:
-    """Return the time series type from the metadata."""
-    match metadata.type:
-        case "SingleTimeSeries":
-            return SingleTimeSeries
-        case _:
-            raise NotImplementedError(metadata.type)
