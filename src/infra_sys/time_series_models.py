@@ -104,7 +104,7 @@ class SingleTimeSeries(TimeSeriesData):
         return SingleTimeSeries(name=name, data=df)
 
     @classmethod
-    def from_time_array(
+    def from_dataframe(
         cls, df: pl.DataFrame, name: str, time_column=TIME_COLUMN, value_column=VALUE_COLUMN
     ) -> "SingleTimeSeries":
         """Create a SingleTimeSeries from a DataFrame with a time column."""

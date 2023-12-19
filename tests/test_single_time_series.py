@@ -19,10 +19,10 @@ def test_from_array():
     assert ts.data[VALUE_COLUMN][-1] == length - 1
 
 
-def test_from_time_array(hourly_time_array):
+def test_from_dataframe(hourly_time_array):
     df = hourly_time_array
     name = VALUE_COLUMN
-    ts = SingleTimeSeries.from_time_array(df, name)
+    ts = SingleTimeSeries.from_dataframe(df, name)
     assert ts.length == len(df)
     assert ts.resolution == timedelta(hours=1)
     assert isinstance(ts.data, pl.DataFrame)
