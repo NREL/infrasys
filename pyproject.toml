@@ -1,0 +1,93 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "infra_sys"
+dynamic = ["version"]
+description = ''
+readme = "README.md"
+requires-python = ">=3.10"
+license = "BSD-3-Clause"
+keywords = []
+authors = [
+  { name = "Aadil Latif", email = "aadil.latif@nrel.gov" },
+  { name = "Daniel Thom", email = "daniel.thom@nrel.gov" },
+  { name = "Kapil Duwadi", email = "kapil.duwadi@nrel.gov" },
+  { name = "Pedro Andres Sanchez Perez", email = "pedroandres.sanchezperez@nrel.gov" },
+  { name = "Tarek Elgindy", email = "tarek.elgindy@nrel.gov" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+    "h5py",
+    "numpy",
+    "polars",
+    "pydantic >= 2.4, <= 3",
+]
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[project.urls]
+Documentation = "https://github.nrel.gov/cadet/infra_sys#readme"
+Issues = "https://github.nrel.gov/cadet/infra_sys/issues"
+Source = "https://github.nrel.gov/cadet/infra_sys"
+
+[tool.hatch.version]
+path = "src/infra_sys/__about__.py"
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".venv",
+    "_build",
+    "build",
+    "dist",
+    "venv",
+]
+
+line-length = 99
+indent-width = 4
+
+target-version = "py311"
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+select = [
+    "C901",  # McCabe complexity
+    "E4",  # Subset of pycodestyle (E)
+    "E7",
+    "E9",
+    "F",  # Pyflakes
+    "W",  # pycodestyle warnings
+]
+ignore = []
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
+"**/{tests,docs,tools}/*" = ["E402"]
