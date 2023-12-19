@@ -22,3 +22,13 @@ jobs:
     - name: Run pytest
       run: |
         python -m pytest -v --disable-warnings tests
+  ruff:
+    runs-on: cadet-runners
+    name: "ruff"
+    steps:
+      - uses: davidslusser/actions_python_ruff@v1.0.0
+        with:
+          src: "src"
+          options: "--cov=src"
+          pip_install_command: "pip install -e .[dev]"
+          python_version: "3.11"
