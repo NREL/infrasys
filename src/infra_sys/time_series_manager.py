@@ -68,25 +68,38 @@ class TimeSeriesManager:
         name: str,
         time_series_type=SingleTimeSeries,
     ) -> TimeSeriesData:
-        """Remove a time series array from one or more components."""
-        # TODO: check for components or time series not stored.
+        """Remove all time series arrays matching the inputs.."""
+        uuids = {}
+        for component in components:
+            metadata = component.get_time_series_metadata(name, time_series_type=time_series_type)
+            if metadata.uuid in uuids:
+                uuids[metadata.uuid] += 1
+            else:
+                uuids[metadata.uuid] = 1
 
-        if len(components) > self._time_series_ref_counts:
-            summaries = [x.summary for x in components]
-            msg = (
-                f"Removing time series {name=} {time_series_type=} for {summaries=} "
-                "will decrease the reference counts below 0."
-            )
-            raise Exception(msg)
+        for uuid, count in uuids.items():
+            if uuid not in self._time_series_ref_counts:
+                msg = f"Bug: {uuid=} is not stored in self._time_series_ref_counts"
+                raise Exception(msg)
+            if count > self._time_series_ref_counts[uuid]:
+                msg = (
+                    f"Removing time series {name=} {time_series_type=} {uuid=}"
+                    "will decrease the reference counts below 0."
+                )
+                raise Exception(msg)
 
-        self._time_series_ref_counts -= len(components)
-        if self._time_series_ref_counts == 0:
-            self._storage.remove_time_series(name, time_series_type=time_series_type)
-            logger.info("Removed time series %s.%s", time_series_type, name)
+        for component in components:
+            component.remove_time_series_metadata(name, time_series_type=time_series_type)
+
+        for uuid, count in uuids.items():
+            self._time_series_ref_counts[uuid] -= count
+            if self._time_series_ref_counts == 0:
+                self._storage.remove_time_series(uuid)
+                logger.info("Removed time series %s.%s", time_series_type, name)
 
     def remove_by_uuid(self, uuid: UUID) -> TimeSeriesData:
         """Remove a time series array and return it."""
-        return self._storage.remove_time_series_by_uuid(uuid)
+        return self._storage.remove_time_series(uuid)
 
     def copy(
         self,

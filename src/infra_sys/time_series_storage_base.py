@@ -19,5 +19,9 @@ class TimeSeriesStorageBase(abc.ABC):
         """Return a time series array."""
 
     @abc.abstractmethod
+    def has_time_series(self, uuid: UUID) -> bool:
+        """Return true if the uuid is stored."""
+
+    @abc.abstractmethod
     def remove_time_series(self, uuid: UUID) -> TimeSeriesData:
         """Remove a time series array and return it."""

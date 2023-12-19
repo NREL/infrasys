@@ -32,6 +32,9 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             raise ISNotStored(msg)
         return time_series
 
+    def has_time_series(self, uuid: UUID) -> bool:
+        return uuid in self._arrays
+
     def remove_time_series(self, uuid: UUID) -> TimeSeriesData:
         time_series = self._arrays.pop(uuid, None)
         if time_series is None:

@@ -119,6 +119,28 @@ class ComponentWithQuantities(Component):
         )
         raise ISNotStored(msg)
 
+    def remove_time_series_metadata(
+        self, name: str, time_series_type: Type = None
+    ) -> TimeSeriesMetadata:
+        """Remove and return the time series metadata."""
+        index = None
+        for i, metadata in enumerate(self.time_series_metadata):
+            if (
+                time_series_type is None
+                or time_series_type == metadata.get_time_series_data_type()
+            ) and (name is None or name == metadata.name):
+                index = i
+                break
+
+        if index is None:
+            msg = (
+                f"No time series metadata with {time_series_type=} {name=} is attached to "
+                "{self.summary}"
+            )
+            raise ISNotStored(msg)
+
+        return self.time_series_metadata.pop(index)
+
 
 class SerializedComponentReference(InfraSysBaseModel):
     """Reference information for a component that has been serialized as a UUID within another."""
