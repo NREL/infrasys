@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import Field, field_serializer
 from typing_extensions import Annotated
 
+from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
 from infra_sys.exceptions import ISOperationNotAllowed, ISComponentNotAttached, ISAlreadyAttached
 from infra_sys.models import (
     InfraSysBaseModel,
@@ -62,7 +63,7 @@ class Component(InfraSysBaseModelWithIdentifers):
         kwargs["exclude"] = exclude
         data = self.model_dump(*args, **kwargs)
         data.update(refs)
-        data["__type_info__"] = SerializedTypeInfo(
+        data[TYPE_INFO] = SerializedTypeInfo(
             module=self.__module__, type=self.__class__.__name__
         ).model_dump()
         return data
@@ -93,9 +94,7 @@ class ComponentWithQuantities(Component):
 class SerializedComponentReference(InfraSysBaseModel):
     """Reference information for a component that has been serialized as a UUID within another."""
 
-    composed_type_info: Annotated[
-        Literal[True], Field(default=True, alias="__composed_type_info__")
-    ]
+    composed_type_info: Annotated[Literal[True], Field(default=True, alias=COMPOSED_TYPE_INFO)]
     module: str
     type: str
     uuid: UUID

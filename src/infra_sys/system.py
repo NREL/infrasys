@@ -4,14 +4,15 @@ import importlib
 import json
 import logging
 from pathlib import Path
-from typing import Type
+from typing import Any, Type
 from uuid import UUID, uuid4
 
+from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
 from infra_sys.exceptions import (
     ISFileExists,
     ISConflictingSystem,
 )
-from infra_sys.models import SerializedTypeInfo
+from infra_sys.models import SerializedTypeInfo, make_summary
 from infra_sys.component_models import (
     Component,
     SerializedComponentReference,
@@ -63,68 +64,70 @@ class System:
 
         # TODO: where is the upgrade path handled? parent package?
         sys = cls(name=data.get("name"), uuid=UUID(data["uuid"]))
+        sys.deserialize_components(data["components"])
         # TODO: time series storage
-        components = data["components"]
+        logger.info("Deserialized system %s", sys.summary)
+        return sys
+
+    def deserialize_components(self, components: list[dict[str, Any]]) -> None:
+        """Deserialize components from dictionaries and add them to the system."""
         remaining_component_indexes = list(range(len(components)))
         cached_types = _CachedTypeHelper()
-
-        # TODO: refactor - too messy and complicated
         max_iterations = len(components)
+
         for _ in range(max_iterations):
             deserialized_types_this_round = set()
             for i in range(len(remaining_component_indexes), 0, -1):
                 index = i - 1
-                component = components[remaining_component_indexes[index]]
-                logger.debug("try to deserialize %s", component)  # TODO
-                values = {}
-                can_be_deserialized = True
-                for field, value in component.items():
-                    if isinstance(value, dict) and "__composed_type_info__" in value:
-                        # TODO: private var
-                        composed_value = sys._deserialize_composed_value(value, cached_types)
-                        if composed_value is None:
-                            logger.debug("cannot deserialize %s yet", component)  # TODO
-                            can_be_deserialized = False
-                            break
-                        values[field] = composed_value
-                    elif (
-                        isinstance(value, list) and value and "__composed_type_info__" in value[0]
-                    ):
-                        # TODO: private var
-                        composed_values = sys._deserialize_composed_list(value, cached_types)
-                        if composed_values is None:
-                            logger.debug("cannot deserialize %s yet", composed_values)  # TODO
-                            can_be_deserialized = False
-                            break
-                        values[field] = composed_values
-                    elif field != "__type_info__":
-                        values[field] = value
-                if can_be_deserialized:
-                    component_type = cached_types.get_type(
-                        SerializedTypeInfo(**component["__type_info__"])
-                    )
-                    logger.debug("Add component %s", component_type)
-                    system_uuid = values.pop("system_uuid")
-                    if str(sys.uuid) != system_uuid:
-                        msg = (
-                            "component has a system_uuid that conflicts with the system: "
-                            f"{values} component's system_uuid={system_uuid} system={sys.uuid}"
-                        )
-                        raise ISConflictingSystem(msg)
-                    sys.components.add(component_type(**values))
+                component_dict = components[remaining_component_indexes[index]]
+                component = self._try_deserialize_component(component_dict, cached_types)
+                if component is not None:
                     remaining_component_indexes.pop(index)
-                    deserialized_types_this_round.add(component_type)
+                    deserialized_types_this_round.add(type(component))
 
             cached_types.add_deserialized_types(deserialized_types_this_round)
             if not remaining_component_indexes:
-                logger.info("Deserialized system %s", sys.name)
                 break
 
         if remaining_component_indexes:
             msg = f"Bug: Failed to deserialize these indexes: {remaining_component_indexes}"
             raise Exception(msg)
 
-        return sys
+    def _try_deserialize_component(
+        self, component: dict, cached_types: "_CachedTypeHelper"
+    ) -> Component | None:
+        values = {}
+        can_be_deserialized = True
+        for field, value in component.items():
+            if isinstance(value, dict) and COMPOSED_TYPE_INFO in value:
+                composed_value = self._deserialize_composed_value(value, cached_types)
+                if composed_value is None:
+                    can_be_deserialized = False
+                    break
+                values[field] = composed_value
+            elif isinstance(value, list) and value and COMPOSED_TYPE_INFO in value[0]:
+                composed_values = self._deserialize_composed_list(value, cached_types)
+                if composed_values is None:
+                    can_be_deserialized = False
+                    break
+                values[field] = composed_values
+            elif field != TYPE_INFO:
+                values[field] = value
+
+        actual_component = None
+        if can_be_deserialized:
+            component_type = cached_types.get_type(SerializedTypeInfo(**component[TYPE_INFO]))
+            system_uuid = values.pop("system_uuid")
+            if str(self.uuid) != system_uuid:
+                msg = (
+                    "component has a system_uuid that conflicts with the system: "
+                    f"{values} component's system_uuid={system_uuid} system={self.uuid}"
+                )
+                raise ISConflictingSystem(msg)
+            actual_component = component_type(**values)
+            self.components.add(actual_component)
+
+        return actual_component
 
     def _deserialize_composed_value(self, value: dict, cached_types) -> Component | None:
         ref = SerializedComponentReference(**value)
@@ -155,6 +158,12 @@ class System:
     def components(self) -> TimeSeriesManager:
         """Return the component manager."""
         return self._component_mgr
+
+    @property
+    def summary(self) -> str:
+        """Provides a description of the system."""
+        name = self.name or str(self.uuid)
+        return make_summary(self.__class__.__name__, name)
 
     @property
     def time_series(self) -> TimeSeriesManager:

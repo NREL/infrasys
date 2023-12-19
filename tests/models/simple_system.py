@@ -7,7 +7,6 @@ from infra_sys.component_models import (
     ComponentWithQuantities,
 )
 from infra_sys.geography_coordinates import GeographyCoordinates
-from infra_sys.models import make_model_config
 from infra_sys.system import System
 
 
