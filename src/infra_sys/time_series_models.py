@@ -27,7 +27,6 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers):
     @property
     def summary(self) -> str:
         """Return the name of the time series array with its type."""
-        # TODO: Does this include package name?
         return f"{self.__class__.__name__}.{self.name}"
 
 

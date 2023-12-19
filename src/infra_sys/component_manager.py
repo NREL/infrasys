@@ -83,7 +83,7 @@ class ComponentManager:
         """
         return list(self.iter(component_type, filter_func=filter_func))
 
-    def list_components_by_name(self, component_type: Type, name: str):
+    def list_by_name(self, component_type: Type, name: str):
         """Return all components that match the inputs."""
         raise NotImplementedError("list_components_by_name")
 

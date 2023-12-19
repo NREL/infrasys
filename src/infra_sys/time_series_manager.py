@@ -28,12 +28,10 @@ class TimeSeriesManager:
         # TODO: create parsing mechanism? CSV, CSV + JSON
         # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
-    def add_time_series(
-        self, time_series: TimeSeriesData, components: list[ComponentWithQuantities]
-    ) -> None:
+    def add(self, time_series: TimeSeriesData, components: list[ComponentWithQuantities]) -> None:
         """Store a time series array for one or more components."""
 
-    def get_time_series(
+    def get(
         self,
         component: ComponentWithQuantities,
         name: str,
@@ -41,11 +39,11 @@ class TimeSeriesManager:
     ) -> TimeSeriesData:
         """Return a time series array."""
 
-    def get_time_series_by_uuid(self, uuid: UUID) -> TimeSeriesData:
+    def get_by_uuid(self, uuid: UUID) -> TimeSeriesData:
         """Return a time series array."""
         return self._storage.get_time_series_by_uuid(uuid)
 
-    def remove_time_series(
+    def remove(
         self,
         components: list[ComponentWithQuantities],
         name: str,
@@ -67,11 +65,11 @@ class TimeSeriesManager:
             self._storage.remove_time_series(name, time_series_type=time_series_type)
             logger.info("Removed time series %s.%s", time_series_type, name)
 
-    def remove_time_series_by_uuid(self, uuid: UUID) -> TimeSeriesData:
+    def remove_by_uuid(self, uuid: UUID) -> TimeSeriesData:
         """Remove a time series array and return it."""
         return self._storage.remove_time_series_by_uuid(uuid)
 
-    def copy_time_series(
+    def copy(
         self,
         dst: ComponentWithQuantities,
         src: ComponentWithQuantities,
@@ -90,12 +88,10 @@ class TimeSeriesManager:
             copied with src's names.
         """
 
-    def iter_time_series_metadata(self, time_series_type: None | Type = None):
+    def iter_metadata(self, time_series_type: None | Type = None):
         """Return an iterator over all time series metadata."""
         raise NotImplementedError("iter_time_series_metadata")
 
-    def list_time_series_metadata(
-        self, time_series_type: None | Type = None
-    ) -> list[TimeSeriesData]:
+    def list_metadata(self, time_series_type: None | Type = None) -> list[TimeSeriesData]:
         """Return a list of all time series metadata."""
-        return list(self.iter_time_series_metadata(time_series_type=time_series_type))
+        return list(self.iter_metadata(time_series_type=time_series_type))
