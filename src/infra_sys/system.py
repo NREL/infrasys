@@ -249,6 +249,10 @@ class System:
                     can_be_deserialized = False
                     break
                 values[field] = composed_values
+            elif isinstance(value, dict) and TYPE_INFO in value:
+                values[field] = cached_types.get_type(
+                    SerializedTypeInfo(**value[TYPE_INFO])
+                ).from_dict(value)
             elif field != TYPE_INFO:
                 values[field] = value
 

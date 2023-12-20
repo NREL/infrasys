@@ -30,6 +30,7 @@ dependencies = [
     "h5py",
     "numpy",
     "polars",
+    "pint",
     "pydantic >= 2.4, <= 3",
 ]
 [project.optional-dependencies]

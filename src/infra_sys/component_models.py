@@ -3,6 +3,7 @@
 import logging
 from typing import Any, Literal, Type
 from uuid import UUID
+from infra_sys.base_quantity import BaseQuantity
 
 from pydantic import Field, field_serializer
 from typing_extensions import Annotated
@@ -53,6 +54,7 @@ class Component(InfraSysBaseModelWithIdentifers):
 
     def model_dump_custom(self, *args, **kwargs):
         """Custom serialization for this package"""
+
         refs = {}
         for field in self.model_fields:
             val = getattr(self, field)
@@ -60,6 +62,8 @@ class Component(InfraSysBaseModelWithIdentifers):
                 refs[field] = serialize_component_reference(val)
             elif isinstance(val, list) and val and isinstance(val[0], Component):
                 refs[field] = [serialize_component_reference(x) for x in val]
+            elif isinstance(val, BaseQuantity):
+                refs[field] = val.to_dict()
             # TODO: other composite types may need handling.
             # Parent packages can always implement a field_serializer themselves.
 
@@ -157,7 +161,10 @@ class SerializedComponentReference(InfraSysBaseModel):
 def raise_if_attached(component: Component):
     """Raise an exception if this component is attached to a system."""
     if component.system_uuid is not None:
-        msg = f"{component.summary} is attached to system %s", component.system_uuid
+        msg = (
+            f"{component.summary} is attached to system %s",
+            component.system_uuid,
+        )
         raise ISAlreadyAttached(msg)
 
 
