@@ -5,15 +5,8 @@ import logging
 from typing import Callable, Iterable, Type
 from uuid import UUID
 
-from infra_sys.exceptions import (
-    ISAlreadyAttached,
-    ISNotStored,
-)
-from infra_sys.component_models import (
-    Component,
-    raise_if_attached,
-)
-from infra_sys.exceptions import ISOperationNotAllowed
+from infra_sys.component_models import Component, raise_if_attached
+from infra_sys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infra_sys.models import make_summary
 
 logger = logging.getLogger(__name__)
@@ -152,6 +145,13 @@ class ComponentManager:
     def change_uuid(self, component_type: Type, component: Component) -> None:
         """Change the component UUID."""
         raise NotImplementedError("change_component_uuid")
+
+    def update(self, component_type: Type, update_func: Callable, filter_func=None) -> None:
+        """Update multiple components of a given type."""
+
+        for component in self.iter(component_type, filter_func=filter_func):
+            update_func(component, update_func=update_func)
+        return
 
     def _add(self, component: Component) -> None:
         raise_if_attached(component)

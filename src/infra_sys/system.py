@@ -47,6 +47,7 @@ class System:
         self.add_component = self._component_mgr.add
         self.add_components = self._component_mgr.add
         self.get_component = self._component_mgr.get
+        self.update_components = self._component_mgr.update
         self.change_component_name = self._component_mgr.change_name
         self.change_component_uuid = self._component_mgr.change_uuid
         self.get_component_by_uuid = self._component_mgr.get_by_uuid
