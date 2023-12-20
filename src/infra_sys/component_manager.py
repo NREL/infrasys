@@ -1,5 +1,6 @@
 """Manages components"""
 
+import itertools
 import logging
 from typing import Callable, Iterable, Type
 from uuid import UUID
@@ -7,7 +8,6 @@ from uuid import UUID
 from infra_sys.exceptions import (
     ISAlreadyAttached,
     ISNotStored,
-    ISComponentNotAttached,
 )
 from infra_sys.component_models import (
     Component,
@@ -48,7 +48,7 @@ class ComponentManager:
 
         See Also
         --------
-        list_components_by_name
+        list_by_name
         """
         if component_type not in self._components or name not in self._components[component_type]:
             summary = make_summary(str(component_type), name)
@@ -59,7 +59,7 @@ class ComponentManager:
         if len(components) > 1:
             msg = (
                 f"There is more than one {component_type} with {name=}. Please use "
-                "list_components_by_name instead."
+                "list_by_name instead."
             )
             raise ISOperationNotAllowed(msg)
 
@@ -72,11 +72,29 @@ class ComponentManager:
 
         IF component_type is an abstract type, all matching subtypes will be returned.
         """
-        raise NotImplementedError("get_components")
+        yield from self._iter(component_type, filter_func)
+
+    def _iter(self, component_type: Type, filter_func: Callable | None) -> Iterable[Component]:
+        subclasses = component_type.__subclasses__()
+        if subclasses:
+            for subclass in subclasses:
+                # Recurse.
+                yield from self._iter(subclass, filter_func)
+        else:
+            if component_type in self._components:
+                if filter_func is None:
+                    yield from itertools.chain(*self._components[component_type].values())
+                else:
+                    for component in itertools.chain(*self._components[component_type].values()):
+                        if filter_func(component):
+                            yield component
 
     def list_by_name(self, component_type: Type, name: str):
-        """Return all components that match the inputs."""
-        raise NotImplementedError("list_components_by_name")
+        """Return all components that match component_type and name.
+
+        The component_type can be an abstract type.
+        """
+        return self.iter(component_type, filter_func=lambda x: x.name == name)
 
     def get_by_uuid(self, uuid: UUID) -> Component:
         """Return the component with the input UUID.
@@ -89,7 +107,7 @@ class ComponentManager:
         component = self._components_by_uuid.get(uuid)
         if component is None:
             msg = f"No component with {uuid=} is stored"
-            raise ISComponentNotAttached(msg)
+            raise ISNotStored(msg)
         return component
 
     def iter_all(self) -> Iterable[Component]:

@@ -11,7 +11,6 @@ from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
 from infra_sys.exceptions import (
     ISNotStored,
     ISOperationNotAllowed,
-    ISComponentNotAttached,
     ISAlreadyAttached,
 )
 from infra_sys.models import (
@@ -172,7 +171,7 @@ def raise_if_not_attached(component: Component, system_uuid: UUID):
     """
     if component.system_uuid is None or component.system_uuid != system_uuid:
         msg = f"{component.summary} is not attached to the system"
-        raise ISComponentNotAttached(msg)
+        raise ISNotStored(msg)
 
 
 def serialize_component_reference(component: Component) -> dict[str, Any]:

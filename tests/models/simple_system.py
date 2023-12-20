@@ -33,11 +33,16 @@ class SimpleBus(ComponentWithQuantities):
         )
 
 
-class SimpleGenerator(ComponentWithQuantities):
-    """Represents a generator."""
+class GeneratorBase(ComponentWithQuantities):
+    """Base class for generators"""
 
     available: bool
     bus: SimpleBus
+
+
+class SimpleGenerator(GeneratorBase):
+    """Represents a generator."""
+
     active_power: float
     rating: float
 
@@ -45,6 +50,23 @@ class SimpleGenerator(ComponentWithQuantities):
     def example(cls) -> "SimpleGenerator":
         return SimpleGenerator(
             name="simple-gen",
+            available=True,
+            bus=SimpleBus.example(),
+            active_power=1.0,
+            rating=0.0,
+        )
+
+
+class RenewableGenerator(GeneratorBase):
+    """Represents a generator."""
+
+    active_power: float
+    rating: float
+
+    @classmethod
+    def example(cls) -> "RenewableGenerator":
+        return RenewableGenerator(
+            name="renewable-gen",
             available=True,
             bus=SimpleBus.example(),
             active_power=1.0,

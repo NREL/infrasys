@@ -9,10 +9,6 @@ class ISAlreadyAttached(ISBaseException):
     """Raised if the component is already attached to a system."""
 
 
-class ISComponentNotAttached(ISBaseException):
-    """Raised if the component is not attached to the system."""
-
-
 class ISDuplicateNames(ISBaseException):
     """Raised if the components with duplicate type and name are stored."""
 
