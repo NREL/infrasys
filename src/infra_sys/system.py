@@ -90,9 +90,9 @@ class System:
         if data is None:
             data = system_data
         else:
-            if "system_key" not in data:
-                raise ISConflictingArguments("data was passed but 'system_key' is not present")
-            data[data["system_key"]] = system_data
+            if "system" in data:
+                raise ISConflictingArguments("data contains the key 'system'")
+            data["system"] = system_data
         with open(filename, "w", encoding="utf-8") as f_out:
             json.dump(data, f_out, indent=indent)
 
@@ -106,7 +106,7 @@ class System:
     @classmethod
     def from_dict(cls, data: dict[str, Any], upgrade_handler=None) -> "System":
         """Deserialize a System from a dictionary."""
-        system_data = data if "system_key" not in data else data["system_key"]
+        system_data = data if "system" not in data else data["system"]
         system = cls(name=system_data.get("name"), uuid=UUID(system_data["uuid"]))
         if system_data.get("data_format_version") != system.data_format_version:
             # This handles the case where the parent package inherited from System.
@@ -146,6 +146,7 @@ class System:
         raise NotImplementedError("merge_system")
 
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
+
     @property
     def components(self) -> TimeSeriesManager:
         """Return the component manager."""
