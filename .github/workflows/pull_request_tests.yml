@@ -3,7 +3,7 @@ name: Pytest
 on: pull_request
 
 jobs:
-  build:
+  test:
     runs-on: cadet-runners
     strategy:
       matrix:
