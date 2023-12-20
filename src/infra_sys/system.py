@@ -3,6 +3,7 @@
 import importlib
 import json
 import logging
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Type
 from uuid import UUID, uuid4
@@ -71,26 +72,49 @@ class System:
 
     def deserialize_components(self, components: list[dict[str, Any]]) -> None:
         """Deserialize components from dictionaries and add them to the system."""
-        remaining_component_indexes = list(range(len(components)))
         cached_types = _CachedTypeHelper()
-        max_iterations = len(components)
+        skipped_types = self._deserialize_components_first_pass(components, cached_types)
+        if skipped_types:
+            self._deserialize_components_nested(skipped_types, cached_types)
 
+    def _deserialize_components_first_pass(
+        self, components: list[dict], cached_types: "_CachedTypeHelper"
+    ) -> dict:
+        deserialized_types = set()
+        skipped_types = defaultdict(list)
+        for component_dict in components:
+            component = self._try_deserialize_component(component_dict, cached_types)
+            if component is None:
+                component_type = cached_types.get_type(
+                    SerializedTypeInfo(**component_dict[TYPE_INFO])
+                )
+                skipped_types[component_type].append(component_dict)
+            else:
+                deserialized_types.add(type(component))
+
+        cached_types.add_deserialized_types(deserialized_types)
+        return skipped_types
+
+    def _deserialize_components_nested(self, skipped_types, cached_types):
+        max_iterations = len(skipped_types)
         for _ in range(max_iterations):
-            deserialized_types_this_round = set()
-            for i in range(len(remaining_component_indexes), 0, -1):
-                index = i - 1
-                component_dict = components[remaining_component_indexes[index]]
-                component = self._try_deserialize_component(component_dict, cached_types)
-                if component is not None:
-                    remaining_component_indexes.pop(index)
-                    deserialized_types_this_round.add(type(component))
+            deserialized_types = set()
+            for component_type, components in skipped_types.items():
+                component = self._try_deserialize_component(components[0], cached_types)
+                if component is None:
+                    continue
+                if len(components) > 1:
+                    for component_dict in components[1:]:
+                        component = self._try_deserialize_component(component_dict, cached_types)
+                        assert component is not None
+                deserialized_types.add(component_type)
 
-            cached_types.add_deserialized_types(deserialized_types_this_round)
-            if not remaining_component_indexes:
-                break
+            for component_type in deserialized_types:
+                skipped_types.pop(component_type)
+            cached_types.add_deserialized_types(deserialized_types)
 
-        if remaining_component_indexes:
-            msg = f"Bug: Failed to deserialize these indexes: {remaining_component_indexes}"
+        if skipped_types:
+            msg = f"Bug: still have types remaining to be deserialized: {skipped_types.keys()}"
             raise Exception(msg)
 
     def _try_deserialize_component(
