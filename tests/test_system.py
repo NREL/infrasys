@@ -32,7 +32,7 @@ def test_in_memory_time_series(hourly_time_array):
     bus = SimpleBus(name="test-bus", voltage=1.1)
     gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
     gen2 = SimpleGenerator(name="gen2", active_power=1.0, rating=1.0, bus=bus, available=True)
-    sys.components.add(bus, gen1, gen2)
+    sys.add_components(bus, gen1, gen2)
 
     name = "active_power"
     df = hourly_time_array

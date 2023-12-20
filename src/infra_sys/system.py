@@ -38,6 +38,29 @@ class System:
         self._name = name
         self._component_mgr = ComponentManager(self._uuid)
         self._time_series_mgr = TimeSeriesManager(storage=time_series_storage)
+
+        # Delegate to the component and time series managers to allow user access directly
+        # from the system.
+        self.get_components = self._component_mgr.iter
+        self.add_component = self._component_mgr.add
+        self.add_components = self._component_mgr.add
+        self.get_component = self._component_mgr.get
+        self.change_component_name = self._component_mgr.change_name
+        self.change_component_uuid = self._component_mgr.change_uuid
+        self.get_component_by_uuid = self._component_mgr.get_by_uuid
+        self.get_components = self._component_mgr.iter
+        self.iter_all_components = self._component_mgr.iter_all
+        self.list_components_by_name = self._component_mgr.list_by_name
+        self.remove_component = self._component_mgr.remove
+        self.remove_component_by_name = self._component_mgr.remove_by_name
+        self.remove_component_by_uuid = self._component_mgr.remove_by_uuid
+        self.add_time_series = self._time_series_mgr.add
+        self.get_time_series = self._time_series_mgr.get
+        self.get_time_series_by_uuid = self._time_series_mgr.get_by_uuid
+        self.remove_time_series = self._time_series_mgr.remove
+        self.remove_time_series_by_uuid = self._time_series_mgr.remove_by_uuid
+        self.copy_time_series = self._time_series_mgr.copy
+
         # TODO: add pretty printing of components and time series
 
     def to_json(self, filename: Path, overwrite=False, indent=None) -> None:
@@ -62,15 +85,19 @@ class System:
         """Deserialize a System from a JSON file."""
         with open(filename, encoding="utf-8") as f_in:
             data = json.load(f_in)
+        return cls.from_dict(data)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "System":
+        """Deserialize a System from a dictionary."""
         # TODO: where is the upgrade path handled? parent package?
         sys = cls(name=data.get("name"), uuid=UUID(data["uuid"]))
-        sys.deserialize_components(data["components"])
+        sys._deserialize_components(data["components"])
         # TODO: time series storage
         logger.info("Deserialized system %s", sys.summary)
         return sys
 
-    def deserialize_components(self, components: list[dict[str, Any]]) -> None:
+    def _deserialize_components(self, components: list[dict[str, Any]]) -> None:
         """Deserialize components from dictionaries and add them to the system."""
         cached_types = _CachedTypeHelper()
         skipped_types = self._deserialize_components_first_pass(components, cached_types)
@@ -95,7 +122,9 @@ class System:
         cached_types.add_deserialized_types(deserialized_types)
         return skipped_types
 
-    def _deserialize_components_nested(self, skipped_types, cached_types):
+    def _deserialize_components_nested(
+        self, skipped_types: dict[Type, list[dict[str, Any]]], cached_types: "_CachedTypeHelper"
+    ):
         max_iterations = len(skipped_types)
         for _ in range(max_iterations):
             deserialized_types = set()

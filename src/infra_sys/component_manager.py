@@ -74,15 +74,6 @@ class ComponentManager:
         """
         raise NotImplementedError("get_components")
 
-    def list_components(
-        self, component_type: Type, filter_func: Callable | None = None
-    ) -> list[Component]:
-        """Return the components with the passed type and optionally match filter_func.
-
-        IF component_type is an abstract type, all matching subtypes will be returned.
-        """
-        return list(self.iter(component_type, filter_func=filter_func))
-
     def list_by_name(self, component_type: Type, name: str):
         """Return all components that match the inputs."""
         raise NotImplementedError("list_components_by_name")
