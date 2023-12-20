@@ -38,6 +38,7 @@ class System:
         self._name = name
         self._component_mgr = ComponentManager(self._uuid)
         self._time_series_mgr = TimeSeriesManager(storage=time_series_storage)
+        self._data_format_version = None
 
         # Delegate to the component and time series managers to allow user access directly
         # from the system.
@@ -77,6 +78,7 @@ class System:
         data = {
             "name": self.name,
             "uuid": str(self.uuid),
+            "data_format_version": self.data_format_version,
             "components": [x.model_dump_custom() for x in self.components.iter_all()],
         }
         with open(filename, "w", encoding="utf-8") as f_out:
@@ -92,12 +94,25 @@ class System:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "System":
         """Deserialize a System from a dictionary."""
-        # TODO: where is the upgrade path handled? parent package?
         sys = cls(name=data.get("name"), uuid=UUID(data["uuid"]))
+        if data.get("data_format_version") != sys.data_format_version:
+            sys.handle_data_format_upgrade(
+                data, data.get("data_format_version"), sys.data_format_version
+            )
+        sys.deserialize_system_attributes(data)
         sys._deserialize_components(data["components"])
         # TODO: time series storage
         logger.info("Deserialized system %s", sys.summary)
         return sys
+
+    def deserialize_system_attributes(self, data: dict[str, Any]) -> None:
+        """Allows subclasses to deserialize attributes stored in the JSON at the root level."""
+
+    def handle_data_format_upgrade(self, data: dict[str, Any], from_version, to_version) -> None:
+        """Allows subclasses to upgrade data models.
+
+        The parameter data contains the full contents of the serialized JSON file.
+        """
 
     def _deserialize_components(self, components: list[dict[str, Any]]) -> None:
         """Deserialize components from dictionaries and add them to the system."""
@@ -224,6 +239,16 @@ class System:
     def time_series(self) -> TimeSeriesManager:
         """Return the time series manager."""
         return self._time_series_mgr
+
+    @property
+    def data_format_version(self) -> str:
+        """Return the data format version of the component models."""
+        return self._data_format_version
+
+    @data_format_version.setter
+    def data_format_version(self, data_format_version: str) -> None:
+        """Set the data format version for the component models."""
+        self._data_format_version = data_format_version
 
     @property
     def uuid(self):
