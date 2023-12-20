@@ -5,11 +5,11 @@ from datetime import datetime, timedelta
 import polars as pl
 import pytest
 
+sys.path.append(os.path.join(os.path.dirname(__file__), "models"))
+
 from infra_sys.geo_location import GeoLocation
 from simple_system import SimpleSystem, SimpleBus, SimpleGenerator, SimpleSubsystem
 from infra_sys.time_series_models import TIME_COLUMN, VALUE_COLUMN
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "models"))
 
 
 @pytest.fixture
