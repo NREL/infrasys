@@ -63,12 +63,14 @@ class System:
 
         # TODO: add pretty printing of components and time series
 
-    def to_json(self, filename: Path, overwrite=False, indent=None) -> None:
+    def to_json(self, filename: Path | str, overwrite=False, indent=None) -> None:
         """Write the contents of a system to a JSON file."""
         # TODO: this likely needs to receive more information from the parent class.
         # It will have its own attributes and a data format version. It might be better for
         # this to return a dict back to the parent.
         # TODO: how to get all python package info from environment?
+        if isinstance(filename, str):
+            filename = Path(filename)
         if filename.exists() and not overwrite:
             msg = f"{filename=} already exists. Choose a different path or set overwrite=True."
             raise ISFileExists(msg)
@@ -81,7 +83,7 @@ class System:
             json.dump(data, f_out, indent=indent)
 
     @classmethod
-    def from_json(cls, filename: Path) -> "System":
+    def from_json(cls, filename: Path | str) -> "System":
         """Deserialize a System from a JSON file."""
         with open(filename, encoding="utf-8") as f_in:
             data = json.load(f_in)
