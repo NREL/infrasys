@@ -1,5 +1,6 @@
 """Defines models that can be used for testing the package."""
 
+from typing import Any
 from uuid import UUID
 
 from infra_sys.exceptions import ISOperationNotAllowed
@@ -89,3 +90,14 @@ class SimpleSubsystem(ComponentWithQuantities):
 
 class SimpleSystem(System):
     """System used for testing"""
+
+    def __init__(self, my_attr=5, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.data_format_version = "1.0.3"
+        self.my_attr = my_attr
+
+    def serialize_system_attributes(self) -> dict[str, Any]:
+        return {"my_attr": self.my_attr}
+
+    def deserialize_system_attributes(self, data: dict[str, Any]) -> None:
+        self.my_attr = data["my_attr"]

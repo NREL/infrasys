@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
 from infra_sys.exceptions import (
     ISFileExists,
+    ISConflictingArguments,
     ISConflictingSystem,
 )
 from infra_sys.models import SerializedTypeInfo, make_summary
@@ -64,55 +65,122 @@ class System:
 
         # TODO: add pretty printing of components and time series
 
-    def to_json(self, filename: Path | str, overwrite=False, indent=None) -> None:
+    def to_json(self, filename: Path | str, overwrite=False, indent=None, data=None) -> None:
         """Write the contents of a system to a JSON file."""
-        # TODO: this likely needs to receive more information from the parent class.
-        # It will have its own attributes and a data format version. It might be better for
-        # this to return a dict back to the parent.
         # TODO: how to get all python package info from environment?
         if isinstance(filename, str):
             filename = Path(filename)
         if filename.exists() and not overwrite:
             msg = f"{filename=} already exists. Choose a different path or set overwrite=True."
             raise ISFileExists(msg)
-        data = {
+
+        system_data = {
             "name": self.name,
             "uuid": str(self.uuid),
             "data_format_version": self.data_format_version,
             "components": [x.model_dump_custom() for x in self.components.iter_all()],
         }
+        extra = self.serialize_system_attributes()
+        intersection = set(extra).intersection(system_data)
+        if intersection:
+            msg = f"Extra attributes from parent class collide with System: {intersection}"
+            raise ISConflictingArguments(msg)
+        system_data.update(extra)
+
+        if data is None:
+            data = system_data
+        else:
+            if "system_key" not in data:
+                raise ISConflictingArguments("data was passed but 'system_key' is not present")
+            data[data["system_key"]] = system_data
         with open(filename, "w", encoding="utf-8") as f_out:
             json.dump(data, f_out, indent=indent)
 
     @classmethod
-    def from_json(cls, filename: Path | str) -> "System":
+    def from_json(cls, filename: Path | str, upgrade_handler=None) -> "System":
         """Deserialize a System from a JSON file."""
         with open(filename, encoding="utf-8") as f_in:
             data = json.load(f_in)
-        return cls.from_dict(data)
+        return cls.from_dict(data, upgrade_handler=upgrade_handler)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "System":
+    def from_dict(cls, data: dict[str, Any], upgrade_handler=None) -> "System":
         """Deserialize a System from a dictionary."""
-        sys = cls(name=data.get("name"), uuid=UUID(data["uuid"]))
-        if data.get("data_format_version") != sys.data_format_version:
-            sys.handle_data_format_upgrade(
-                data, data.get("data_format_version"), sys.data_format_version
+        system_data = data if "system_key" not in data else data["system_key"]
+        system = cls(name=system_data.get("name"), uuid=UUID(system_data["uuid"]))
+        if system_data.get("data_format_version") != system.data_format_version:
+            # This handles the case where the parent package inherited from System.
+            system.handle_data_format_upgrade(
+                system_data, system_data.get("data_format_version"), system.data_format_version
             )
-        sys.deserialize_system_attributes(data)
-        sys._deserialize_components(data["components"])
+            # This handles the case where the parent package composes an instance of System.
+            if upgrade_handler is not None:
+                upgrade_handler(
+                    system_data, system_data.get("data_format_version"), system.data_format_version
+                )
+        system.deserialize_system_attributes(system_data)
+        system._deserialize_components(system_data["components"])
         # TODO: time series storage
-        logger.info("Deserialized system %s", sys.summary)
-        return sys
+        logger.info("Deserialized system %s", system.summary)
+        return system
+
+    def serialize_system_attributes(self) -> dict[str, Any]:
+        """Allows subclasses to serialize attributes at the root level."""
+        return {}
 
     def deserialize_system_attributes(self, data: dict[str, Any]) -> None:
-        """Allows subclasses to deserialize attributes stored in the JSON at the root level."""
+        """Allows subclasses to deserialize attributes stored in the JSON at the root level.
+
+        The method should modify self with its custom attributes in data.
+        """
 
     def handle_data_format_upgrade(self, data: dict[str, Any], from_version, to_version) -> None:
         """Allows subclasses to upgrade data models.
 
         The parameter data contains the full contents of the serialized JSON file.
+        The method should modify the data models in-place.
         """
+
+    def merge_system(self, other: "System") -> None:
+        """Merge the contents of another system into this one."""
+        raise NotImplementedError("merge_system")
+
+    # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
+    @property
+    def components(self) -> TimeSeriesManager:
+        """Return the component manager."""
+        return self._component_mgr
+
+    @property
+    def data_format_version(self) -> str | None:
+        """Return the data format version of the component models."""
+        return self._data_format_version
+
+    @data_format_version.setter
+    def data_format_version(self, data_format_version: str) -> None:
+        """Set the data format version for the component models."""
+        self._data_format_version = data_format_version
+
+    @property
+    def name(self):
+        """Return the name of the system."""
+        return self._name
+
+    @property
+    def summary(self) -> str:
+        """Provides a description of the system."""
+        name = self.name or str(self.uuid)
+        return make_summary(self.__class__.__name__, name)
+
+    @property
+    def time_series(self) -> TimeSeriesManager:
+        """Return the time series manager."""
+        return self._time_series_mgr
+
+    @property
+    def uuid(self):
+        """Return the UUID of the system."""
+        return self._uuid
 
     def _deserialize_components(self, components: list[dict[str, Any]]) -> None:
         """Deserialize components from dictionaries and add them to the system."""
@@ -218,48 +286,6 @@ class System:
             else:
                 return None
         return deserialized_components
-
-    @property
-    def name(self):
-        """Return the name of the system."""
-        return self._name
-
-    @property
-    def components(self) -> TimeSeriesManager:
-        """Return the component manager."""
-        return self._component_mgr
-
-    @property
-    def summary(self) -> str:
-        """Provides a description of the system."""
-        name = self.name or str(self.uuid)
-        return make_summary(self.__class__.__name__, name)
-
-    @property
-    def time_series(self) -> TimeSeriesManager:
-        """Return the time series manager."""
-        return self._time_series_mgr
-
-    @property
-    def data_format_version(self) -> str:
-        """Return the data format version of the component models."""
-        return self._data_format_version
-
-    @data_format_version.setter
-    def data_format_version(self, data_format_version: str) -> None:
-        """Set the data format version for the component models."""
-        self._data_format_version = data_format_version
-
-    @property
-    def uuid(self):
-        """Return the UUID of the system."""
-        return self._uuid
-
-    def merge_system(self, other: "System") -> None:
-        """Merge the contents of another system into this one."""
-        raise NotImplementedError("merge_system")
-
-    # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
 
 class _CachedTypeHelper:

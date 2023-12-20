@@ -17,6 +17,10 @@ class ISFileExists(ISBaseException):
     """Raised if the file already exists."""
 
 
+class ISConflictingArguments(ISBaseException):
+    """Raised if the arguments are conflict."""
+
+
 class ISConflictingSystem(ISBaseException):
     """Raised if the system has conflicting values."""
 

@@ -15,13 +15,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "models"))
 @pytest.fixture
 def simple_system():
     """Creates a system."""
-    sys = SimpleSystem()
+    system = SimpleSystem()
     geo = GeoLocation(x=1.0, y=2.0)
     bus = SimpleBus(name="test-bus", voltage=1.1, coordinates=geo)
     gen = SimpleGenerator(name="test-gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen])
-    sys.components.add(geo, bus, gen, subsystem)
-    return sys
+    system.components.add(geo, bus, gen, subsystem)
+    return system
 
 
 @pytest.fixture
