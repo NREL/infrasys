@@ -8,6 +8,7 @@ import polars as pl
 from pydantic import Field, field_validator, model_validator
 from typing_extensions import Annotated
 
+from infra_sys.exceptions import ISConflictingArguments
 from infra_sys.models import InfraSysBaseModelWithIdentifers
 
 TIME_COLUMN = "timestamp"
@@ -127,13 +128,13 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers):
     """Defines common metadata for all time series."""
 
     name: str
+    initial_time: datetime
     resolution: timedelta
 
 
 class SingleTimeSeriesMetadata(TimeSeriesMetadata):
     """Defines the metadata for a SingleTimeSeries."""
 
-    initial_time: datetime
     length: int
     type: Literal["SingleTimeSeries"] = "SingleTimeSeries"
 
@@ -147,6 +148,39 @@ class SingleTimeSeriesMetadata(TimeSeriesMetadata):
             initial_time=time_series.initial_time,
             length=time_series.length,
         )
+
+    def get_range(
+        self, start_time: datetime | None = None, length: int | None = None
+    ) -> tuple[int, int]:
+        """Return the range to be used to index into the dataframe."""
+        if start_time is None and length is None:
+            return (0, self.length)
+
+        if start_time is None:
+            index = 0
+        else:
+            if start_time < self.initial_time:
+                msg = "{start_time=} is less than {self.initial_time=}"
+                raise ISConflictingArguments(msg)
+            if start_time >= self.initial_time + self.length * self.resolution:
+                msg = f"{start_time=} is too large: {self=}"
+                raise ISConflictingArguments(msg)
+            diff = start_time - self.initial_time
+            if (diff % self.resolution).total_seconds() != 0.0:
+                msg = (
+                    f"{start_time=} conflicts with initial_time={self.initial_time} and "
+                    f"resolution={self.resolution}"
+                )
+                raise ISConflictingArguments(msg)
+            index = int(diff / self.resolution)
+        if length is None:
+            length = self.length - index
+
+        if index + length > self.length:
+            msg = f"{start_time=} {length=} conflicts with {self=}"
+            raise ISConflictingArguments(msg)
+
+        return (index, length)
 
     @staticmethod
     def get_time_series_data_type() -> Type:

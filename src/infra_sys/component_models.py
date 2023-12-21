@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class Component(InfraSysBaseModelWithIdentifers):
     """Base class for all models representing entities that get attached to a System."""
 
-    name: str | None = None
+    name: Annotated[str | None, Field(frozen=True)] = None
     system_uuid: UUID | None = None
 
     @field_serializer("system_uuid")
@@ -81,7 +81,7 @@ class Component(InfraSysBaseModelWithIdentifers):
 class ComponentWithQuantities(Component):
     """Base class for all models representing physical components"""
 
-    name: str
+    name: Annotated[str, Field(frozen=True)]
     time_series_metadata: list[TimeSeriesMetadataUnion] = []
 
     def check_component_addition(self, system_uuid: UUID):

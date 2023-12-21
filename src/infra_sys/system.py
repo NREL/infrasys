@@ -48,8 +48,8 @@ class System:
         self.add_components = self._component_mgr.add
         self.get_component = self._component_mgr.get
         self.update_components = self._component_mgr.update
-        self.change_component_name = self._component_mgr.change_name
         self.change_component_uuid = self._component_mgr.change_uuid
+        self.copy_component = self._component_mgr.copy
         self.get_component_by_uuid = self._component_mgr.get_by_uuid
         self.get_components = self._component_mgr.iter
         self.iter_all_components = self._component_mgr.iter_all

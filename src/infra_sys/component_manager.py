@@ -137,10 +137,11 @@ class ComponentManager:
         """
         raise NotImplementedError("remove_component_by_uuid")
 
-    def change_name(self, component_type: Type, component: Component, new_name: str) -> None:
-        """Change the component name."""
-        # TODO: may not allow this
-        raise NotImplementedError("change_component_name")
+    def copy(
+        self, component: Type, new_name: str, attach_to_system=False, copy_time_series=True
+    ) -> Component:
+        """Create a copy of the component."""
+        raise NotImplementedError("copy")
 
     def change_uuid(self, component_type: Type, component: Component) -> None:
         """Change the component UUID."""

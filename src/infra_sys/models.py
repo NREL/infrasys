@@ -17,8 +17,6 @@ def make_model_config(**kwargs) -> ConfigDict:
         validate_assignment=True,
         validate_default=True,
         extra="forbid",
-        # TODO: this can't work if we set the system_uuid or change names
-        # frozen=True,
         use_enum_values=False,
         arbitrary_types_allowed=True,
         populate_by_name=True,
