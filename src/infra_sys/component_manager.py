@@ -150,7 +150,7 @@ class ComponentManager:
         """Update multiple components of a given type."""
 
         for component in self.iter(component_type, filter_func=filter_func):
-            update_func(component, update_func=update_func)
+            update_func(component)
         return
 
     def _add(self, component: Component) -> None:
