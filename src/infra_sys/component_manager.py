@@ -1,15 +1,13 @@
 """Manages components"""
 
 import itertools
-import logging
 from typing import Callable, Iterable, Type
 from uuid import UUID
+from loguru import logger
 
 from infra_sys.component_models import Component, raise_if_attached
 from infra_sys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infra_sys.models import make_summary
-
-logger = logging.getLogger(__name__)
 
 
 class ComponentManager:
@@ -172,4 +170,4 @@ class ComponentManager:
         self._components[cls][name].append(component)
         self._components_by_uuid[component.uuid] = component
         component.system_uuid = self._uuid
-        logger.debug("Added %s to the system", component.summary)
+        logger.debug("Added {} to the system", component.summary)

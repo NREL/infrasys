@@ -1,8 +1,9 @@
 """In-memory time series storage"""
 
-import logging
 from datetime import datetime
 from uuid import UUID
+
+from loguru import logger
 
 from infra_sys.exceptions import ISNotStored
 from infra_sys.time_series_models import (
@@ -12,8 +13,6 @@ from infra_sys.time_series_models import (
     TimeSeriesMetadata,
 )
 from infra_sys.time_series_storage_base import TimeSeriesStorageBase
-
-logger = logging.getLogger(__name__)
 
 
 class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
