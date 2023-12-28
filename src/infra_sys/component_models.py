@@ -1,10 +1,10 @@
 """Defines base models for components."""
 
-import logging
 from typing import Any, Literal, Type
 from uuid import UUID
 from infra_sys.base_quantity import BaseQuantity
 
+from loguru import logger
 from pydantic import Field, field_serializer
 from typing_extensions import Annotated
 
@@ -23,8 +23,6 @@ from infra_sys.time_series_models import (
     TimeSeriesMetadata,
     TimeSeriesMetadataUnion,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class Component(InfraSysBaseModelWithIdentifers):

@@ -1,10 +1,11 @@
 """Manages time series arrays"""
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Type
 from uuid import UUID
+
+from loguru import logger
 
 from infra_sys.exceptions import ISDuplicateNames, ISNotStored
 from infra_sys.component_models import ComponentWithQuantities
@@ -15,8 +16,6 @@ from infra_sys.time_series_models import (
 )
 from infra_sys.time_series_storage_base import TimeSeriesStorageBase
 from infra_sys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
