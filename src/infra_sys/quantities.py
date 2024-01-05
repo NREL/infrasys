@@ -17,3 +17,5 @@ class ActivePower(BaseQuantity): __compatible_unit__ = "watt"
 class Energy(BaseQuantity): __compatible_unit__ = "watthour"
 
 class Time(BaseQuantity): __compatible_unit__ = "minute"
+
+class Resistance(BaseQuantity): __compatible_unit__ = "ohm"
