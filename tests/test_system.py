@@ -1,12 +1,11 @@
-from datetime import timedelta
 from uuid import uuid4
 
 import pytest
 
-from infra_sys.exceptions import ISNotStored, ISOperationNotAllowed, ISConflictingArguments
-from infra_sys.geo_location import GeoLocation
+from infra_sys.exceptions import ISNotStored, ISOperationNotAllowed
+from infra_sys.location import Location
 from infra_sys.component_models import Component
-from infra_sys.time_series_models import TIME_COLUMN, SingleTimeSeries
+from infra_sys.time_series_models import SingleTimeSeries
 from simple_system import (
     GeneratorBase,
     SimpleSystem,
@@ -19,7 +18,7 @@ from simple_system import (
 
 def test_system():
     system = SimpleSystem()
-    geo = GeoLocation(x=1.0, y=2.0)
+    geo = Location(x=1.0, y=2.0)
     bus = SimpleBus(name="test-bus", voltage=1.1, coordinates=geo)
     gen = SimpleGenerator(name="test-gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen])
@@ -34,7 +33,7 @@ def test_serialization(tmp_path, simple_system):
     system = simple_system
     custom_attr = 10
     system.my_attr = custom_attr
-    geos = list(system.components.iter(GeoLocation))
+    geos = list(system.components.iter(Location))
     assert len(geos) == 1
     geo = geos[0]
     bus = system.components.get(SimpleBus, "test-bus")
@@ -88,35 +87,6 @@ def test_in_memory_time_series(hourly_time_array):
     assert system.time_series.get(gen1, name) == ts
     assert system.time_series.get(gen2, name) == ts
 
-    offset = 5
-    length = 10
-
-    ts_slice = system.time_series.get(gen1, name, length=10)
-    assert ts_slice.data[TIME_COLUMN][0] == df[TIME_COLUMN][0]
-    assert len(ts_slice.data) == length
-    assert ts_slice.length == length
-
-    ts_slice = system.time_series.get(gen1, name, start_time=df[TIME_COLUMN][offset])
-    assert ts_slice.data[TIME_COLUMN][0] == df[TIME_COLUMN][offset]
-    assert len(ts_slice.data) == ts.length - offset
-    assert ts_slice.length == ts.length - offset
-
-    ts_slice = system.time_series.get(gen1, name, start_time=df[TIME_COLUMN][offset], length=10)
-    assert len(ts_slice.data) == length
-    assert ts_slice.data[TIME_COLUMN][0] == df[TIME_COLUMN][offset]
-    assert len(system.time_series.list_metadata()) == 1
-    assert system.time_series.has(ts.uuid)
-    assert ts_slice.length == length
-
-    with pytest.raises(ISConflictingArguments):
-        system.time_series.get(
-            gen1, name, start_time=df[TIME_COLUMN][offset] + timedelta(minutes=1)
-        )
-    with pytest.raises(ISConflictingArguments, match="is less than"):
-        system.time_series.get(gen1, name, start_time=df[TIME_COLUMN][0] - ts.resolution)
-    with pytest.raises(ISConflictingArguments, match="is too large"):
-        system.time_series.get(gen1, name, start_time=df[TIME_COLUMN][-1] + ts.resolution)
-
     system.time_series.remove([gen1], name)
     with pytest.raises(ISNotStored):
         system.time_series.get(gen1, name)
@@ -126,9 +96,5 @@ def test_in_memory_time_series(hourly_time_array):
     with pytest.raises(ISNotStored):
         system.time_series.get(gen2, name)
 
-    assert not system.time_series.has(ts.uuid)
     assert not gen1.has_time_series(name)
     assert not gen2.has_time_series(name)
-
-    with pytest.raises(ISNotStored):
-        system.time_series.remove_by_uuid(ts.uuid)

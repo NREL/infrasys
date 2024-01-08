@@ -7,7 +7,7 @@ import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "models"))
 
-from infra_sys.geo_location import GeoLocation
+from infra_sys.location import Location
 from simple_system import SimpleSystem, SimpleBus, SimpleGenerator, SimpleSubsystem
 from infra_sys.time_series_models import TIME_COLUMN, VALUE_COLUMN
 
@@ -16,7 +16,7 @@ from infra_sys.time_series_models import TIME_COLUMN, VALUE_COLUMN
 def simple_system():
     """Creates a system."""
     system = SimpleSystem()
-    geo = GeoLocation(x=1.0, y=2.0)
+    geo = Location(x=1.0, y=2.0)
     bus = SimpleBus(name="test-bus", voltage=1.1, coordinates=geo)
     gen = SimpleGenerator(name="test-gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen])

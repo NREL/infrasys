@@ -9,8 +9,10 @@ import pint
 from infra_sys.common import TYPE_INFO
 from infra_sys.models import SerializedTypeInfo
 
+ureg = pint.UnitRegistry()
 
-class BaseQuantity(pint.Quantity, ABC):
+
+class BaseQuantity(ureg.Quantity, ABC):
     """Interface for base quantity."""
 
     def __new__(cls, value, units, **kwargs):

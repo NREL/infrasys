@@ -7,7 +7,7 @@ from infra_sys.exceptions import ISOperationNotAllowed
 from infra_sys.component_models import (
     ComponentWithQuantities,
 )
-from infra_sys.geo_location import GeoLocation
+from infra_sys.location import Location
 from infra_sys.system import System
 
 
@@ -15,7 +15,7 @@ class SimpleBus(ComponentWithQuantities):
     """Represents a bus."""
 
     voltage: float
-    coordinates: GeoLocation | None = None
+    coordinates: Location | None = None
 
     def check_component_addition(self, system_uuid: UUID):
         if self.coordinates is not None and not self.coordinates.is_attached(
@@ -30,7 +30,7 @@ class SimpleBus(ComponentWithQuantities):
         return SimpleBus(
             name="simple-bus",
             voltage=1.1,
-            coordinates=GeoLocation(x=0.0, y=0.0),
+            coordinates=Location(x=0.0, y=0.0),
         )
 
 
