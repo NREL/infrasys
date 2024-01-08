@@ -2,11 +2,12 @@
 
 import importlib
 import json
-import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Type
 from uuid import UUID, uuid4
+
+from loguru import logger
 
 from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
 from infra_sys.exceptions import (
@@ -22,8 +23,6 @@ from infra_sys.component_models import (
 from infra_sys.component_manager import ComponentManager
 from infra_sys.time_series_manager import TimeSeriesManager
 from infra_sys.time_series_storage_base import TimeSeriesStorageBase
-
-logger = logging.getLogger(__name__)
 
 
 class System:
@@ -47,8 +46,9 @@ class System:
         self.add_component = self._component_mgr.add
         self.add_components = self._component_mgr.add
         self.get_component = self._component_mgr.get
-        self.change_component_name = self._component_mgr.change_name
+        self.update_components = self._component_mgr.update
         self.change_component_uuid = self._component_mgr.change_uuid
+        self.copy_component = self._component_mgr.copy
         self.get_component_by_uuid = self._component_mgr.get_by_uuid
         self.get_components = self._component_mgr.iter
         self.iter_all_components = self._component_mgr.iter_all

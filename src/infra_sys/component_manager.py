@@ -1,22 +1,13 @@
 """Manages components"""
 
 import itertools
-import logging
 from typing import Callable, Iterable, Type
 from uuid import UUID
+from loguru import logger
 
-from infra_sys.exceptions import (
-    ISAlreadyAttached,
-    ISNotStored,
-)
-from infra_sys.component_models import (
-    Component,
-    raise_if_attached,
-)
-from infra_sys.exceptions import ISOperationNotAllowed
+from infra_sys.component_models import Component, raise_if_attached
+from infra_sys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infra_sys.models import make_summary
-
-logger = logging.getLogger(__name__)
 
 
 class ComponentManager:
@@ -144,14 +135,22 @@ class ComponentManager:
         """
         raise NotImplementedError("remove_component_by_uuid")
 
-    def change_name(self, component_type: Type, component: Component, new_name: str) -> None:
-        """Change the component name."""
-        # TODO: may not allow this
-        raise NotImplementedError("change_component_name")
+    def copy(
+        self, component: Type, new_name: str, attach_to_system=False, copy_time_series=True
+    ) -> Component:
+        """Create a copy of the component."""
+        raise NotImplementedError("copy")
 
     def change_uuid(self, component_type: Type, component: Component) -> None:
         """Change the component UUID."""
         raise NotImplementedError("change_component_uuid")
+
+    def update(self, component_type: Type, update_func: Callable, filter_func=None) -> None:
+        """Update multiple components of a given type."""
+
+        for component in self.iter(component_type, filter_func=filter_func):
+            update_func(component, update_func=update_func)
+        return
 
     def _add(self, component: Component) -> None:
         raise_if_attached(component)
@@ -171,4 +170,4 @@ class ComponentManager:
         self._components[cls][name].append(component)
         self._components_by_uuid[component.uuid] = component
         component.system_uuid = self._uuid
-        logger.debug("Added %s to the system", component.summary)
+        logger.debug("Added {} to the system", component.summary)

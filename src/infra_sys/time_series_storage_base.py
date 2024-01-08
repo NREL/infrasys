@@ -2,9 +2,9 @@
 
 
 import abc
-from uuid import UUID
+from datetime import datetime
 
-from infra_sys.time_series_models import TimeSeriesData
+from infra_sys.time_series_models import TimeSeriesData, TimeSeriesMetadata
 
 
 class TimeSeriesStorageBase(abc.ABC):
@@ -15,13 +15,14 @@ class TimeSeriesStorageBase(abc.ABC):
         """Store a time series array."""
 
     @abc.abstractmethod
-    def get_time_series(self, uuid: UUID) -> TimeSeriesData:
+    def get_time_series(
+        self,
+        metadata: TimeSeriesMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+    ) -> TimeSeriesData:
         """Return a time series array."""
 
     @abc.abstractmethod
-    def has_time_series(self, uuid: UUID) -> bool:
-        """Return true if the uuid is stored."""
-
-    @abc.abstractmethod
-    def remove_time_series(self, uuid: UUID) -> TimeSeriesData:
+    def remove_time_series(self, metadata: TimeSeriesMetadata) -> TimeSeriesData:
         """Remove a time series array and return it."""

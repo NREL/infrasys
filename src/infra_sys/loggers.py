@@ -1,85 +1,52 @@
 """Contains logging configuration data."""
+import sys
 
-import logging
-import logging.config
+# Logger printing formats
+DEFAULT_FORMAT = "<level>{level}</level>: {message}"
+DEBUG_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+    "<level>{level: <7}</level> | "
+    "<cyan>{name}:{line}</cyan> | "
+    "{message}"
+)
 
 
 def setup_logging(
-    name,
     filename=None,
-    mode="w",
-    console_level=logging.INFO,
-    file_level=logging.INFO,
-    packages=None,
+    level="DEBUG",
+    verbose=False,
 ):
     """Configures logging to file and console.
 
     Parameters
     ----------
-    name : str
-        logger name
     filename : str | None
         log filename
-    mode : str
-        Mode for how to open filename, if applicable.
-    console_level : int, optional
-        console log level. defaults to logging.INFO
-    file_level : int, optional
-        file log level. defaults to logging.INFO
-    packages : list, optional
-        enable logging for these package names. Always adds infra_sys.
+    level : str, optional
+        change defualt level of logging.
+    verbose :  bool
+        returns additional logging information.
     """
-    handler_names = ["console"]
-    handler_configs = {
-        "console": {
-            "level": console_level,
-            "formatter": "short",
-            "class": "logging.StreamHandler",
-        }
-    }
-    if filename is not None:
-        handler_names.append("file")
-        handler_configs["file"] = {
-            "class": "logging.FileHandler",
-            "level": file_level,
-            "filename": filename,
-            "mode": mode,
-            "formatter": "detailed",
-        }
+    from loguru import logger
 
-    log_config = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "basic": {"format": "%(message)s"},
-            "short": {
-                "format": "%(asctime)s - %(levelname)s [%(name)s "
-                "%(filename)s:%(lineno)d] : %(message)s",
-            },
-            "detailed": {
-                "format": "%(asctime)s - %(levelname)s [%(name)s "
-                "%(filename)s:%(lineno)d] : %(message)s",
-            },
-        },
-        "handlers": handler_configs,
-        "loggers": {
-            name: {"handlers": handler_names, "level": "DEBUG", "propagate": False},
-        },
-    }
+    logger.remove()
+    logger.enable("infra_sys")
+    # logger.enable("resource_monitor")
+    logger.add(sys.stderr, level=level, format=DEBUG_FORMAT if verbose else DEFAULT_FORMAT)
+    if filename:
+        logger.add(filename, level=level)
 
-    packages = set(packages or [])
-    packages.add("infra_sys")
-    packages.add("resource_monitor")
-    for package in packages:
-        log_config["loggers"][package] = {
-            "handlers": ["console"],
-            "level": "DEBUG",
-            "propagate": False,
-        }
-        if filename is not None:
-            log_config["loggers"][package]["handlers"].append("file")
 
-    logging.config.dictConfig(log_config)
-    logger = logging.getLogger(name)
+if __name__ == "__main__":
+    from infra_sys.component_models import Component
+    from infra_sys.system import System
 
-    return logger
+    logger = setup_logging(level="INFO")
+    system = System()
+
+    component_1 = Component(name="TestComponent")
+    component_2 = Component(name="TestComponent2")
+
+    # Adding components
+    system.add_component(component_1)
+    system.add_component(component_2)

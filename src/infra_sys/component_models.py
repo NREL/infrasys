@@ -1,10 +1,10 @@
 """Defines base models for components."""
 
-import logging
 from typing import Any, Literal, Type
 from uuid import UUID
 from infra_sys.base_quantity import BaseQuantity
 
+from loguru import logger
 from pydantic import Field, field_serializer
 from typing_extensions import Annotated
 
@@ -24,13 +24,11 @@ from infra_sys.time_series_models import (
     TimeSeriesMetadataUnion,
 )
 
-logger = logging.getLogger(__name__)
-
 
 class Component(InfraSysBaseModelWithIdentifers):
     """Base class for all models representing entities that get attached to a System."""
 
-    name: str | None = None
+    name: Annotated[str | None, Field(frozen=True)] = None
     system_uuid: UUID | None = None
 
     @field_serializer("system_uuid")
@@ -81,7 +79,7 @@ class Component(InfraSysBaseModelWithIdentifers):
 class ComponentWithQuantities(Component):
     """Base class for all models representing physical components"""
 
-    name: str
+    name: Annotated[str, Field(frozen=True)]
     time_series_metadata: list[TimeSeriesMetadataUnion] = []
 
     def check_component_addition(self, system_uuid: UUID):
