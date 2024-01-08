@@ -3,7 +3,7 @@
 from infra_sys.component_models import Component
 
 
-class GeoLocation(Component):
+class Location(Component):
     """Specifies geographic location."""
 
     x: float
