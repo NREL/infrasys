@@ -71,14 +71,14 @@ class ComponentManager:
             for subclass in subclasses:
                 # Recurse.
                 yield from self._iter(subclass, filter_func)
-        else:
-            if component_type in self._components:
-                if filter_func is None:
-                    yield from itertools.chain(*self._components[component_type].values())
-                else:
-                    for component in itertools.chain(*self._components[component_type].values()):
-                        if filter_func(component):
-                            yield component
+
+        if component_type in self._components:
+            if filter_func is None:
+                yield from itertools.chain(*self._components[component_type].values())
+            else:
+                for component in itertools.chain(*self._components[component_type].values()):
+                    if filter_func(component):
+                        yield component
 
     def list_by_name(self, component_type: Type, name: str):
         """Return all components that match component_type and name.
