@@ -1,25 +1,38 @@
 """Manages time series arrays"""
 
-from dataclasses import dataclass
+from collections import defaultdict
 from datetime import datetime
-from typing import Type
+from pathlib import Path
+from typing import Any, Type
 from uuid import UUID
 
 from loguru import logger
 
-from infra_sys.exceptions import ISDuplicateNames, ISNotStored
+from infra_sys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infra_sys.component_models import ComponentWithQuantities
+from infra_sys.models import InfraSysBaseModel
 from infra_sys.time_series_models import (
     SingleTimeSeries,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
-from infra_sys.time_series_storage_base import TimeSeriesStorageBase
 from infra_sys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
+from infra_sys.parquet_time_series_storage import ParquetTimeSeriesStorage
 
 
-@dataclass
-class TimeSeriesMetadataTracker:
+TIME_SERIES_KWARGS = {
+    "time_series_in_memory": True,
+    "time_series_read_only": False,
+    "time_series_directory": None,
+    "enable_time_series_file_compression": True,
+}
+
+
+def _process_time_series_kwarg(key: str, **kwargs):
+    return kwargs.get(key, TIME_SERIES_KWARGS[key])
+
+
+class TimeSeriesMetadataTracker(InfraSysBaseModel):
     """Tracks metadata in memory"""
 
     metadata: TimeSeriesMetadata
@@ -29,106 +42,175 @@ class TimeSeriesMetadataTracker:
 class TimeSeriesManager:
     """Manages time series for a system."""
 
-    def __init__(self, storage: TimeSeriesStorageBase | None = None):
-        self._storage = storage or InMemoryTimeSeriesStorage()
-        self._time_series_metadata: dict[UUID, TimeSeriesMetadataTracker] = {}
+    def __init__(
+        self,
+        metadata_trackers: None | list[TimeSeriesMetadataTracker] | None = None,
+        **kwargs,
+    ):
+        self._base_directory: Path | None = _process_time_series_kwarg(
+            "time_series_directory", **kwargs
+        )
+        self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
+        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
+            self._storage = InMemoryTimeSeriesStorage()
+        elif _process_time_series_kwarg("enable_time_series_file_compression", **kwargs):
+            self._storage = ParquetTimeSeriesStorage()
+        else:
+            raise NotImplementedError("Bug: unhandled time series storage options")
+
+        if metadata_trackers:
+            self._metadata = {x.metadata.uuid: x for x in metadata_trackers}
+        else:
+            self._metadata: dict[UUID, TimeSeriesMetadataTracker] = {}
 
         # TODO: enforce one resolution
         # TODO: create parsing mechanism? CSV, CSV + JSON
-        # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
-    def add(self, time_series: TimeSeriesData, components: list[ComponentWithQuantities]) -> None:
-        """Store a time series array for one or more components."""
+    def add(
+        self,
+        time_series: TimeSeriesData,
+        *components: ComponentWithQuantities,
+        **user_attributes: Any,
+    ) -> None:
+        """Store a time series array for one or more components.
+
+        time_series : TimeSeriesData
+        components : tuple[ComponentWithQuantities]
+        user_attributes : kwargs
+            Key/value pairs to store with the time series data.
+
+        Raises
+        ------
+        ISAlreadyAttached
+            Raised if the variable name and user attributes match any time series already
+            attached to one of the components.
+        ISOperationNotAllowed
+            Raised if the manager was created in read-only mode.
+        """
+        if self._read_only:
+            raise ISOperationNotAllowed("Cannot store time series in read-only mode")
+
         ts_type = type(time_series)
         metadata_type = ts_type.get_time_series_metadata_type()
-        metadata = metadata_type.from_data(time_series)
-        name = time_series.name
+        metadata = metadata_type.from_data(time_series, **user_attributes)
+        variable_name = time_series.variable_name
 
         for component in components:
-            if component.has_time_series(name=name, time_series_type=ts_type):
-                msg = f"{component.summary} already has a time series with {ts_type} {name}"
-                raise ISDuplicateNames(msg)
+            if component.has_time_series(
+                variable_name=variable_name,
+                time_series_type=ts_type,
+                **metadata.user_attributes,
+            ):
+                msg = (
+                    f"{component.summary} already has a time series with "
+                    f"{ts_type} {variable_name} {user_attributes=}"
+                )
+                raise ISAlreadyAttached(msg)
 
+        if metadata.uuid not in self._metadata:
+            self._metadata[metadata.uuid] = TimeSeriesMetadataTracker(metadata=metadata)
+            self._storage.add_time_series(metadata, time_series)
+
+        tracker = self._metadata[metadata.uuid]
         for component in components:
-            self._storage.add_time_series(time_series)
-            if time_series.uuid not in self._time_series_metadata:
-                self._time_series_metadata[time_series.uuid] = TimeSeriesMetadataTracker(metadata)
-            tracker = self._time_series_metadata[time_series.uuid]
             tracker.count += 1
             component.add_time_series_metadata(metadata)
 
     def get(
         self,
         component: ComponentWithQuantities,
-        name: str,
+        variable_name: str,
         time_series_type: Type = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
+        **user_attributes,
     ) -> TimeSeriesData:
-        """Return a time series array."""
-        metadata = component.get_time_series_metadata(name, time_series_type=time_series_type)
-        return self.get_by_uuid(metadata.uuid, start_time=start_time, length=length)
+        """Return a time series array.
 
-    def get_by_uuid(
+        Raises
+        ------
+        ISNotStored
+            Raised if no time series matches the inputs.
+            Raised if the inputs match more than one time series.
+        ISOperationNotAllowed
+            Raised if the inputs match more than one time series.
+
+        See Also
+        --------
+        list_time_series
+        """
+        metadata = component.get_time_series_metadata(
+            variable_name,
+            time_series_type=time_series_type,
+            **user_attributes,
+        )
+        return self._get_by_metadata(metadata, start_time=start_time, length=length)
+
+    def list_time_series(
         self,
-        uuid: UUID,
+        component: ComponentWithQuantities,
+        variable_name: str,
+        time_series_type: Type = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-    ) -> TimeSeriesData:
-        """Return a time series array."""
-        if uuid not in self._time_series_metadata:
-            msg = f"No metadata is stored for time series with {uuid=}"
-            raise ISNotStored(msg)
-        return self._storage.get_time_series(
-            self._time_series_metadata[uuid].metadata, start_time=start_time, length=length
+        **user_attributes,
+    ) -> list[TimeSeriesData]:
+        """Return all time series that match the inputs."""
+        metadata = component.list_time_series_metadata(
+            variable_name,
+            time_series_type=time_series_type,
+            **user_attributes,
         )
-
-    def has(self, uuid: UUID) -> bool:
-        """Return True if there is a time series array with this UUID."""
-        return uuid in self._time_series_metadata
+        return [self._get_by_metadata(x, start_time=start_time, length=length) for x in metadata]
 
     def remove(
         self,
-        components: list[ComponentWithQuantities],
-        name: str,
+        *components: ComponentWithQuantities,
+        variable_name: str | None = None,
         time_series_type=SingleTimeSeries,
-    ) -> TimeSeriesData:
-        """Remove all time series arrays matching the inputs.."""
-        uuids = {}
+        **user_attributes,
+    ):
+        """Remove all time series arrays matching the inputs.
+
+        Raises
+        ------
+        ISNotStored
+            Raised if no time series match the inputs.
+        ISOperationNotAllowed
+            Raised if the manager was created in read-only mode.
+        """
+        if self._read_only:
+            raise ISOperationNotAllowed("Cannot remove time series in read-only mode.")
+
+        uuids = defaultdict(lambda: 0)
         for component in components:
-            metadata = component.get_time_series_metadata(name, time_series_type=time_series_type)
-            if metadata.uuid in uuids:
+            for metadata in component.list_time_series_metadata(
+                variable_name, time_series_type=time_series_type, **user_attributes
+            ):
                 uuids[metadata.uuid] += 1
-            else:
-                uuids[metadata.uuid] = 1
 
         for uuid, count in uuids.items():
-            if uuid not in self._time_series_metadata:
-                msg = f"Bug: {uuid=} is not stored in self._time_series_metadata"
+            if uuid not in self._metadata:
+                msg = f"Bug: {uuid=} is not stored in self._metadata"
                 raise Exception(msg)
-            if count > self._time_series_metadata[uuid].count:
+            if count > self._metadata[uuid].count:
                 msg = (
-                    f"Removing time series {name=} {time_series_type=} {uuid=}"
+                    f"Bug: Removing time series {variable_name=} {time_series_type=} {uuid=}"
                     "will decrease the reference counts below 0."
                 )
                 raise Exception(msg)
 
         for component in components:
-            component.remove_time_series_metadata(name, time_series_type=time_series_type)
+            component.remove_time_series_metadata(
+                variable_name, time_series_type=time_series_type, **user_attributes
+            )
 
         for uuid, count in uuids.items():
-            self._time_series_metadata[uuid].count -= count
-            if self._time_series_metadata[uuid].count == 0:
-                self._storage.remove_time_series(self._time_series_metadata[uuid].metadata)
-                self._time_series_metadata.pop(uuid)
-                logger.info("Removed time series %s.%s", time_series_type, name)
-
-    def remove_by_uuid(self, uuid: UUID) -> TimeSeriesData:
-        """Remove a time series array and return it."""
-        if uuid not in self._time_series_metadata:
-            msg = f"No time series is stored with {uuid=}"
-            raise ISNotStored(msg)
-        return self._storage.remove_time_series(self._time_series_metadata[uuid].metadata)
+            self._metadata[uuid].count -= count
+            if self._metadata[uuid].count == 0:
+                self._storage.remove_time_series(self._metadata[uuid].metadata)
+                self._metadata.pop(uuid)
+                logger.info("Removed time series %s.%s", time_series_type, variable_name)
 
     def copy(
         self,
@@ -148,17 +230,47 @@ class TimeSeriesManager:
             time_series will not copied. If name_mapping is nothing then all time_series will be
             copied with src's names.
         """
+        if self._read_only:
+            raise ISOperationNotAllowed("Cannot copy time series in read-only mode")
         raise NotImplementedError("copy time series")
 
-    def iter_metadata(self, time_series_type: None | Type = None):
-        """Return an iterator over all time series metadata."""
-        for metadata in self._time_series_metadata.values():
-            if (
-                time_series_type is None
-                or time_series_type == metadata.get_time_series_data_type()
-            ):
-                yield metadata
+    def _get_by_metadata(
+        self,
+        metadata: TimeSeriesMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+    ) -> TimeSeriesData:
+        if metadata.uuid not in self._metadata:
+            msg = f"No time series metadata is stored with {metadata.uuid}"
+            raise ISNotStored(msg)
+        return self._storage.get_time_series(
+            metadata,
+            start_time=start_time,
+            length=length,
+        )
 
-    def list_metadata(self, time_series_type: None | Type = None) -> list[TimeSeriesData]:
-        """Return a list of all time series metadata."""
-        return list(self.iter_metadata(time_series_type=time_series_type))
+    def serialize_data(self, base_dir) -> list[Path]:
+        """Serialize the time series data to one or more files. May be a no-op.
+
+        Returns
+        -------
+        list[Path]
+            Returns all filenames containing the data.
+        """
+        filename = ""
+        return [base_dir / filename]
+
+    def serialize_metadata(self) -> list[dict[str, Any]]:
+        """Serialize the time series metadata to a dictionary."""
+        return [x.model_dump() for x in self._metadata.values()]
+
+    @classmethod
+    def deserialize(
+        cls,
+        data: dict[str, Any],
+        **kwargs,
+    ) -> "TimeSeriesManager":
+        """Deserialize the class."""
+        metadata_trackers = [TimeSeriesMetadataTracker(**x) for x in data["metadata"]]
+        # TODO: handle data files
+        return cls(metadata_trackers=metadata_trackers, **kwargs)

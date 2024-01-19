@@ -2,7 +2,8 @@
 
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Iterable, Literal, Optional, Type
+from typing import Any, Iterable, Literal, Optional, Type, Union
+from uuid import UUID
 
 import polars as pl
 from pydantic import Field, field_validator, model_validator
@@ -26,12 +27,12 @@ class TimeSeriesStorageType(str, Enum):
 class TimeSeriesData(InfraSysBaseModelWithIdentifers):
     """Base class for all time series models"""
 
-    name: str
+    variable_name: str
 
     @property
     def summary(self) -> str:
-        """Return the name of the time series array with its type."""
-        return f"{self.__class__.__name__}.{self.name}"
+        """Return the variable_name of the time series array with its type."""
+        return f"{self.__class__.__name__}.{self.variable_name}"
 
 
 class SingleTimeSeries(TimeSeriesData):
@@ -89,7 +90,7 @@ class SingleTimeSeries(TimeSeriesData):
 
     @classmethod
     def from_array(
-        cls, data: Iterable, name: str, initial_time: datetime, resolution: timedelta
+        cls, data: Iterable, variable_name: str, initial_time: datetime, resolution: timedelta
     ) -> "SingleTimeSeries":
         """Create a SingleTimeSeries from an iterable of data. Length is inferred from data."""
         length = len(data)
@@ -102,22 +103,30 @@ class SingleTimeSeries(TimeSeriesData):
                 VALUE_COLUMN: data,
             }
         )
-        return SingleTimeSeries(name=name, data=df)
+        return SingleTimeSeries(variable_name=variable_name, data=df)
 
     @classmethod
     def from_dataframe(
-        cls, df: pl.DataFrame, name: str, time_column=TIME_COLUMN, value_column=VALUE_COLUMN
+        cls,
+        df: pl.DataFrame,
+        variable_name: str,
+        time_column=TIME_COLUMN,
+        value_column=VALUE_COLUMN,
     ) -> "SingleTimeSeries":
         """Create a SingleTimeSeries from a DataFrame with a time column."""
         data = df.select(
             pl.col(time_column).alias(TIME_COLUMN), pl.col(value_column).alias(VALUE_COLUMN)
         )
-        return SingleTimeSeries(name=name, data=data)
+        return SingleTimeSeries(variable_name=variable_name, data=data)
 
     @staticmethod
     def get_time_series_metadata_type() -> Type:
         """Return the metadata type associated with this time series type."""
         return SingleTimeSeriesMetadata
+
+
+class SingleTimeSeriesScalingFactor(SingleTimeSeries):
+    """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
 
 
 # TODO:
@@ -127,9 +136,17 @@ class SingleTimeSeries(TimeSeriesData):
 class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers):
     """Defines common metadata for all time series."""
 
-    name: str
+    variable_name: str
     initial_time: datetime
     resolution: timedelta
+    time_series_uuid: UUID
+    user_attributes: dict[str, Any] = {}
+    type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
+
+    @property
+    def summary(self) -> str:
+        """Return the variable_name of the time series array with its type."""
+        return f"{self.type}.{self.variable_name}"
 
 
 class SingleTimeSeriesMetadata(TimeSeriesMetadata):
@@ -139,14 +156,17 @@ class SingleTimeSeriesMetadata(TimeSeriesMetadata):
     type: Literal["SingleTimeSeries"] = "SingleTimeSeries"
 
     @classmethod
-    def from_data(cls, time_series: SingleTimeSeries) -> "SingleTimeSeriesMetadata":
+    def from_data(
+        cls, time_series: SingleTimeSeries, **user_attributes
+    ) -> "SingleTimeSeriesMetadata":
         """Construct a SingleTimeSeriesMetadata from a SingleTimeSeries."""
         return cls(
-            name=time_series.name,
-            uuid=time_series.uuid,
+            variable_name=time_series.variable_name,
             resolution=time_series.resolution,
             initial_time=time_series.initial_time,
             length=time_series.length,
+            time_series_uuid=time_series.uuid,
+            user_attributes=user_attributes,
         )
 
     def get_range(
@@ -188,5 +208,14 @@ class SingleTimeSeriesMetadata(TimeSeriesMetadata):
         return SingleTimeSeries
 
 
+class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadata):
+    """Defines the metadata for a SingleTimeSeriesScalingFactor."""
+
+    type: Literal["SingleTimeSeriesScalingFactor"] = "SingleTimeSeriesScalingFactor"
+
+
 # This needs to be a Union if we add other time series types.
-TimeSeriesMetadataUnion = Annotated[SingleTimeSeriesMetadata, Field(discriminator="type")]
+TimeSeriesMetadataUnion = Annotated[
+    Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata],
+    Field(discriminator="type"),
+]
