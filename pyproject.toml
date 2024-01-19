@@ -27,7 +27,6 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "h5py",
     "numpy",
     "polars",
     "pint",
