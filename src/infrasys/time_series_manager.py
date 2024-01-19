@@ -8,16 +8,16 @@ from uuid import UUID
 
 from loguru import logger
 
-from infra_sys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
-from infra_sys.component_models import ComponentWithQuantities
-from infra_sys.models import InfraSysBaseModel
-from infra_sys.time_series_models import (
+from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
+from infrasys.component_models import ComponentWithQuantities
+from infrasys.models import InfraSysBaseModel
+from infrasys.time_series_models import (
     SingleTimeSeries,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
-from infra_sys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
-from infra_sys.parquet_time_series_storage import ParquetTimeSeriesStorage
+from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
+from infrasys.parquet_time_series_storage import ParquetTimeSeriesStorage
 
 
 TIME_SERIES_KWARGS = {

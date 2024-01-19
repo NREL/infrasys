@@ -2,24 +2,24 @@
 
 from typing import Any, Literal, Type
 from uuid import UUID
-from infra_sys.base_quantity import BaseQuantity
+from infrasys.base_quantity import BaseQuantity
 
 from loguru import logger
 from pydantic import Field, field_serializer
 from typing_extensions import Annotated
 
-from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
-from infra_sys.exceptions import (
+from infrasys.common import COMPOSED_TYPE_INFO, TYPE_INFO
+from infrasys.exceptions import (
     ISNotStored,
     ISOperationNotAllowed,
     ISAlreadyAttached,
 )
-from infra_sys.models import (
+from infrasys.models import (
     InfraSysBaseModel,
     InfraSysBaseModelWithIdentifers,
     SerializedTypeInfo,
 )
-from infra_sys.time_series_models import (
+from infrasys.time_series_models import (
     TimeSeriesMetadata,
     TimeSeriesMetadataUnion,
 )

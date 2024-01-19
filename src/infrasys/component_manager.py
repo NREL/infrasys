@@ -5,9 +5,9 @@ from typing import Callable, Iterable, Type
 from uuid import UUID
 from loguru import logger
 
-from infra_sys.component_models import Component, raise_if_attached
-from infra_sys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
-from infra_sys.models import make_summary
+from infrasys.component_models import Component, raise_if_attached
+from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
+from infrasys.models import make_summary
 
 
 class ComponentManager:

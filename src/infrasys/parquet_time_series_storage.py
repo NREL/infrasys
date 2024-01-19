@@ -2,8 +2,8 @@
 
 from datetime import datetime
 
-from infra_sys.time_series_models import TimeSeriesData, TimeSeriesMetadata
-from infra_sys.time_series_storage_base import TimeSeriesStorageBase
+from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
+from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
 
 class ParquetTimeSeriesStorage(TimeSeriesStorageBase):

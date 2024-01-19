@@ -3,7 +3,7 @@ import polars as pl
 
 import pytest
 
-from infra_sys.time_series_models import TIME_COLUMN, SingleTimeSeries, VALUE_COLUMN
+from infrasys.time_series_models import TIME_COLUMN, SingleTimeSeries, VALUE_COLUMN
 
 
 def test_from_array():

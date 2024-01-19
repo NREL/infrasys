@@ -3,15 +3,15 @@ from uuid import uuid4
 
 import pytest
 
-from infra_sys.exceptions import (
+from infrasys.exceptions import (
     ISAlreadyAttached,
     ISNotStored,
     ISOperationNotAllowed,
     ISConflictingArguments,
 )
-from infra_sys.location import Location
-from infra_sys.component_models import Component
-from infra_sys.time_series_models import SingleTimeSeries
+from infrasys.location import Location
+from infrasys.component_models import Component
+from infrasys.time_series_models import SingleTimeSeries
 from simple_system import (
     GeneratorBase,
     SimpleSystem,
