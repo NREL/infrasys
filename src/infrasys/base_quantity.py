@@ -6,8 +6,8 @@ from abc import ABC
 import pint
 
 # internal imports
-from infra_sys.common import TYPE_INFO
-from infra_sys.models import SerializedTypeInfo
+from infrasys.common import TYPE_INFO
+from infrasys.models import SerializedTypeInfo
 
 ureg = pint.UnitRegistry()
 

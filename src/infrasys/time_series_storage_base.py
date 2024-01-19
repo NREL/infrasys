@@ -4,7 +4,7 @@
 import abc
 from datetime import datetime
 
-from infra_sys.time_series_models import TimeSeriesData, TimeSeriesMetadata
+from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
 
 
 class TimeSeriesStorageBase(abc.ABC):

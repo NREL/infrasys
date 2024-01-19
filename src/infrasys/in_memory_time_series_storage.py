@@ -5,14 +5,14 @@ from uuid import UUID
 
 from loguru import logger
 
-from infra_sys.exceptions import ISNotStored
-from infra_sys.time_series_models import (
+from infrasys.exceptions import ISNotStored
+from infrasys.time_series_models import (
     SingleTimeSeries,
     SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
-from infra_sys.time_series_storage_base import TimeSeriesStorageBase
+from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
 
 class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):

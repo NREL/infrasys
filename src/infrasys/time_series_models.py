@@ -9,8 +9,8 @@ import polars as pl
 from pydantic import Field, field_validator, model_validator
 from typing_extensions import Annotated
 
-from infra_sys.exceptions import ISConflictingArguments
-from infra_sys.models import InfraSysBaseModelWithIdentifers
+from infrasys.exceptions import ISConflictingArguments
+from infrasys.models import InfraSysBaseModelWithIdentifers
 
 TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"

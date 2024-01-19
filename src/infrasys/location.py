@@ -1,6 +1,6 @@
 """Defines models for geographic location."""
 
-from infra_sys.component_models import Component
+from infrasys.component_models import Component
 
 
 class Location(Component):

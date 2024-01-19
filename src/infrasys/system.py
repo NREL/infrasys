@@ -9,20 +9,20 @@ from uuid import UUID, uuid4
 
 from loguru import logger
 
-from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
-from infra_sys.exceptions import (
+from infrasys.common import COMPOSED_TYPE_INFO, TYPE_INFO
+from infrasys.exceptions import (
     ISFileExists,
     ISConflictingArguments,
     ISConflictingSystem,
 )
-from infra_sys.models import SerializedTypeInfo, make_summary
-from infra_sys.component_models import (
+from infrasys.models import SerializedTypeInfo, make_summary
+from infrasys.component_models import (
     Component,
     SerializedComponentReference,
 )
-from infra_sys.component_manager import ComponentManager
-from infra_sys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
-from infra_sys.utils.json import ExtendedJSONEncoder
+from infrasys.component_manager import ComponentManager
+from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
+from infrasys.utils.json import ExtendedJSONEncoder
 
 
 class System:
