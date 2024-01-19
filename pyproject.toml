@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "infrasys"
-dynamic = ["version"]
+version = "0.0.1"
 description = ''
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,8 +46,12 @@ Documentation = "https://github.nrel.gov/cadet/infrasys#readme"
 Issues = "https://github.nrel.gov/cadet/infrasys/issues"
 Source = "https://github.nrel.gov/cadet/infrasys"
 
-[tool.hatch.version]
-path = "src/infrasys/__about__.py"
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra"
+testpaths = [
+    "tests",
+]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -58,6 +62,7 @@ exclude = [
     "_build",
     "build",
     "dist",
+    "env",
     "venv",
 ]
 
