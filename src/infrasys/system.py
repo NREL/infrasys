@@ -270,7 +270,7 @@ class System:
                     can_be_deserialized = False
                     break
                 values[field] = composed_value
-            elif isinstance(value, list) and value and COMPOSED_TYPE_INFO in value[0]:
+            elif isinstance(value, list) and value and isinstance(value[0], dict) and COMPOSED_TYPE_INFO in value[0]:
                 composed_values = self._deserialize_composed_list(value, cached_types)
                 if composed_values is None:
                     can_be_deserialized = False
