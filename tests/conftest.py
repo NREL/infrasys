@@ -7,9 +7,9 @@ import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "models"))
 
-from infra_sys.location import Location
+from infrasys.location import Location
 from simple_system import SimpleSystem, SimpleBus, SimpleGenerator, SimpleSubsystem
-from infra_sys.time_series_models import TIME_COLUMN, VALUE_COLUMN
+from infrasys.time_series_models import TIME_COLUMN, VALUE_COLUMN
 
 
 @pytest.fixture

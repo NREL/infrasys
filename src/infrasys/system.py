@@ -9,20 +9,20 @@ from uuid import UUID, uuid4
 
 from loguru import logger
 
-from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
-from infra_sys.exceptions import (
+from infrasys.common import COMPOSED_TYPE_INFO, TYPE_INFO
+from infrasys.exceptions import (
     ISFileExists,
     ISConflictingArguments,
     ISConflictingSystem,
 )
-from infra_sys.models import SerializedTypeInfo, make_summary
-from infra_sys.component_models import (
+from infrasys.models import SerializedTypeInfo, make_summary
+from infrasys.component_models import (
     Component,
     SerializedComponentReference,
 )
-from infra_sys.component_manager import ComponentManager
-from infra_sys.time_series_manager import TimeSeriesManager
-from infra_sys.time_series_storage_base import TimeSeriesStorageBase
+from infrasys.component_manager import ComponentManager
+from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
+from infrasys.utils.json import ExtendedJSONEncoder
 
 
 class System:
@@ -31,13 +31,31 @@ class System:
     def __init__(
         self,
         name: str | None = None,
-        time_series_storage: TimeSeriesStorageBase | None = None,
+        time_series_manager: None | TimeSeriesManager = None,
         uuid: UUID | None = None,
+        **kwargs,
     ):
+        """Constructs a System.
+
+        Parameters
+        ----------
+        name : str | None
+            Optional system name
+        time_series_manager : None | TimeSeriesManager
+            Users should not pass this. De-serialization (from_json) will pass a constructed
+            manager.
+        kwargs
+            Configures time series behaviors:
+            - time_series_in_memory: Defaults to true.
+            - time_series_read_only: Disables add/remove of time series, defaults to false.
+            - time_series_directory: Location to store time series file, defaults to the system's
+              tmp directory.
+        """
         self._uuid = uuid or uuid4()
         self._name = name
         self._component_mgr = ComponentManager(self._uuid)
-        self._time_series_mgr = TimeSeriesManager(storage=time_series_storage)
+        time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
+        self._time_series_mgr = time_series_manager or TimeSeriesManager(**time_series_kwargs)
         self._data_format_version = None
 
         # Delegate to the component and time series managers to allow user access directly
@@ -58,9 +76,7 @@ class System:
         self.remove_component_by_uuid = self._component_mgr.remove_by_uuid
         self.add_time_series = self._time_series_mgr.add
         self.get_time_series = self._time_series_mgr.get
-        self.get_time_series_by_uuid = self._time_series_mgr.get_by_uuid
         self.remove_time_series = self._time_series_mgr.remove
-        self.remove_time_series_by_uuid = self._time_series_mgr.remove_by_uuid
         self.copy_time_series = self._time_series_mgr.copy
 
         # TODO: add pretty printing of components and time series
@@ -78,7 +94,11 @@ class System:
             "name": self.name,
             "uuid": str(self.uuid),
             "data_format_version": self.data_format_version,
-            "components": [x.model_dump_custom() for x in self.components.iter_all()],
+            "components": [x.model_dump_custom() for x in self._component_mgr.iter_all()],
+            "time_series": {
+                "metadata": self._time_series_mgr.serialize_metadata(),
+                "files": self._time_series_mgr.serialize_data(filename.parent),
+            },
         }
         extra = self.serialize_system_attributes()
         intersection = set(extra).intersection(system_data)
@@ -94,20 +114,27 @@ class System:
                 raise ISConflictingArguments("data contains the key 'system'")
             data["system"] = system_data
         with open(filename, "w", encoding="utf-8") as f_out:
-            json.dump(data, f_out, indent=indent)
+            json.dump(data, f_out, indent=indent, cls=ExtendedJSONEncoder)
 
     @classmethod
-    def from_json(cls, filename: Path | str, upgrade_handler=None) -> "System":
-        """Deserialize a System from a JSON file."""
+    def from_json(cls, filename: Path | str, upgrade_handler=None, **kwargs) -> "System":
+        """Deserialize a System from a JSON file. Refer to System constructor for kwargs."""
         with open(filename, encoding="utf-8") as f_in:
             data = json.load(f_in)
-        return cls.from_dict(data, upgrade_handler=upgrade_handler)
+        return cls.from_dict(data, upgrade_handler=upgrade_handler, **kwargs)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], upgrade_handler=None) -> "System":
+    def from_dict(cls, data: dict[str, Any], upgrade_handler=None, **kwargs) -> "System":
         """Deserialize a System from a dictionary."""
         system_data = data if "system" not in data else data["system"]
-        system = cls(name=system_data.get("name"), uuid=UUID(system_data["uuid"]))
+        ts_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
+        time_series_manager = TimeSeriesManager.deserialize(data["time_series"], **ts_kwargs)
+        system = cls(
+            name=system_data.get("name"),
+            time_series_manager=time_series_manager,
+            uuid=UUID(system_data["uuid"]),
+            **kwargs,
+        )
         if system_data.get("data_format_version") != system.data_format_version:
             # This handles the case where the parent package inherited from System.
             system.handle_data_format_upgrade(
@@ -120,7 +147,6 @@ class System:
                 )
         system.deserialize_system_attributes(system_data)
         system._deserialize_components(system_data["components"])
-        # TODO: time series storage
         logger.info("Deserialized system %s", system.summary)
         return system
 
@@ -148,7 +174,7 @@ class System:
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
     @property
-    def components(self) -> TimeSeriesManager:
+    def components(self) -> ComponentManager:
         """Return the component manager."""
         return self._component_mgr
 
@@ -268,7 +294,7 @@ class System:
                 )
                 raise ISConflictingSystem(msg)
             actual_component = component_type(**values)
-            self.components.add(actual_component)
+            self.components.add(actual_component, deserialization_in_progress=True)
 
         return actual_component
 

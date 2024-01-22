@@ -5,9 +5,9 @@ from typing import Callable, Iterable, Type
 from uuid import UUID
 from loguru import logger
 
-from infra_sys.component_models import Component, raise_if_attached
-from infra_sys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
-from infra_sys.models import make_summary
+from infrasys.component_models import Component, raise_if_attached
+from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
+from infrasys.models import make_summary
 
 
 class ComponentManager:
@@ -18,7 +18,7 @@ class ComponentManager:
         self._components_by_uuid: dict[UUID, Component] = {}
         self._uuid = uuid
 
-    def add(self, *args) -> None:
+    def add(self, *args, deserialization_in_progress=False) -> None:
         """Add one or more components to the system.
 
         Raises
@@ -27,7 +27,7 @@ class ComponentManager:
             Raised if a component is already attached to a system.
         """
         for component in args:
-            self._add(component)
+            self._add(component, deserialization_in_progress)
 
     def get(self, component_type: Type, name: str) -> Component:
         """Return the component with the passed type and name.
@@ -61,7 +61,7 @@ class ComponentManager:
     ) -> Iterable[Component]:
         """Return the components with the passed type and optionally match filter_func.
 
-        IF component_type is an abstract type, all matching subtypes will be returned.
+        If component_type is an abstract type, all matching subtypes will be returned.
         """
         yield from self._iter(component_type, filter_func)
 
@@ -152,9 +152,12 @@ class ComponentManager:
             update_func(component)
         return
 
-    def _add(self, component: Component) -> None:
+    def _add(self, component: Component, deserialization_in_progress: bool) -> None:
         raise_if_attached(component)
-        component.check_component_addition(self._uuid)
+        if not deserialization_in_progress:
+            # TODO: Do we want any checks during deserialization? User could change the JSON.
+            # We could prevent the user from changing the JSON with a checksum.
+            component.check_component_addition(self._uuid)
         if component.uuid in self._components_by_uuid:
             msg = f"{component.summary} with UUID={component.uuid} is already stored"
             raise ISAlreadyAttached(msg)

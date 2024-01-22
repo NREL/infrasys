@@ -1,4 +1,4 @@
-# infra_sys
+# infrasys
 This package implements a data store for components and time series in support of Python-based
 modeling packages. While it is designed to support teams modeling transmission and distribution
 systems, it can be used by any package that needs to store components (e.g., generators and buses)

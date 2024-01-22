@@ -3,12 +3,12 @@
 from typing import Any
 from uuid import UUID
 
-from infra_sys.exceptions import ISOperationNotAllowed
-from infra_sys.component_models import (
+from infrasys.exceptions import ISOperationNotAllowed
+from infrasys.component_models import (
     ComponentWithQuantities,
 )
-from infra_sys.location import Location
-from infra_sys.system import System
+from infrasys.location import Location
+from infrasys.system import System
 
 
 class SimpleBus(ComponentWithQuantities):

@@ -1,9 +1,10 @@
 """HDF5 time series storage"""
 
 from datetime import datetime
+from uuid import UUID
 
-from infra_sys.time_series_models import TimeSeriesData, TimeSeriesMetadata
-from infra_sys.time_series_storage_base import TimeSeriesStorageBase
+from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
+from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
 
 class Hdf5TimeSeriesStorage(TimeSeriesStorageBase):
@@ -14,11 +15,11 @@ class Hdf5TimeSeriesStorage(TimeSeriesStorageBase):
 
     def get_time_series(
         self,
-        metadata: TimeSeriesMetadata,
+        uuid: UUID,
         start_time: datetime | None = None,
         length: int | None = None,
     ) -> TimeSeriesData:
         ...
 
-    def remove_time_series(self, metadata: TimeSeriesMetadata) -> TimeSeriesData:
+    def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
         ...

@@ -4,14 +4,14 @@
 import abc
 from datetime import datetime
 
-from infra_sys.time_series_models import TimeSeriesData, TimeSeriesMetadata
+from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
 
 
 class TimeSeriesStorageBase(abc.ABC):
     """Base class for time series storage"""
 
     @abc.abstractmethod
-    def add_time_series(self, time_series: TimeSeriesData) -> None:
+    def add_time_series(self, metadata: TimeSeriesMetadata, time_series: TimeSeriesData) -> None:
         """Store a time series array."""
 
     @abc.abstractmethod
@@ -24,5 +24,5 @@ class TimeSeriesStorageBase(abc.ABC):
         """Return a time series array."""
 
     @abc.abstractmethod
-    def remove_time_series(self, metadata: TimeSeriesMetadata) -> TimeSeriesData:
+    def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
         """Remove a time series array and return it."""

@@ -2,24 +2,24 @@
 
 from typing import Any, Literal, Type
 from uuid import UUID
-from infra_sys.base_quantity import BaseQuantity
+from infrasys.base_quantity import BaseQuantity
 
 from loguru import logger
 from pydantic import Field, field_serializer
 from typing_extensions import Annotated
 
-from infra_sys.common import COMPOSED_TYPE_INFO, TYPE_INFO
-from infra_sys.exceptions import (
+from infrasys.common import COMPOSED_TYPE_INFO, TYPE_INFO
+from infrasys.exceptions import (
     ISNotStored,
     ISOperationNotAllowed,
     ISAlreadyAttached,
 )
-from infra_sys.models import (
+from infrasys.models import (
     InfraSysBaseModel,
     InfraSysBaseModelWithIdentifers,
     SerializedTypeInfo,
 )
-from infra_sys.time_series_models import (
+from infrasys.time_series_models import (
     TimeSeriesMetadata,
     TimeSeriesMetadataUnion,
 )
@@ -88,59 +88,125 @@ class ComponentWithQuantities(Component):
             msg = f"{self.summary} cannot be added to the system because it has time series." ""
             raise ISOperationNotAllowed(msg)
 
-    def has_time_series(self, name: str | None = None, time_series_type: Type = None) -> bool:
-        """Return True if the component has time series data."""
-        for metadata in self.time_series_metadata:
-            if (
-                time_series_type is None
-                or time_series_type == metadata.get_time_series_data_type()
-            ) and (name is None or name == metadata.name):
-                return True
-        return False
+    def has_time_series(
+        self,
+        variable_name: str | None = None,
+        time_series_type: Type = None,
+        **user_attributes,
+    ) -> bool:
+        """Return True if the component has time series data matching the inputs."""
+        return bool(
+            self._find_time_series_indexes(
+                variable_name, time_series_type=time_series_type, **user_attributes
+            )
+        )
 
-    def add_time_series_metadata(self, metadata: TimeSeriesMetadata):
-        """Add the metadata to the component. Caller must check for duplicates."""
+    def add_time_series_metadata(self, metadata: TimeSeriesMetadata) -> None:
+        """Add the metadata to the component. Caller must check for duplicates.
+
+        Raises
+        ------
+        ISAlreadyAttached
+            Raised if the time series is duplicate with another time series attached to the
+            component.
+        """
+        if self.has_time_series(
+            variable_name=metadata.variable_name,
+            time_series_type=metadata.get_time_series_data_type(),
+            **metadata.user_attributes,
+        ):
+            msg = f"time series {metadata.summary} is already attached to component {self.summary}"
+            raise ISAlreadyAttached(msg)
+
         self.time_series_metadata.append(metadata)
         logger.debug("Added time series %s to %s", metadata.summary, self.summary)
 
     def get_time_series_metadata(
-        self, name: str, time_series_type: Type = None
+        self,
+        variable_name: str | None = None,
+        time_series_type: Type = None,
+        **user_attributes,
     ) -> TimeSeriesMetadata:
-        """Return the time series metadata."""
-        for metadata in self.time_series_metadata:
-            if (
-                time_series_type is None
-                or time_series_type == metadata.get_time_series_data_type()
-            ) and (name is None or name == metadata.name):
-                return metadata
+        """Return the time series metadata matching the inputs.
 
-        msg = (
-            f"No time series metadata with {time_series_type=} {name=} is attached to "
-            "{self.summary}"
+        Raises
+        ------
+        ISNotStored
+            Raised if no time series match the inputs.
+        ISConflictingArguments
+            Raised if more than one time series match the inputs.
+        """
+        indexes = self._find_time_series_indexes(
+            variable_name=variable_name, time_series_type=time_series_type, **user_attributes
         )
-        raise ISNotStored(msg)
-
-    def remove_time_series_metadata(
-        self, name: str, time_series_type: Type = None
-    ) -> TimeSeriesMetadata:
-        """Remove and return the time series metadata."""
-        index = None
-        for i, metadata in enumerate(self.time_series_metadata):
-            if (
-                time_series_type is None
-                or time_series_type == metadata.get_time_series_data_type()
-            ) and (name is None or name == metadata.name):
-                index = i
-                break
-
-        if index is None:
+        if not indexes:
             msg = (
-                f"No time series metadata with {time_series_type=} {name=} is attached to "
-                "{self.summary}"
+                f"No time series metadata with {time_series_type=} {variable_name=} "
+                "{user_attributes=} is attached to {self.summary}"
             )
             raise ISNotStored(msg)
 
-        return self.time_series_metadata.pop(index)
+        if len(indexes) > 1:
+            msg = (
+                f"{len(indexes)} time series match the inputs. "
+                "Please refine the filters or call list_time_series_metadata to get all instances"
+            )
+            raise ISOperationNotAllowed(msg)
+
+        return self.time_series_metadata[indexes[0]]
+
+    def list_time_series_metadata(
+        self, variable_name: str | None = None, time_series_type: Type = None, **user_attributes
+    ) -> list[TimeSeriesMetadata]:
+        """Return the time series metadata matching the inputs."""
+        return [
+            self.time_series_metadata[i]
+            for i in self._find_time_series_indexes(
+                variable_name=variable_name, time_series_type=time_series_type, **user_attributes
+            )
+        ]
+
+    def remove_time_series_metadata(
+        self, variable_name: str | None = None, time_series_type: Type = None, **user_attributes
+    ) -> list[TimeSeriesMetadata]:
+        """Remove and return all time series metadata matching the inputs."""
+        indexes = self._find_time_series_indexes(
+            variable_name=variable_name, time_series_type=time_series_type, **user_attributes
+        )
+
+        if not indexes:
+            msg = (
+                f"No time series metadata with {time_series_type=} {variable_name=} "
+                "{user_attributes=} is attached to {self.summary}"
+            )
+            raise ISNotStored(msg)
+
+        return [self.time_series_metadata.pop(i) for i in reversed(sorted(indexes))]
+
+    def _find_time_series_indexes(
+        self,
+        variable_name: str | None = None,
+        time_series_type: Type | None = None,
+        **user_attributes,
+    ) -> list[int]:
+        indexes = []
+        for i, metadata in enumerate(self.time_series_metadata):
+            if (
+                time_series_type is not None
+                and time_series_type != metadata.get_time_series_data_type()
+            ):
+                continue
+            if variable_name is not None and variable_name != metadata.variable_name:
+                continue
+            matches = True
+            for key, val in user_attributes.items():
+                if metadata.user_attributes.get(key) != val:
+                    matches = False
+                    break
+            if matches:
+                indexes.append(i)
+
+        return indexes
 
 
 class SerializedComponentReference(InfraSysBaseModel):

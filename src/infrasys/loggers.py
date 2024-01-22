@@ -30,7 +30,7 @@ def setup_logging(
     from loguru import logger
 
     logger.remove()
-    logger.enable("infra_sys")
+    logger.enable("infrasys")
     # logger.enable("resource_monitor")
     logger.add(sys.stderr, level=level, format=DEBUG_FORMAT if verbose else DEFAULT_FORMAT)
     if filename:
@@ -38,8 +38,8 @@ def setup_logging(
 
 
 if __name__ == "__main__":
-    from infra_sys.component_models import Component
-    from infra_sys.system import System
+    from infrasys.component_models import Component
+    from infrasys.system import System
 
     logger = setup_logging(level="INFO")
     system = System()
