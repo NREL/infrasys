@@ -46,10 +46,10 @@ class System:
             manager.
         kwargs
             Configures time series behaviors:
-            - time_series_in_memory: Defaults to true.
-            - time_series_read_only: Disables add/remove of time series, defaults to false.
-            - time_series_directory: Location to store time series file, defaults to the system's
-              tmp directory.
+              - time_series_in_memory: Defaults to true.
+              - time_series_read_only: Disables add/remove of time series, defaults to false.
+              - time_series_directory: Location to store time series file, defaults to the system's
+                tmp directory.
         """
         self._uuid = uuid or uuid4()
         self._name = name

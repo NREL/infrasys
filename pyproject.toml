@@ -35,10 +35,17 @@ dependencies = [
 ]
 [project.optional-dependencies]
 dev = [
+    "furo",
+    "myst_parser",
     "pre-commit",
     "pytest",
     "pytest-cov",
     "ruff",
+    "sphinx",
+    "sphinx-click",
+    "autodoc_pydantic~=2.0",
+    "sphinx-copybutton",
+    "sphinx-tabs~=3.4",
 ]
 
 [project.urls]
