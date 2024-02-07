@@ -1,30 +1,31 @@
 """Manages time series arrays"""
 
+import atexit
+import shutil
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from shutil import copytree
+from tempfile import mkdtemp
 from typing import Any, Type
-from uuid import UUID
 
 from loguru import logger
 
-from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
+from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.component_models import ComponentWithQuantities
+from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed
+from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.models import InfraSysBaseModel
 from infrasys.time_series_models import (
     SingleTimeSeries,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
-from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
-from infrasys.parquet_time_series_storage import ParquetTimeSeriesStorage
-
 
 TIME_SERIES_KWARGS = {
-    "time_series_in_memory": True,
+    "time_series_in_memory": False,
     "time_series_read_only": False,
     "time_series_directory": None,
-    "enable_time_series_file_compression": True,
 }
 
 
@@ -42,26 +43,23 @@ class TimeSeriesMetadataTracker(InfraSysBaseModel):
 class TimeSeriesManager:
     """Manages time series for a system."""
 
-    def __init__(
-        self,
-        metadata_trackers: None | list[TimeSeriesMetadataTracker] | None = None,
-        **kwargs,
-    ):
-        self._base_directory: Path | None = _process_time_series_kwarg(
-            "time_series_directory", **kwargs
-        )
+    def __init__(self, **kwargs):
+        base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
+
+        self._ts_directory = Path(mkdtemp(dir=base_directory))
+        logger.debug("Creating tmp folder at {}", self._ts_directory)
+        atexit.register(clean_tmp_folder, self._ts_directory)
+
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
         if _process_time_series_kwarg("time_series_in_memory", **kwargs):
             self._storage = InMemoryTimeSeriesStorage()
-        elif _process_time_series_kwarg("enable_time_series_file_compression", **kwargs):
-            self._storage = ParquetTimeSeriesStorage()
         else:
-            raise NotImplementedError("Bug: unhandled time series storage options")
+            self._storage = ArrowTimeSeriesStorage(self._ts_directory)
 
-        if metadata_trackers:
-            self._metadata = {x.metadata.uuid: x for x in metadata_trackers}
-        else:
-            self._metadata: dict[UUID, TimeSeriesMetadataTracker] = {}
+        # This tracks the number of references to each time series array across components.
+        # When an array is removed and no references remain, it can be deleted.
+        # This is only tracked in memory and has to be rebuilt during deserialization.
+        self._ref_counts = defaultdict(lambda: 0)
 
         # TODO: enforce one resolution
         # TODO: create parsing mechanism? CSV, CSV + JSON
@@ -87,9 +85,7 @@ class TimeSeriesManager:
         ISOperationNotAllowed
             Raised if the manager was created in read-only mode.
         """
-        if self._read_only:
-            raise ISOperationNotAllowed("Cannot store time series in read-only mode")
-
+        self._handle_read_only()
         ts_type = type(time_series)
         metadata_type = ts_type.get_time_series_metadata_type()
         metadata = metadata_type.from_data(time_series, **user_attributes)
@@ -107,19 +103,24 @@ class TimeSeriesManager:
                 )
                 raise ISAlreadyAttached(msg)
 
-        if metadata.uuid not in self._metadata:
-            self._metadata[metadata.uuid] = TimeSeriesMetadataTracker(metadata=metadata)
+        if time_series.uuid not in self._ref_counts:
             self._storage.add_time_series(metadata, time_series)
 
-        tracker = self._metadata[metadata.uuid]
         for component in components:
-            tracker.count += 1
+            self._ref_counts[time_series.uuid] += 1
             component.add_time_series_metadata(metadata)
+
+    def add_reference_counts(self, component: ComponentWithQuantities):
+        """Must be called for each component after deserialization in order to rebuild the
+        reference counts for each time array.
+        """
+        for metadata in component.list_time_series_metadata():
+            self._ref_counts[metadata.time_series_uuid] += 1
 
     def get(
         self,
         component: ComponentWithQuantities,
-        variable_name: str,
+        variable_name: str | None = None,
         time_series_type: Type = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
@@ -149,7 +150,7 @@ class TimeSeriesManager:
     def list_time_series(
         self,
         component: ComponentWithQuantities,
-        variable_name: str,
+        variable_name: str | None = None,
         time_series_type: Type = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
@@ -179,60 +180,71 @@ class TimeSeriesManager:
         ISOperationNotAllowed
             Raised if the manager was created in read-only mode.
         """
-        if self._read_only:
-            raise ISOperationNotAllowed("Cannot remove time series in read-only mode.")
-
+        self._handle_read_only()
         uuids = defaultdict(lambda: 0)
+        all_metadata = []
         for component in components:
             for metadata in component.list_time_series_metadata(
                 variable_name, time_series_type=time_series_type, **user_attributes
             ):
-                uuids[metadata.uuid] += 1
+                uuids[metadata.time_series_uuid] += 1
+                all_metadata.append(metadata)
 
         for uuid, count in uuids.items():
-            if uuid not in self._metadata:
-                msg = f"Bug: {uuid=} is not stored in self._metadata"
+            if uuid not in self._ref_counts:
+                msg = f"Bug: {uuid=} is not stored in self._ref_counts"
                 raise Exception(msg)
-            if count > self._metadata[uuid].count:
+            if count > self._ref_counts[uuid]:
                 msg = (
                     f"Bug: Removing time series {variable_name=} {time_series_type=} {uuid=}"
                     "will decrease the reference counts below 0."
                 )
                 raise Exception(msg)
 
+        count_removed = 0
         for component in components:
-            component.remove_time_series_metadata(
+            removed = component.remove_time_series_metadata(
                 variable_name, time_series_type=time_series_type, **user_attributes
             )
+            count_removed += len(removed)
 
-        for uuid, count in uuids.items():
-            self._metadata[uuid].count -= count
-            if self._metadata[uuid].count == 0:
-                self._storage.remove_time_series(self._metadata[uuid].metadata)
-                self._metadata.pop(uuid)
-                logger.info("Removed time series %s.%s", time_series_type, variable_name)
+        if count_removed != len(all_metadata):
+            msg = f"Bug: {count_removed=} {len(all_metadata)=}"
+            raise Exception(msg)
+
+        for metadata in all_metadata:
+            self._ref_counts[metadata.time_series_uuid] -= 1
+            if self._ref_counts[metadata.time_series_uuid] <= 0:
+                self._storage.remove_time_series(metadata)
+                self._ref_counts.pop(metadata.time_series_uuid)
+                logger.info("Removed time series {}.{}", time_series_type, variable_name)
 
     def copy(
         self,
-        dst: ComponentWithQuantities,
-        src: ComponentWithQuantities,
+        dst: Path,
+        src: Path | None = None,
         name_mapping: dict[str, str] | None = None,
-    ):
-        """Copy all time series from src to dst.
+    ) -> None:
+        """Copy all time series from src to dst using shutil.
 
         Parameters
         ----------
-        dst : ComponentWithQuantities
-        src : ComponentWithQuantities
+        dst
+            Destination folder
+        src
+            Source folder
         name_mapping : dict[str, str]
             Optionally map src names to different dst names.
             If provided and src has a time_series with a name not present in name_mapping, that
             time_series will not copied. If name_mapping is nothing then all time_series will be
             copied with src's names.
+
+        Notes
+        -----
+        name_mapping is currently not implemented.
         """
-        if self._read_only:
-            raise ISOperationNotAllowed("Cannot copy time series in read-only mode")
-        raise NotImplementedError("copy time series")
+        self._handle_read_only()
+        raise NotImplementedError
 
     def _get_by_metadata(
         self,
@@ -240,29 +252,21 @@ class TimeSeriesManager:
         start_time: datetime | None = None,
         length: int | None = None,
     ) -> TimeSeriesData:
-        if metadata.uuid not in self._metadata:
-            msg = f"No time series metadata is stored with {metadata.uuid}"
-            raise ISNotStored(msg)
         return self._storage.get_time_series(
             metadata,
             start_time=start_time,
             length=length,
         )
 
-    def serialize_data(self, base_dir) -> list[Path]:
-        """Serialize the time series data to one or more files. May be a no-op.
-
-        Returns
-        -------
-        list[Path]
-            Returns all filenames containing the data.
-        """
-        filename = ""
-        return [base_dir / filename]
-
-    def serialize_metadata(self) -> list[dict[str, Any]]:
-        """Serialize the time series metadata to a dictionary."""
-        return [x.model_dump() for x in self._metadata.values()]
+    def serialize(self, dst, src=None):
+        """Serialize the time series data to base_dir."""
+        # From the shutil documentation: the copying operation will continue if
+        # it encounters existing directories, and files within the dst tree
+        # will be overwritten by corresponding files from the src tree.
+        if src is None:
+            src = self._ts_directory
+        copytree(src, dst, dirs_exist_ok=True)
+        logger.debug("Copied time series data from {} to {}", src, dst)
 
     @classmethod
     def deserialize(
@@ -270,7 +274,21 @@ class TimeSeriesManager:
         data: dict[str, Any],
         **kwargs,
     ) -> "TimeSeriesManager":
-        """Deserialize the class."""
-        metadata_trackers = [TimeSeriesMetadataTracker(**x) for x in data["metadata"]]
-        # TODO: handle data files
-        return cls(metadata_trackers=metadata_trackers, **kwargs)
+        """Deserialize the class. Must also call add_reference_counts after deserializing
+        components.
+        """
+        mgr = cls(**kwargs)
+        if not mgr._read_only:
+            mgr.serialize(src=data["directory"], dst=mgr._ts_directory)
+        else:
+            mgr._ts_directory = data["directory"]
+        return mgr
+
+    def _handle_read_only(self):
+        if self._read_only:
+            raise ISOperationNotAllowed("Cannot modify time series in read-only mode.")
+
+
+def clean_tmp_folder(folder: Path | str):
+    shutil.rmtree(folder)
+    logger.info("Wiped folder: {}", folder)

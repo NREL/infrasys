@@ -14,7 +14,6 @@ DEBUG_FORMAT = (
 def setup_logging(
     filename=None,
     level="DEBUG",
-    verbose=False,
 ):
     """Configures logging to file and console.
 
@@ -32,7 +31,7 @@ def setup_logging(
     logger.remove()
     logger.enable("infrasys")
     # logger.enable("resource_monitor")
-    logger.add(sys.stderr, level=level, format=DEBUG_FORMAT if verbose else DEFAULT_FORMAT)
+    logger.add(sys.stderr, level=level, format=DEFAULT_FORMAT)
     if filename:
         logger.add(filename, level=level)
 

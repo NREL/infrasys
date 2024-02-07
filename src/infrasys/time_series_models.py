@@ -2,10 +2,11 @@
 
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Iterable, Literal, Optional, Type, Union
+from typing import Any, Literal, Optional, Type, Union, Sequence
 from uuid import UUID
 
-import polars as pl
+import numpy as np
+import pyarrow as pa
 from pydantic import Field, field_validator, model_validator
 from typing_extensions import Annotated
 
@@ -16,11 +17,15 @@ TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
 
 
+ISArray = Sequence | pa.Array | np.ndarray
+
+
 class TimeSeriesStorageType(str, Enum):
     """Defines the possible storage types for time series."""
 
     HDF5 = "hdf5"
     IN_MEMORY = "in_memory"
+    FILE = "arrow"
     PARQUET = "parquet"
 
 
@@ -38,86 +43,120 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers):
 class SingleTimeSeries(TimeSeriesData):
     """Defines a time array with a single dimension of floats."""
 
+    data: ISArray
     resolution: Optional[timedelta] = None
     initial_time: Optional[datetime] = None
     length: Optional[int] = None
-    data: pl.DataFrame
 
     @field_validator("data")
     @classmethod
-    def check_data(cls, df) -> pl.DataFrame:
+    def check_data(cls, data) -> pa.Array:  # Standarize what object we receive.
         """Check time series data."""
-        if len(df) < 3:
-            msg = f"SingleTimeSeries length must be at least 2: {len(df)}"
+        if len(data) < 2:
+            msg = f"SingleTimeSeries length must be at least 2: {len(data)}"
             raise ValueError(msg)
 
-        if TIME_COLUMN not in df.columns:
-            msg = f"SingleTimeSeries dataframe must have the time column {TIME_COLUMN}"
-            raise ValueError(msg)
+        if isinstance(data, ISArray) and not isinstance(data, pa.Array):
+            data = pa.array(data)
 
-        if VALUE_COLUMN not in df.columns:
-            msg = f"SingleTimeSeries dataframe must have the value column {VALUE_COLUMN}"
-            raise ValueError(msg)
+        return data  # type: ignore
 
-        return df
-
-    @model_validator(mode="after")
+    @model_validator(mode="after")  # type: ignore
     def assign_values(self) -> "SingleTimeSeries":
         """Assign parameters by inspecting data."""
-        actual_res = self.data[TIME_COLUMN][1] - self.data[TIME_COLUMN][0]
+
+        # Check that length matches what user says.
         actual_len = len(self.data)
-        actual_it = self.data[TIME_COLUMN][0]
-
-        if self.resolution is None:
-            self.resolution = actual_res
-        elif self.resolution != actual_res:
-            msg = f"resolution={self.resolution} does not match data resolution {actual_res}"
-            raise ValueError(msg)
-
         if self.length is None:
             self.length = actual_len
         elif self.length != actual_len:
             msg = f"length={self.length} does not match data length {actual_len}"
             raise ValueError(msg)
-
-        if self.initial_time is None:
-            self.initial_time = actual_it
-        elif self.initial_time != actual_it:
-            msg = f"initial_time={self.initial_time} does not match data initial_time {actual_it}"
-            raise ValueError(msg)
-
         return self
 
     @classmethod
     def from_array(
-        cls, data: Iterable, variable_name: str, initial_time: datetime, resolution: timedelta
+        cls,
+        data: ISArray,
+        variable_name: str,
+        initial_time: datetime,
+        resolution: timedelta,
     ) -> "SingleTimeSeries":
-        """Create a SingleTimeSeries from an iterable of data. Length is inferred from data."""
-        length = len(data)
-        end_time = initial_time + (length - 1) * resolution
-        df = pl.DataFrame(
-            {
-                TIME_COLUMN: pl.datetime_range(
-                    initial_time, end_time, interval=resolution, eager=True
-                ),
-                VALUE_COLUMN: data,
-            }
+        """Method of SingleTimeSeries that creates an instance from a sequence.
+
+        Parameters
+        ----------
+        data
+            Sequence that contains the values of the time series
+        initial_time
+            Start time for the time series (e.g., datetime(2020,1,1))
+        resolution
+            Resolution of the time series (e.g., 30min, 1hr)
+        variable_name
+            Name assigned to the values of the time series (e.g., active_power)
+
+        Returns
+        -------
+        SingleTimeSeries
+
+        See Also
+        --------
+        from_time_array:  Time index implementation
+
+        Note
+        ----
+        - Length of the sequence is inferred from the data.
+        """
+        return SingleTimeSeries(
+            data=data,
+            variable_name=variable_name,
+            initial_time=initial_time,
+            resolution=resolution,
         )
-        return SingleTimeSeries(variable_name=variable_name, data=df)
 
     @classmethod
-    def from_dataframe(
+    def from_time_array(
         cls,
-        df: pl.DataFrame,
+        data: ISArray,
         variable_name: str,
-        time_column=TIME_COLUMN,
-        value_column=VALUE_COLUMN,
+        time_index: Sequence[datetime],
     ) -> "SingleTimeSeries":
-        """Create a SingleTimeSeries from a DataFrame with a time column."""
-        data = df.select(
-            pl.col(time_column).alias(TIME_COLUMN), pl.col(value_column).alias(VALUE_COLUMN)
+        """Create SingleTimeSeries using time_index provided.
+
+        Parameters
+        ----------
+        data
+            Sequence that contains the values of the time series
+        variable_name
+            Name assigned to the values of the time series (e.g., active_power)
+        time_index
+            Sequence that contains the index of the time series
+
+        Returns
+        -------
+        SingleTimeSeries
+
+        See Also
+        --------
+        from_array: Base implementation
+
+        Note
+        ----
+        The current implementation only uses the time_index to infer the initial time and resolution.
+
+        """
+        # Infer initial time from the time_index.
+        initial_time = time_index[0]
+
+        # This does not cover changes mult-resolution time index.
+        resolution = time_index[1] - time_index[0]
+
+        return SingleTimeSeries.from_array(
+            data,
+            variable_name,
+            initial_time,
+            resolution,
         )
-        return SingleTimeSeries(variable_name=variable_name, data=data)
 
     @staticmethod
     def get_time_series_metadata_type() -> Type:
@@ -160,6 +199,9 @@ class SingleTimeSeriesMetadata(TimeSeriesMetadata):
         cls, time_series: SingleTimeSeries, **user_attributes
     ) -> "SingleTimeSeriesMetadata":
         """Construct a SingleTimeSeriesMetadata from a SingleTimeSeries."""
+
+        # TODO: We need to figure out how to tell pyright that this object has
+        # validation and not empty fields once created.
         return cls(
             variable_name=time_series.variable_name,
             resolution=time_series.resolution,

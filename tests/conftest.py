@@ -1,15 +1,10 @@
-import os
-import sys
-from datetime import datetime, timedelta
+import logging
 
-import polars as pl
 import pytest
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "models"))
+from loguru import logger
 
 from infrasys.location import Location
-from simple_system import SimpleSystem, SimpleBus, SimpleGenerator, SimpleSubsystem
-from infrasys.time_series_models import TIME_COLUMN, VALUE_COLUMN
+from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator, SimpleSubsystem
 
 
 @pytest.fixture
@@ -24,16 +19,16 @@ def simple_system():
     return system
 
 
-@pytest.fixture
-def hourly_time_array() -> pl.DataFrame:
-    """Provides a DataFrame with hourly data for a year."""
-    start = datetime(year=2021, month=1, day=1)
-    end = datetime(year=2021, month=12, day=31, hour=23)
-    resolution = timedelta(hours=1)
-    length = 8760
-    return pl.DataFrame(
-        {
-            TIME_COLUMN: pl.datetime_range(start, end, interval=resolution, eager=True),
-            VALUE_COLUMN: range(length),
-        },
-    )
+@pytest.fixture(autouse=True)
+def propagate_logs():
+    """Enable logging for the package"""
+
+    class PropagateHandler(logging.Handler):
+        def emit(self, record):
+            if logging.getLogger(record.name).isEnabledFor(record.levelno):
+                logging.getLogger(record.name).handle(record)
+
+    logger.remove()
+    logger.enable("infrasys")
+    logger.add(PropagateHandler(), format="{message}")
+    yield

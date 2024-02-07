@@ -19,13 +19,11 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
     """Stores time series in memory."""
 
     def __init__(self):
-        self._arrays: dict[UUID, TimeSeriesData] = {}  # This is metadata UUID, not time series
-        # TODO: consider storing by time series by UUID instead. Would have to track reference
-        # counts.
+        self._arrays: dict[UUID, TimeSeriesData] = {}  # Time series UUID, not metadata UUID
 
     def add_time_series(self, metadata: TimeSeriesMetadata, time_series: TimeSeriesData) -> None:
-        if metadata.uuid not in self._arrays:
-            self._arrays[metadata.uuid] = time_series
+        if metadata.time_series_uuid not in self._arrays:
+            self._arrays[metadata.time_series_uuid] = time_series
             logger.debug("Added {} to store", time_series.summary)
         else:
             logger.debug("{} was already stored", time_series.summary)
@@ -36,9 +34,9 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         start_time: datetime | None = None,
         length: int | None = None,
     ) -> TimeSeriesData:
-        time_series = self._arrays.get(metadata.uuid)
+        time_series = self._arrays.get(metadata.time_series_uuid)
         if time_series is None:
-            msg = f"No time series with {metadata.uuid} is stored"
+            msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
 
         if metadata.get_time_series_data_type() == SingleTimeSeries:
@@ -46,7 +44,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
 
     def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
-        time_series = self._arrays.pop(metadata.uuid, None)
+        time_series = self._arrays.pop(metadata.time_series_uuid, None)
         if time_series is None:
             msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
@@ -57,12 +55,13 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         start_time: datetime | None = None,
         length: int | None = None,
     ) -> SingleTimeSeries:
-        base_ts = self._arrays[metadata.uuid]
+        base_ts = self._arrays[metadata.time_series_uuid]
         if start_time is None and length is None:
             return base_ts
 
         index, length = metadata.get_range(start_time=start_time, length=length)
         return SingleTimeSeries(
+            uuid=metadata.time_series_uuid,
             variable_name=base_ts.variable_name,
             resolution=base_ts.resolution,
             initial_time=start_time or base_ts.initial_time,

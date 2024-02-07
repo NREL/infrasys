@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy",
-    "polars",
+    "pyarrow",
     "pint",
     "loguru",
     "pydantic >= 2.4, <= 3",

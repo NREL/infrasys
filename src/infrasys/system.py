@@ -96,8 +96,7 @@ class System:
             "data_format_version": self.data_format_version,
             "components": [x.model_dump_custom() for x in self._component_mgr.iter_all()],
             "time_series": {
-                "metadata": self._time_series_mgr.serialize_metadata(),
-                "files": self._time_series_mgr.serialize_data(filename.parent),
+                "directory": filename.parent / (filename.name + "_time_series"),
             },
         }
         extra = self.serialize_system_attributes()
@@ -115,6 +114,8 @@ class System:
             data["system"] = system_data
         with open(filename, "w", encoding="utf-8") as f_out:
             json.dump(data, f_out, indent=indent, cls=ExtendedJSONEncoder)
+
+        self._time_series_mgr.serialize(filename.parent / (filename.name + "_time_series"))
 
     @classmethod
     def from_json(cls, filename: Path | str, upgrade_handler=None, **kwargs) -> "System":
@@ -147,7 +148,7 @@ class System:
                 )
         system.deserialize_system_attributes(system_data)
         system._deserialize_components(system_data["components"])
-        logger.info("Deserialized system %s", system.summary)
+        logger.info("Deserialized system {}", system.summary)
         return system
 
     def serialize_system_attributes(self) -> dict[str, Any]:
@@ -261,20 +262,45 @@ class System:
     def _try_deserialize_component(
         self, component: dict, cached_types: "_CachedTypeHelper"
     ) -> Component | None:
+        actual_component = None
+        values = self._deserialize_fields(component, cached_types)
+        if values is None:
+            return None
+
+        component_type = cached_types.get_type(SerializedTypeInfo(**component[TYPE_INFO]))
+        system_uuid = values.pop("system_uuid")
+        if str(self.uuid) != system_uuid:
+            msg = (
+                "component has a system_uuid that conflicts with the system: "
+                f"{values} component's system_uuid={system_uuid} system={self.uuid}"
+            )
+            raise ISConflictingSystem(msg)
+        actual_component = component_type(**values)
+        self.components.add(actual_component, deserialization_in_progress=True)
+        if actual_component.has_time_series():
+            # This allows the time series manager to rebuild the reference counts of time
+            # series and then manage deletions.
+            self.time_series.add_reference_counts(actual_component)
+
+        return actual_component
+
+    def _deserialize_fields(self, component: dict, cached_types) -> dict | None:
         values = {}
-        can_be_deserialized = True
         for field, value in component.items():
             if isinstance(value, dict) and COMPOSED_TYPE_INFO in value:
                 composed_value = self._deserialize_composed_value(value, cached_types)
                 if composed_value is None:
-                    can_be_deserialized = False
-                    break
+                    return None
                 values[field] = composed_value
-            elif isinstance(value, list) and value and isinstance(value[0], dict) and COMPOSED_TYPE_INFO in value[0]:
+            elif (
+                isinstance(value, list)
+                and value
+                and isinstance(value[0], dict)
+                and COMPOSED_TYPE_INFO in value[0]
+            ):
                 composed_values = self._deserialize_composed_list(value, cached_types)
                 if composed_values is None:
-                    can_be_deserialized = False
-                    break
+                    return None
                 values[field] = composed_values
             elif isinstance(value, dict) and TYPE_INFO in value:
                 values[field] = cached_types.get_type(
@@ -283,20 +309,7 @@ class System:
             elif field != TYPE_INFO:
                 values[field] = value
 
-        actual_component = None
-        if can_be_deserialized:
-            component_type = cached_types.get_type(SerializedTypeInfo(**component[TYPE_INFO]))
-            system_uuid = values.pop("system_uuid")
-            if str(self.uuid) != system_uuid:
-                msg = (
-                    "component has a system_uuid that conflicts with the system: "
-                    f"{values} component's system_uuid={system_uuid} system={self.uuid}"
-                )
-                raise ISConflictingSystem(msg)
-            actual_component = component_type(**values)
-            self.components.add(actual_component, deserialization_in_progress=True)
-
-        return actual_component
+        return values
 
     def _deserialize_composed_value(self, value: dict, cached_types) -> Component | None:
         ref = SerializedComponentReference(**value)
@@ -332,7 +345,7 @@ class _CachedTypeHelper:
         """Return True if the type can be deserialized."""
         return component_type in self._deserialized_types
 
-    def get_type(self, ref: SerializedComponentReference):
+    def get_type(self, ref: SerializedComponentReference | SerializedTypeInfo):
         """Return the type contained in ref, dynamically importing as necessary."""
         type_key = (ref.module, ref.type)
         component_type = self._observed_types.get(type_key)

@@ -50,6 +50,15 @@ class Component(InfraSysBaseModelWithIdentifers):
             return False
         return self.system_uuid == system_uuid
 
+    def has_time_series(
+        self,
+        variable_name: str | None = None,
+        time_series_type: Type = None,
+        **user_attributes,
+    ) -> bool:
+        """Return True if the component has time series data matching the inputs."""
+        return False
+
     def model_dump_custom(self, *args, **kwargs):
         """Custom serialization for this package"""
 
@@ -94,7 +103,6 @@ class ComponentWithQuantities(Component):
         time_series_type: Type = None,
         **user_attributes,
     ) -> bool:
-        """Return True if the component has time series data matching the inputs."""
         return bool(
             self._find_time_series_indexes(
                 variable_name, time_series_type=time_series_type, **user_attributes
@@ -119,7 +127,7 @@ class ComponentWithQuantities(Component):
             raise ISAlreadyAttached(msg)
 
         self.time_series_metadata.append(metadata)
-        logger.debug("Added time series %s to %s", metadata.summary, self.summary)
+        logger.debug("Added time series {} to {}", metadata.summary, self.summary)
 
     def get_time_series_metadata(
         self,

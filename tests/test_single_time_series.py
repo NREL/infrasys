@@ -1,35 +1,46 @@
+"""Test related to arrow storage module."""
 from datetime import datetime, timedelta
-import polars as pl
 
 import pytest
+import pyarrow as pa
 
-from infrasys.time_series_models import TIME_COLUMN, SingleTimeSeries, VALUE_COLUMN
+from infrasys.time_series_models import SingleTimeSeries
 
 
-def test_from_array():
+def test_single_time_series_attributes():
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    length = 8784
+    variable_name = "active_power"
+    data = range(length)
+    ts = SingleTimeSeries(
+        data=data, variable_name=variable_name, initial_time=start, resolution=resolution
+    )
+    assert ts.length == length
+    assert ts.resolution == resolution
+    assert ts.initial_time == start
+    assert isinstance(ts.data, pa.Array)
+    assert ts.data[-1].as_py() == length - 1
+
+
+def test_from_array_construction():
+    """Test SingleTimeSeries.from_array construction."""
     start = datetime(year=2020, month=1, day=1)
     resolution = timedelta(hours=1)
     length = 8784
     data = range(length)
     variable_name = "active_power"
     ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
+    assert isinstance(ts, SingleTimeSeries)
     assert ts.length == length
     assert ts.resolution == resolution
-    assert isinstance(ts.data, pl.DataFrame)
-    assert ts.data[VALUE_COLUMN][-1] == length - 1
+    assert ts.initial_time == start
+    assert isinstance(ts.data, pa.Array)
+    assert ts.data[-1].as_py() == length - 1
 
 
-def test_from_dataframe(hourly_time_array):
-    df = hourly_time_array
-    variable_name = VALUE_COLUMN
-    ts = SingleTimeSeries.from_dataframe(df, variable_name)
-    assert ts.length == len(df)
-    assert ts.resolution == timedelta(hours=1)
-    assert isinstance(ts.data, pl.DataFrame)
-    assert ts.data[VALUE_COLUMN][-1] == len(df) - 1
-
-
-def test_invalid_length():
+def test_invalid_sequence_length():
+    """Check that time series has at least 2 elements."""
     start = datetime(year=2020, month=1, day=1)
     resolution = timedelta(hours=1)
     length = 1
@@ -39,36 +50,34 @@ def test_invalid_length():
         SingleTimeSeries.from_array(data, variable_name, start, resolution)
 
 
-def test_invalid_time_column(hourly_time_array):
-    df = hourly_time_array.select(pl.col(TIME_COLUMN).alias("invalid"), pl.col(VALUE_COLUMN))
-    variable_name = "value"
-    with pytest.raises(ValueError, match="must have the time column"):
-        SingleTimeSeries(data=df, variable_name=variable_name)
+def test_from_time_array_constructor():
+    """Test SingleTimeSeries.from_time_array construction."""
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    time_array = [initial_time + timedelta(hours=i) for i in range(length)]
+    data = range(length)
+    variable_name = "active_power"
+    ts = SingleTimeSeries.from_time_array(data, variable_name, time_array)
+    assert isinstance(ts, SingleTimeSeries)
+    assert ts.length == length
+    assert ts.resolution == resolution
+    assert ts.initial_time == initial_time
+    assert isinstance(ts.data, pa.Array)
+    assert ts.data[-1].as_py() == length - 1
 
 
-def test_invalid_value_column(hourly_time_array):
-    df = hourly_time_array.select(pl.col(TIME_COLUMN), pl.col(VALUE_COLUMN).alias("invalid"))
-    variable_name = VALUE_COLUMN
-    with pytest.raises(ValueError, match="must have the value column"):
-        SingleTimeSeries(data=df, variable_name=variable_name)
-
-
-def test_inconsistent_resolution(hourly_time_array):
-    df = hourly_time_array
-    variable_name = VALUE_COLUMN
-    with pytest.raises(ValueError, match="does not match data resolution"):
-        SingleTimeSeries(data=df, variable_name=variable_name, resolution=timedelta(seconds=10))
-
-
-def test_inconsistent_length(hourly_time_array):
-    df = hourly_time_array
-    variable_name = VALUE_COLUMN
+def test_inconsistent_length():
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    length = 8784
+    data = range(length)
+    variable_name = "active_power"
     with pytest.raises(ValueError, match="does not match data length"):
-        SingleTimeSeries(data=df, variable_name=variable_name, length=10)
-
-
-def test_inconsistent_initial_time(hourly_time_array):
-    df = hourly_time_array
-    variable_name = VALUE_COLUMN
-    with pytest.raises(ValueError, match="does not match data initial_time"):
-        SingleTimeSeries(data=df, variable_name=variable_name, initial_time=datetime.now())
+        SingleTimeSeries(
+            data=data,
+            variable_name=variable_name,
+            resolution=resolution,
+            initial_time=start,
+            length=10,
+        )
