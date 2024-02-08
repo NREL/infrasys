@@ -72,10 +72,14 @@ class TimeSeriesManager:
     ) -> None:
         """Store a time series array for one or more components.
 
+        Parameters
+        ----------
         time_series : TimeSeriesData
-        components : tuple[ComponentWithQuantities]
-        user_attributes : kwargs
-            Key/value pairs to store with the time series data.
+            Time series data to store.
+        components : ComponentWithQuantities
+            Add the time series to all of these components.
+        user_attributes : Any
+            Key/value pairs to store with the time series data. Must be JSON-serializable.
 
         Raises
         ------
@@ -221,18 +225,18 @@ class TimeSeriesManager:
 
     def copy(
         self,
-        dst: Path,
-        src: Path | None = None,
+        dst: ComponentWithQuantities,
+        src: ComponentWithQuantities,
         name_mapping: dict[str, str] | None = None,
     ) -> None:
-        """Copy all time series from src to dst using shutil.
+        """Copy all time series from src to dst.
 
         Parameters
         ----------
-        dst
-            Destination folder
-        src
-            Source folder
+        dst : ComponentWithQuantities
+            Destination component
+        src : ComponentWithQuantities
+            Source component
         name_mapping : dict[str, str]
             Optionally map src names to different dst names.
             If provided and src has a time_series with a name not present in name_mapping, that

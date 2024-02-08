@@ -80,12 +80,12 @@ class ComponentManager:
                     if filter_func(component):
                         yield component
 
-    def list_by_name(self, component_type: Type, name: str):
+    def list_by_name(self, component_type: Type, name: str) -> list[Component]:
         """Return all components that match component_type and name.
 
         The component_type can be an abstract type.
         """
-        return self.iter(component_type, filter_func=lambda x: x.name == name)
+        return list(self.iter(component_type, filter_func=lambda x: x.name == name))
 
     def get_by_uuid(self, uuid: UUID) -> Component:
         """Return the component with the input UUID.
@@ -141,7 +141,7 @@ class ComponentManager:
         """Create a copy of the component."""
         raise NotImplementedError("copy")
 
-    def change_uuid(self, component_type: Type, component: Component) -> None:
+    def change_uuid(self, component: Component) -> None:
         """Change the component UUID."""
         raise NotImplementedError("change_component_uuid")
 
