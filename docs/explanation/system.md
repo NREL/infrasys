@@ -9,7 +9,7 @@ Refer to the [System API](#system-api) for complete information.
 Parent packages must choose one of the following:
 
 1. Derive a custom System class that inherits from `infrasys.System`. Re-implement methods
-as desired.
+as desired. Add custom attributes to the System that will be serialized to JSON.
 
     - Reimplement `System.add_components` in order to perform custom validation
       or custom behavior. For example, a package may implement a load that
@@ -29,4 +29,9 @@ as desired.
 2. Implement an independent System class and compose the `infrasys.System`. This can be beneficial
 if you want to make the underlying system opaque to users.
 
-3. Use `infrasys.System` directly. This is probably not what most users want.
+    - This pattern requires that you call `System.to_json()` with the keyword argument `data` set
+      to a dictionary containing your system's attributes. `infrasys` will add its contents to a
+      field called `system` inside that dictionary.
+
+3. Use `infrasys.System` directly. This is probably not what most packages want because they will
+not be able to serialize custom attributes or implement specialized behavior as discussed above.

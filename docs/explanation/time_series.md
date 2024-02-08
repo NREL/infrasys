@@ -1,9 +1,35 @@
 # Time Series
-Infrastructure systems supports time series data expressed as a one-dimensional array of floats.
-Users must provide a `variable_name` that is typically the field of a component being modeled. For
-example, if the user has a time array associated with the active power of a generator, they would assign
-`variable_name = "active_power"`. Users can attach their own attributes to each time array. For example,
-there might be different profiles for different model years.
+Infrastructure systems supports time series data expressed as a one-dimensional array of floats
+using the class [SingleTimeSeries](#singe-time-series-api). Users must provide a `variable_name`
+that is typically the field of a component being modeled. For example, if the user has a time array
+associated with the active power of a generator, they would assign
+`variable_name = "active_power"`.
+
+Here is an example of how to create an instance of `SingleTimeSeries`:
+
+```python
+    import random
+    time_series = SingleTimeSeries.from_array(
+        data=[random.random() for x in range(24)],
+        variable_name="active_power",
+        initial_time=datetime(year=2030, month=1, day=1),
+        resolution=timedelta(hours=1),
+    )
+```
+
+Users can attach their own attributes to each time array. For example,
+there might be different profiles for different scenarios or model years.
+
+```python
+    time_series = SingleTimeSeries.from_array(
+        data=[random.random() for x in range(24)],
+        variable_name="active_power",
+        initial_time=datetime(year=2030, month=1, day=1),
+        resolution=timedelta(hours=1),
+        scenario="high",
+        model_year="2035",
+    )
+```
 
 ## Behaviors
 Users can customize time series behavior with these flags passed to the `System` constructor:
