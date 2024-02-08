@@ -57,6 +57,7 @@ class System:
         Examples
         --------
         >>> system = System(name="my_system")
+        >>> system2 = System(name="my_system", time_series_directory="/tmp/scratch")
         """
         self._uuid = uuid or uuid4()
         self._name = name
@@ -87,7 +88,7 @@ class System:
 
         Examples
         --------
-        >>> to_json("systems/system1.json")
+        >>> system.to_json("systems/system1.json")
         INFO: Wrote system data to systems/system1.json
         INFO: Copied time series data to systems/system1_time_series
         """
