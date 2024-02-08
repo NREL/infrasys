@@ -270,22 +270,24 @@ class TimeSeriesManager:
         if src is None:
             src = self._ts_directory
         copytree(src, dst, dirs_exist_ok=True)
-        logger.debug("Copied time series data from {} to {}", src, dst)
+        logger.info("Copied time series data to {}", dst)
 
     @classmethod
     def deserialize(
         cls,
         data: dict[str, Any],
+        parent_dir: Path | str,
         **kwargs,
     ) -> "TimeSeriesManager":
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
+        time_series_dir = Path(parent_dir) / data["directory"]
         mgr = cls(**kwargs)
         if not mgr._read_only:
-            mgr.serialize(src=data["directory"], dst=mgr._ts_directory)
+            mgr.serialize(src=time_series_dir, dst=mgr._ts_directory)
         else:
-            mgr._ts_directory = data["directory"]
+            mgr._ts_directory = time_series_dir
         return mgr
 
     def _handle_read_only(self):

@@ -139,6 +139,7 @@ class ComponentManager:
         self, component: Type, new_name: str, attach_to_system=False, copy_time_series=True
     ) -> Component:
         """Create a copy of the component."""
+        # TODO: must call change_uuid and clear system_uuid if attach_to_system=False
         raise NotImplementedError("copy")
 
     def change_uuid(self, component: Component) -> None:
