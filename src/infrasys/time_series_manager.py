@@ -72,10 +72,14 @@ class TimeSeriesManager:
     ) -> None:
         """Store a time series array for one or more components.
 
+        Parameters
+        ----------
         time_series : TimeSeriesData
-        components : tuple[ComponentWithQuantities]
-        user_attributes : kwargs
-            Key/value pairs to store with the time series data.
+            Time series data to store.
+        components : ComponentWithQuantities
+            Add the time series to all of these components.
+        user_attributes : Any
+            Key/value pairs to store with the time series data. Must be JSON-serializable.
 
         Raises
         ------
@@ -221,18 +225,18 @@ class TimeSeriesManager:
 
     def copy(
         self,
-        dst: Path,
-        src: Path | None = None,
+        dst: ComponentWithQuantities,
+        src: ComponentWithQuantities,
         name_mapping: dict[str, str] | None = None,
     ) -> None:
-        """Copy all time series from src to dst using shutil.
+        """Copy all time series from src to dst.
 
         Parameters
         ----------
-        dst
-            Destination folder
-        src
-            Source folder
+        dst : ComponentWithQuantities
+            Destination component
+        src : ComponentWithQuantities
+            Source component
         name_mapping : dict[str, str]
             Optionally map src names to different dst names.
             If provided and src has a time_series with a name not present in name_mapping, that
@@ -266,22 +270,24 @@ class TimeSeriesManager:
         if src is None:
             src = self._ts_directory
         copytree(src, dst, dirs_exist_ok=True)
-        logger.debug("Copied time series data from {} to {}", src, dst)
+        logger.info("Copied time series data to {}", dst)
 
     @classmethod
     def deserialize(
         cls,
         data: dict[str, Any],
+        parent_dir: Path | str,
         **kwargs,
     ) -> "TimeSeriesManager":
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
+        time_series_dir = Path(parent_dir) / data["directory"]
         mgr = cls(**kwargs)
         if not mgr._read_only:
-            mgr.serialize(src=data["directory"], dst=mgr._ts_directory)
+            mgr.serialize(src=time_series_dir, dst=mgr._ts_directory)
         else:
-            mgr._ts_directory = data["directory"]
+            mgr._ts_directory = time_series_dir
         return mgr
 
     def _handle_read_only(self):

@@ -3,8 +3,9 @@
 import importlib
 import json
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Type
+from typing import Any, Callable, Iterable, Type
 from uuid import UUID, uuid4
 
 from loguru import logger
@@ -18,10 +19,12 @@ from infrasys.exceptions import (
 from infrasys.models import SerializedTypeInfo, make_summary
 from infrasys.component_models import (
     Component,
+    ComponentWithQuantities,
     SerializedComponentReference,
 )
 from infrasys.component_manager import ComponentManager
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
+from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData
 from infrasys.utils.json import ExtendedJSONEncoder
 
 
@@ -33,7 +36,7 @@ class System:
         name: str | None = None,
         time_series_manager: None | TimeSeriesManager = None,
         uuid: UUID | None = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         """Constructs a System.
 
@@ -44,12 +47,17 @@ class System:
         time_series_manager : None | TimeSeriesManager
             Users should not pass this. De-serialization (from_json) will pass a constructed
             manager.
-        kwargs
+        kwargs : Any
             Configures time series behaviors:
-            - time_series_in_memory: Defaults to true.
-            - time_series_read_only: Disables add/remove of time series, defaults to false.
-            - time_series_directory: Location to store time series file, defaults to the system's
-              tmp directory.
+              - time_series_in_memory: Defaults to true.
+              - time_series_read_only: Disables add/remove of time series, defaults to false.
+              - time_series_directory: Location to store time series file, defaults to the system's
+                tmp directory.
+
+        Examples
+        --------
+        >>> system = System(name="my_system")
+        >>> system2 = System(name="my_system", time_series_directory="/tmp/scratch")
         """
         self._uuid = uuid or uuid4()
         self._name = name
@@ -58,31 +66,32 @@ class System:
         self._time_series_mgr = time_series_manager or TimeSeriesManager(**time_series_kwargs)
         self._data_format_version = None
 
-        # Delegate to the component and time series managers to allow user access directly
-        # from the system.
-        self.get_components = self._component_mgr.iter
-        self.add_component = self._component_mgr.add
-        self.add_components = self._component_mgr.add
-        self.get_component = self._component_mgr.get
-        self.update_components = self._component_mgr.update
-        self.change_component_uuid = self._component_mgr.change_uuid
-        self.copy_component = self._component_mgr.copy
-        self.get_component_by_uuid = self._component_mgr.get_by_uuid
-        self.get_components = self._component_mgr.iter
-        self.iter_all_components = self._component_mgr.iter_all
-        self.list_components_by_name = self._component_mgr.list_by_name
-        self.remove_component = self._component_mgr.remove
-        self.remove_component_by_name = self._component_mgr.remove_by_name
-        self.remove_component_by_uuid = self._component_mgr.remove_by_uuid
-        self.add_time_series = self._time_series_mgr.add
-        self.get_time_series = self._time_series_mgr.get
-        self.remove_time_series = self._time_series_mgr.remove
-        self.copy_time_series = self._time_series_mgr.copy
-
         # TODO: add pretty printing of components and time series
 
     def to_json(self, filename: Path | str, overwrite=False, indent=None, data=None) -> None:
-        """Write the contents of a system to a JSON file."""
+        """Write the contents of a system to a JSON file. Time series will be written to a
+        directory at the same level as filename.
+
+        Parameters
+        ----------
+        filename : Path | str
+           Filename to write. If the parent directory does not exist, it will be created.
+        overwrite : bool
+            Set to True to overwrite the file if it already exists.
+        indent : int | None
+            Indentation level in the JSON file. Defaults to no indentation.
+        data : dict | None
+            This is an override for packages that compose this System inside a parent System
+            class. If set, it will be the outer object in the JSON file. It must not set the
+            key 'system'. Packages that derive a custom instance of this class should leave this
+            field unset.
+
+        Examples
+        --------
+        >>> system.to_json("systems/system1.json")
+        INFO: Wrote system data to systems/system1.json
+        INFO: Copied time series data to systems/system1_time_series
+        """
         # TODO: how to get all python package info from environment?
         if isinstance(filename, str):
             filename = Path(filename)
@@ -90,13 +99,19 @@ class System:
             msg = f"{filename=} already exists. Choose a different path or set overwrite=True."
             raise ISFileExists(msg)
 
+        if not filename.parent.exists():
+            filename.parent.mkdir()
+
+        time_series_dir = filename.parent / (filename.stem + "_time_series")
         system_data = {
             "name": self.name,
             "uuid": str(self.uuid),
             "data_format_version": self.data_format_version,
             "components": [x.model_dump_custom() for x in self._component_mgr.iter_all()],
             "time_series": {
-                "directory": filename.parent / (filename.name + "_time_series"),
+                # Note: parent directory is stripped. De-serialization will find it from the
+                # parent of the JSON file.
+                "directory": time_series_dir.name,
             },
         }
         extra = self.serialize_system_attributes()
@@ -114,22 +129,66 @@ class System:
             data["system"] = system_data
         with open(filename, "w", encoding="utf-8") as f_out:
             json.dump(data, f_out, indent=indent, cls=ExtendedJSONEncoder)
+            logger.info("Wrote system data to {}", filename)
 
-        self._time_series_mgr.serialize(filename.parent / (filename.name + "_time_series"))
+        self._time_series_mgr.serialize(filename.parent / (filename.stem + "_time_series"))
 
     @classmethod
-    def from_json(cls, filename: Path | str, upgrade_handler=None, **kwargs) -> "System":
-        """Deserialize a System from a JSON file. Refer to System constructor for kwargs."""
+    def from_json(
+        cls, filename: Path | str, upgrade_handler: Callable | None = None, **kwargs
+    ) -> "System":
+        """Deserialize a System from a JSON file. Refer to System constructor for kwargs.
+
+        Parameters
+        ----------
+        filename : Path | str
+            JSON file containing the system data.
+        upgrade_handler : Callable | None
+            Optional function to handle data format upgrades. Should only be set when the parent
+            package composes this package. If set, it will be called before de-serialization of
+            the components.
+
+        Examples
+        --------
+        >>> system = System.from_json("systems/system1.json")
+        """
         with open(filename, encoding="utf-8") as f_in:
             data = json.load(f_in)
-        return cls.from_dict(data, upgrade_handler=upgrade_handler, **kwargs)
+        time_series_parent_dir = Path(filename).parent
+        return cls.from_dict(
+            data, time_series_parent_dir, upgrade_handler=upgrade_handler, **kwargs
+        )
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], upgrade_handler=None, **kwargs) -> "System":
-        """Deserialize a System from a dictionary."""
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+        time_series_parent_dir: Path | str,
+        upgrade_handler=None,
+        **kwargs,
+    ) -> "System":
+        """Deserialize a System from a dictionary.
+
+        Parameters
+        ----------
+        data : dict[str, Any]
+            System data in serialized form.
+        time_series_parent_dir : Path | str
+            Directory that contains the system's time series directory.
+        upgrade_handler : Callable | None
+            Optional function to handle data format upgrades. Should only be set when the parent
+            package composes this package. If set, it will be called before de-serialization of
+            the components.
+
+        Examples
+        --------
+        >>> system = System.from_dict(data, "systems")
+        """
         system_data = data if "system" not in data else data["system"]
         ts_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
-        time_series_manager = TimeSeriesManager.deserialize(data["time_series"], **ts_kwargs)
+        time_series_manager = TimeSeriesManager.deserialize(
+            data["time_series"], time_series_parent_dir, **ts_kwargs
+        )
         system = cls(
             name=system_data.get("name"),
             time_series_manager=time_series_manager,
@@ -139,17 +198,497 @@ class System:
         if system_data.get("data_format_version") != system.data_format_version:
             # This handles the case where the parent package inherited from System.
             system.handle_data_format_upgrade(
-                system_data, system_data.get("data_format_version"), system.data_format_version
+                system_data,
+                system_data.get("data_format_version"),
+                system.data_format_version,
             )
             # This handles the case where the parent package composes an instance of System.
             if upgrade_handler is not None:
                 upgrade_handler(
-                    system_data, system_data.get("data_format_version"), system.data_format_version
+                    system_data,
+                    system_data.get("data_format_version"),
+                    system.data_format_version,
                 )
         system.deserialize_system_attributes(system_data)
         system._deserialize_components(system_data["components"])
         logger.info("Deserialized system {}", system.summary)
         return system
+
+    def add_component(self, component: Component, **kwargs) -> None:
+        """Add one component to the system.
+
+        Parameters
+        ----------
+        component : Component
+            Component to add to the system.
+
+        Raises
+        ------
+        ISAlreadyAttached
+            Raised if a component is already attached to a system.
+
+        Examples
+        --------
+        >>> system.add_component(Bus.example())
+
+        See Also
+        --------
+        add_components
+        """
+        return self.add_components(component, **kwargs)
+
+    def add_components(self, *components: Component, **kwargs) -> None:
+        """Add one or more components to the system.
+
+        Parameters
+        ----------
+        components : Component
+            Component(s) to add to the system.
+
+        Raises
+        ------
+        ISAlreadyAttached
+            Raised if a component is already attached to a system.
+
+        Examples
+        --------
+        >>> system.add_components(Bus.example(), Generator.example())
+
+        See Also
+        --------
+        add_component
+        """
+        return self._component_mgr.add(*components, **kwargs)
+
+    def change_component_uuid(self, component: Component) -> None:
+        """Change the component UUID. This is required if you copy a component and attach it to
+        the same system.
+
+        Parameters
+        ----------
+        component : Component
+        """
+        return self._component_mgr.change_uuid(component)
+
+    def copy_component(
+        self,
+        component: Type,
+        new_name: str,
+        attach_to_system: bool = False,
+        copy_time_series: bool = True,
+    ) -> Component:
+        """Create a copy of the component. The new component will have a different UUID from the
+        original.
+
+        Parameters
+        ----------
+        component : Type
+            Type of the source component
+        new_name : str
+            Name of the new component
+        attach_to_system : bool
+            Optional, if True, attach the new component to the system.
+        copy_time_series : bool
+            Optional, if True, copy all time series to the new component.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> gen2 = system.copy_component(gen, "gen2")
+        """
+        return self._component_mgr.copy(
+            component,
+            new_name,
+            attach_to_system=attach_to_system,
+            copy_time_series=copy_time_series,
+        )
+
+    def get_component(self, component_type: Type, name: str) -> Component:
+        """Return the component with the passed type and name.
+
+        Parameters
+        ----------
+        component_type : Type
+            Type of component
+        name : Type
+            Name of component
+
+        Raises
+        ------
+        ISDuplicateNames
+            Raised if more than one component match the inputs.
+
+        Examples
+        --------
+        >>> system.get_component(Generator, "gen1")
+
+        See Also
+        --------
+        list_by_name
+        """
+        return self._component_mgr.get(component_type, name)
+
+    def get_component_by_uuid(self, uuid: UUID) -> Component:
+        """Return the component with the input UUID.
+
+        Parameters
+        ----------
+        uuid : UUID
+
+        Raises
+        ------
+        ISNotStored
+            Raised if the UUID is not stored.
+
+        Examples
+        --------
+        >>> uuid = UUID("714c8311-8dff-4ae2-aa2e-30779a317d42")
+        >>> component = system.get_component_by_uuid(uuid)
+        """
+        return self._component_mgr.get_by_uuid(uuid)
+
+    def get_components(
+        self, component_type: Type, filter_func: Callable | None = None
+    ) -> Iterable[Component]:
+        """Return the components with the passed type and that optionally match filter_func.
+
+        Parameters
+        ----------
+        component_type : Type
+            If component_type is an abstract type, all matching subtypes will be returned.
+        filter_func : Callable | None
+            Optional function to filter the returned values. The function must accept a component
+            as a single argument.
+
+        Examples
+        --------
+        >>> for component in system.get_components(Component)
+            print(component.summary)
+        >>> names = {"bus1", "bus2", "gen1", "gen2"}
+        >>> for component in system.get_components(
+            Component,
+            filter_func=lambda x: x.name in names,
+        ):
+            print(component.summary)
+        """
+        return self._component_mgr.iter(component_type, filter_func=filter_func)
+
+    def list_components_by_name(self, component_type: Type, name: str) -> list[Component]:
+        """Return all components that match component_type and name.
+
+        Parameters
+        ----------
+        component_type : Type
+        name : str
+
+        Examples
+        --------
+        system.list_components_by_name(Generator, "gen1")
+        """
+        return self._component_mgr.list_by_name(component_type, name)
+
+    def iter_all_components(self) -> Iterable[Component]:
+        """Return an iterator over all components.
+
+        Examples
+        --------
+        >>> for component in system.iter_all_components()
+            print(component.summary)
+
+        See Also
+        --------
+        get_components
+        """
+        return self._component_mgr.iter_all()
+
+    def remove_component(self, component: Component) -> Component:
+        """Remove the component from the system and return it.
+
+        Parameters
+        ----------
+        component : Component
+
+        Raises
+        ------
+        ISNotStored
+            Raised if the component is not stored in the system.
+
+        Examples
+        --------
+        >>> gen = system.get_component(Generator, "gen1")
+        >>> system.remove_component(gen)
+        """
+        return self._component_mgr.remove(component)
+
+    def remove_component_by_name(self, component_type: Type, name: str) -> list[Component]:
+        """Remove all components matching the inputs from the system and return them.
+
+        Parameters
+        ----------
+        component_type : Type
+        name : str
+
+        Raises
+        ------
+        ISNotStored
+            Raised if the inputs do not match any components in the system.
+
+        Examples
+        --------
+        >>> generators = system.remove_by_name(Generator, "gen1")
+        """
+        return self._component_mgr.remove_by_name(component_type, name)
+
+    def remove_component_by_uuid(self, uuid: UUID) -> Component:
+        """Remove the component with uuid from the system and return it.
+
+        Parameters
+        ----------
+        uuid : UUID
+
+        Raises
+        ------
+        ISNotStored
+            Raised if the UUID is not stored in the system.
+
+        Examples
+        --------
+        >>> uuid = UUID("714c8311-8dff-4ae2-aa2e-30779a317d42")
+        >>> generator = system.remove_component_by_uuid(uuid)
+        """
+        return self._component_mgr.remove_by_uuid(uuid)
+
+    def update_components(
+        self,
+        component_type: Type,
+        update_func: Callable,
+        filter_func: Callable | None = None,
+    ) -> None:
+        """Update multiple components of a given type.
+
+        Parameters
+        ----------
+        component_type : Type
+            Type of component to update. Can be abstract.
+        update_func : Callable
+            Function to call on each component. Must take a component as a single argument.
+        filter_func : Callable | None
+            Optional function to filter the components to update. Must take a component as a
+            single argument.
+
+        Examples
+        --------
+        >>> system.update_components(Generator, lambda x: x.active_power *= 10)
+        """
+        return self._component_mgr.update(component_type, update_func, filter_func=filter_func)
+
+    def add_time_series(
+        self,
+        time_series: TimeSeriesData,
+        *components: ComponentWithQuantities,
+        **user_attributes: Any,
+    ) -> None:
+        """Store a time series array for one or more components.
+
+        Parameters
+        ----------
+        time_series : TimeSeriesData
+            Time series data to store.
+        components : ComponentWithQuantities
+            Add the time series to all of these components.
+        user_attributes : Any
+            Key/value pairs to store with the time series data. Must be JSON-serializable.
+
+        Raises
+        ------
+        ISAlreadyAttached
+            Raised if the variable name and user attributes match any time series already
+            attached to one of the components.
+        ISOperationNotAllowed
+            Raised if the manager was created in read-only mode.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> gen2 = system.get_component(Generator, "gen2")
+        >>> ts = SingleTimeSeries.from_array(
+            data=[0.86, 0.78, 0.81, 0.85, 0.79],
+            variable_name="active_power",
+            start_time=datetime(year=2030, month=1, day=1),
+            resolution=timedelta(hours=1),
+        )
+        >>> system.add_time_series(ts, gen1, gen2)
+        """
+        return self._time_series_mgr.add(time_series, *components, **user_attributes)
+
+    def copy_time_series(
+        self,
+        dst: ComponentWithQuantities,
+        src: ComponentWithQuantities,
+        name_mapping: dict[str, str] | None = None,
+    ) -> None:
+        """Copy all time series from src to dst.
+
+        Parameters
+        ----------
+        dst : ComponentWithQuantities
+            Destination component
+        src : ComponentWithQuantities
+            Source component
+        name_mapping : dict[str, str]
+            Optionally map src names to different dst names.
+            If provided and src has a time_series with a name not present in name_mapping, that
+            time_series will not copied. If name_mapping is nothing then all time_series will be
+            copied with src's names.
+
+        Notes
+        -----
+        name_mapping is currently not implemented.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> gen2 = system.get_component(Generator, "gen2")
+        >>> system.copy_time_series(gen1, gen2)
+        """
+        return self._time_series_mgr.copy(dst, src, name_mapping=name_mapping)
+
+    def get_time_series(
+        self,
+        component: ComponentWithQuantities,
+        variable_name: str | None = None,
+        time_series_type: Type = SingleTimeSeries,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        **user_attributes: str,
+    ) -> TimeSeriesData:
+        """Return a time series array.
+
+        Parameters
+        ----------
+        component : ComponentWithQuantities
+            Return time series attached to this component.
+        variable_name : str | None
+            Optional, return time series with this name.
+        time_series_type : Type
+            Optional, return time series with this type.
+        start_time : datetime | None
+            Return a slice of the time series starting at this time. Defaults to the first value.
+        length : int | None
+            Return a slice of the time series with this length. Defaults to the full length.
+        user_attributes : str
+            Return time series with these attributes.
+
+        Raises
+        ------
+        ISNotStored
+            Raised if no time series matches the inputs.
+            Raised if the inputs match more than one time series.
+        ISOperationNotAllowed
+            Raised if the inputs match more than one time series.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> ts_full = system.get_time_series(gen1, "active_power")
+        >>> ts_slice = system.get_time_series(
+            gen1,
+            "active_power",
+            start_time=datetime(year=2030, month=1, day=1, hour=5),
+            length=5,
+        )
+
+        See Also
+        --------
+        list_time_series
+        """
+        return self._time_series_mgr.get(
+            component,
+            variable_name=variable_name,
+            time_series_type=time_series_type,
+            start_time=start_time,
+            length=length,
+            **user_attributes,
+        )
+
+    def list_time_series(
+        self,
+        component: ComponentWithQuantities,
+        variable_name: str | None = None,
+        time_series_type: Type = SingleTimeSeries,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        **user_attributes,
+    ) -> list[TimeSeriesData]:
+        """Return all time series that match the inputs.
+
+        Parameters
+        ----------
+        component : ComponentWithQuantities
+            Return time series attached to this component.
+        variable_name : str | None
+            Optional, return time series with this name.
+        time_series_type : Type
+            Optional, return time series with this type.
+        start_time : datetime | None
+            Return a slice of the time series starting at this time. Defaults to the first value.
+        length : int | None
+            Return a slice of the time series with this length. Defaults to the full length.
+        user_attributes : str
+            Return time series with these attributes.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> for ts in system.list_time_series(gen1):
+            print(ts)
+        """
+        return self._time_series_mgr.list_time_series(
+            component,
+            variable_name=variable_name,
+            time_series_type=time_series_type,
+            start_time=start_time,
+            length=length,
+            **user_attributes,
+        )
+
+    def remove_time_series(
+        self,
+        *components: ComponentWithQuantities,
+        variable_name: str | None = None,
+        time_series_type: Type = SingleTimeSeries,
+        **user_attributes,
+    ):
+        """Remove all time series arrays attached to the components matching the inputs.
+
+        Parameters
+        ----------
+        components : ComponentWithQuantities
+            Affected components
+        variable_name : str | None
+            Optional, defaults to any name.
+        time_series_type : Type | None
+            Optional, defaults to any type.
+        user_attributes : str
+            Remove only time series with these attributes.
+        Raises
+        ------
+        ISNotStored
+            Raised if no time series match the inputs.
+        ISOperationNotAllowed
+            Raised if the manager was created in read-only mode.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> system.remove_time_series(gen1, "active_power")
+        """
+        return self._time_series_mgr.remove(
+            *components,
+            variable_name=variable_name,
+            time_series_type=time_series_type,
+            **user_attributes,
+        )
 
     def serialize_system_attributes(self) -> dict[str, Any]:
         """Allows subclasses to serialize attributes at the root level."""
@@ -236,7 +775,9 @@ class System:
         return skipped_types
 
     def _deserialize_components_nested(
-        self, skipped_types: dict[Type, list[dict[str, Any]]], cached_types: "_CachedTypeHelper"
+        self,
+        skipped_types: dict[Type, list[dict[str, Any]]],
+        cached_types: "_CachedTypeHelper",
     ):
         max_iterations = len(skipped_types)
         for _ in range(max_iterations):
