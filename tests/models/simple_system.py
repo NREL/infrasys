@@ -101,3 +101,12 @@ class SimpleSystem(System):
 
     def deserialize_system_attributes(self, data: dict[str, Any]) -> None:
         self.my_attr = data["my_attr"]
+
+
+if __name__ == "__main__":
+    system = SimpleSystem()
+    bus = SimpleBus.example()
+    gen = SimpleGenerator.example()
+    system.add_components(bus, gen)
+    bus2 = system.components.get(SimpleBus, "simple-bus")
+    gen2 = SimpleGenerator(active_power=3.0, rating=1.0, bus=bus2, available=True)

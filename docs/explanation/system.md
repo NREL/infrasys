@@ -35,3 +35,14 @@ if you want to make the underlying system opaque to users.
 
 3. Use `infrasys.System` directly. This is probably not what most packages want because they will
 not be able to serialize custom attributes or implement specialized behavior as discussed above.
+
+### Units
+`infrasys` uses the [pint library](https://pint.readthedocs.io/en/stable/) to help manage units.
+Package developers should consider storing fields that are quantities as subtypes of
+[Base.Quantity](#base-quantity-api). Pint performs unit conversion automatically when performing
+arithmetic.
+
+**Notes**:
+- `infrasys` includes some basic quantities in [infrasys.quantities](#quantity-api).
+- Pint will automatically convert a list or list of lists of values into a `numpy.ndarray`.
+infrasys will handle serialization/de-serialization of these types.

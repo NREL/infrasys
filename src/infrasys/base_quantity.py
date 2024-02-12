@@ -1,13 +1,10 @@
 """ This module contains base class for handling pint quantity."""
-# standard imports
+
 from abc import ABC
+from typing import Any
 
-# third-party imports
+import numpy as np
 import pint
-
-# internal imports
-from infrasys.common import TYPE_INFO
-from infrasys.models import SerializedTypeInfo
 
 ureg = pint.UnitRegistry()
 
@@ -24,18 +21,14 @@ class BaseQuantity(ureg.Quantity, ABC):
             raise ValueError(message)
         return instance
 
-    def to_dict(self):
-        """Method to convert quantity to dict"""
-        return {
-            "value": self.magnitude,
-            "units": str(self.units),
-            TYPE_INFO: SerializedTypeInfo(
-                module=self.__module__, type=self.__class__.__name__
-            ).model_dump(),
-        }
+    def to_dict(self) -> dict[str, Any]:
+        """Convert a quantity to a dictionary for serialization."""
+        val = self.magnitude
+        if isinstance(self.magnitude, np.ndarray):
+            val = self.magnitude.tolist()
+        return {"value": val, "units": str(self.units)}
 
     @classmethod
     def from_dict(cls, data: dict) -> "BaseQuantity":
-        """Build from dict."""
-
+        """Construct the quantity from a serialized dictionary."""
         return cls(data["value"], data["units"])

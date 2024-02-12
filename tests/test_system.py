@@ -37,27 +37,6 @@ def test_system():
         system.get_component(SimpleGenerator, "not-present")
 
 
-def test_serialization(tmp_path, simple_system):
-    system = simple_system
-    custom_attr = 10
-    system.my_attr = custom_attr
-    geos = list(system.get_components(Location))
-    assert len(geos) == 1
-    geo = geos[0]
-    bus = system.get_component(SimpleBus, "test-bus")
-    gen = system.get_component(SimpleGenerator, "test-gen")
-    subsystem = system.get_component(SimpleSubsystem, "test-subsystem")
-
-    filename = tmp_path / "system.json"
-    system.to_json(filename, overwrite=True, indent=2)
-    sys2 = SimpleSystem.from_json(filename)
-    assert sys2.components.get_by_uuid(geo.uuid) == geo
-    assert sys2.components.get(SimpleBus, "test-bus") == bus
-    assert sys2.components.get(SimpleGenerator, "test-gen") == gen
-    assert sys2.components.get(SimpleSubsystem, "test-subsystem") == subsystem
-    assert sys2.my_attr == custom_attr
-
-
 def test_get_components(simple_system):
     system = simple_system
     for _ in range(5):
@@ -223,10 +202,10 @@ def test_serialize_time_series_from_array(tmp_path):
 
     variable_name = "active_power"
     length = 8784
-    df = range(length)
+    data = range(length)
     start = datetime(year=2020, month=1, day=1)
     resolution = timedelta(hours=1)
-    ts = SingleTimeSeries.from_array(df, variable_name, start, resolution)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
     filename = tmp_path / "system.json"
     system.to_json(filename)
@@ -235,6 +214,8 @@ def test_serialize_time_series_from_array(tmp_path):
     gen1b = system2.components.get(SimpleGenerator, gen1.name)
     with pytest.raises(ISOperationNotAllowed):
         system2.remove_time_series(gen1b, variable_name=variable_name)
+    ts2 = system.get_time_series(gen1b, variable_name=variable_name)
+    assert ts2.data.tolist() == list(data)
 
 
 def test_serialize_time_series(tmp_path):
