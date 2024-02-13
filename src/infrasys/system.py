@@ -379,15 +379,15 @@ class System:
         """
         return self._component_mgr.iter(component_type, filter_func=filter_func)
 
-    def get_stored_component_types(self) -> Iterable[Type]:
-        """Return an iterable of all stored component types.
+    def get_component_types(self) -> Iterable[Type]:
+        """Return an iterable of all component types stored in the system.
 
         Examples
         --------
-        >>> for component_type in system.get_stored_component_types():
+        >>> for component_type in system.get_component_types():
             print(component_type)
         """
-        return self._component_mgr.get_stored_types()
+        return self._component_mgr.get_types()
 
     def list_components_by_name(self, component_type: Type, name: str) -> list[Any]:
         """Return all components that match component_type and name.

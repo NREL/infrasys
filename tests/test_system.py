@@ -57,7 +57,7 @@ def test_get_components(simple_system):
     with pytest.raises(ISNotStored):
         system.get_component_by_uuid(uuid4())
 
-    stored_types = sorted((x.__name__ for x in system.get_stored_component_types()))
+    stored_types = sorted((x.__name__ for x in system.get_component_types()))
     assert stored_types == [
         "Location",
         "RenewableGenerator",
