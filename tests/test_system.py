@@ -63,7 +63,7 @@ def test_system_auto_add_composed_components_list():
     system.add_component(subsystem)
 
 
-def test_get_components(simple_system):
+def test_get_components(simple_system: SimpleSystem):
     system = simple_system
     initial_count = 4
     assert len(list(system.get_components(Component))) == initial_count
@@ -278,3 +278,21 @@ def test_serialize_time_series(tmp_path):
     gen1b = system.get_component(SimpleGenerator, gen1.name)
     with pytest.raises(ISOperationNotAllowed):
         system2.remove_time_series(gen1b, variable_name=variable_name)
+
+
+def test_copy_component(simple_system_with_time_series: SimpleSystem):
+    system = simple_system_with_time_series
+    gen1 = system.get_component(SimpleGenerator, "test-gen")
+
+    gen2 = system.copy_component(gen1)
+    assert gen2.uuid != gen1.uuid
+    assert gen2.name == gen1.name
+    assert gen2.system_uuid is None
+
+    gen3 = system.copy_component(gen1, name="gen3")
+    assert gen3.name == "gen3"
+    assert gen2.system_uuid is None
+
+    gen4 = system.copy_component(gen1, name="gen4", attach_to_system=True)
+    assert gen4.name == "gen4"
+    assert gen4.system_uuid == gen1.system_uuid

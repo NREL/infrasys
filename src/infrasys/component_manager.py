@@ -157,13 +157,25 @@ class ComponentManager:
     def copy(
         self,
         component: Type,
-        new_name: str,
+        name: str | None = None,
         attach_to_system=False,
-        copy_time_series=True,
     ) -> Component:
-        """Create a copy of the component."""
-        # TODO: must call change_uuid and clear system_uuid if attach_to_system=False
-        raise NotImplementedError("copy")
+        """Create a copy of the component. Time series data is excluded."""
+        # This uses model_dump and the component constructor because the 'name' field is frozen.
+        data = component.model_dump()
+        data.pop("time_series_metadata", None)
+        for field in ("system_uuid", "uuid"):
+            data.pop(field)
+        if name is not None:
+            data["name"] = name
+        new_component = type(component)(**data)
+        new_component.system_uuid = None
+
+        logger.info("Copied {} to {}", component.summary, new_component.summary)
+        if attach_to_system:
+            self.add(new_component)
+
+        return new_component
 
     def change_uuid(self, component: Component) -> None:
         """Change the component UUID."""

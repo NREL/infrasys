@@ -295,35 +295,28 @@ class System:
     def copy_component(
         self,
         component: Type,
-        new_name: str,
+        name: str | None = None,
         attach_to_system: bool = False,
-        copy_time_series: bool = True,
     ) -> Any:
-        """Create a copy of the component. The new component will have a different UUID from the
-        original.
+        """Create a copy of the component. Time series data is excluded.The new component will
+        have a different UUID from the original.
 
         Parameters
         ----------
         component : Type
             Type of the source component
-        new_name : str
-            Name of the new component
+        name : str
+            Name of the new component. If None, keep the original name.
         attach_to_system : bool
             Optional, if True, attach the new component to the system.
-        copy_time_series : bool
-            Optional, if True, copy all time series to the new component.
 
         Examples
         --------
         >>> gen1 = system.get_component(Generator, "gen1")
-        >>> gen2 = system.copy_component(gen, "gen2")
+        >>> gen2 = system.copy_component(gen, name="gen2")
+        >>> gen3 = system.copy_component(gen, name="gen3", attach_to_system=True)
         """
-        return self._component_mgr.copy(
-            component,
-            new_name,
-            attach_to_system=attach_to_system,
-            copy_time_series=copy_time_series,
-        )
+        return self._component_mgr.copy(component, name=name, attach_to_system=attach_to_system)
 
     def get_component(self, component_type: Type, name: str) -> Any:
         """Return the component with the passed type and name.
