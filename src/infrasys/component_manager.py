@@ -56,6 +56,10 @@ class ComponentManager:
 
         return components[0]
 
+    def get_stored_types(self) -> Iterable[Type]:
+        """Return an iterable of all stored types."""
+        return self._components.keys()
+
     def iter(
         self, component_type: Type, filter_func: Callable | None = None
     ) -> Iterable[Component]:
