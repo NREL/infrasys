@@ -40,6 +40,7 @@ class System:
     def __init__(
         self,
         name: str | None = None,
+        auto_add_composed_components: bool = False,
         time_series_manager: None | TimeSeriesManager = None,
         uuid: UUID | None = None,
         **kwargs: Any,
@@ -50,6 +51,11 @@ class System:
         ----------
         name : str | None
             Optional system name
+        auto_add_composed_components : bool
+            Set to True to automatically add composed components to the system in add_components.
+            The default behavior is to raise an ISOperationNotAllowed when this condition occurs.
+            This handles values that are components, such as generator.bus, and lists of
+            components, such as subsystem.generators, but not any other form of nested components.
         time_series_manager : None | TimeSeriesManager
             Users should not pass this. De-serialization (from_json) will pass a constructed
             manager.
@@ -67,12 +73,22 @@ class System:
         """
         self._uuid = uuid or uuid4()
         self._name = name
-        self._component_mgr = ComponentManager(self._uuid)
+        self._component_mgr = ComponentManager(self._uuid, auto_add_composed_components)
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
         self._time_series_mgr = time_series_manager or TimeSeriesManager(**time_series_kwargs)
         self._data_format_version: None | str = None
 
         # TODO: add pretty printing of components and time series
+
+    @property
+    def auto_add_composed_components(self) -> bool:
+        """Return the setting for auto_add_composed_components."""
+        return self._component_mgr.auto_add_composed_components
+
+    @auto_add_composed_components.setter
+    def auto_add_composed_components(self, val: bool) -> None:
+        """Set auto_add_composed_components."""
+        self._component_mgr.auto_add_composed_components = val
 
     def to_json(self, filename: Path | str, overwrite=False, indent=None, data=None) -> None:
         """Write the contents of a system to a JSON file. Time series will be written to a

@@ -37,13 +37,42 @@ def test_system():
         system.get_component(SimpleGenerator, "not-present")
 
 
+def test_system_auto_add_composed_components():
+    system = SimpleSystem(auto_add_composed_components=False)
+    assert not system.auto_add_composed_components
+    geo = Location(x=1.0, y=2.0)
+    bus = SimpleBus(name="test-bus", voltage=1.1, coordinates=geo)
+
+    with pytest.raises(ISOperationNotAllowed):
+        system.add_component(bus)
+
+    system.auto_add_composed_components = True
+    assert system.auto_add_composed_components
+    system.add_component(bus)
+    assert len(list(system.get_components(Location))) == 1
+
+
+def test_system_auto_add_composed_components_list():
+    system = SimpleSystem(auto_add_composed_components=False)
+    assert not system.auto_add_composed_components
+    subsystem = SimpleSubsystem.example()
+    with pytest.raises(ISOperationNotAllowed):
+        system.add_component(subsystem)
+    system.auto_add_composed_components = True
+    assert system.auto_add_composed_components
+    system.add_component(subsystem)
+
+
 def test_get_components(simple_system):
     system = simple_system
+    initial_count = 4
+    assert len(list(system.get_components(Component))) == initial_count
+    system.auto_add_composed_components = True
     for _ in range(5):
         gen = RenewableGenerator.example()
         system.add_component(gen)
     all_components = list(system.get_components(Component))
-    assert len(all_components) == 9
+    assert len(all_components) == initial_count + 5 * 3
     generators = list(
         system.get_components(GeneratorBase, filter_func=lambda x: x.name == "renewable-gen")
     )

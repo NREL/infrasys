@@ -13,10 +13,25 @@ from infrasys.models import make_summary
 class ComponentManager:
     """Manages components"""
 
-    def __init__(self, uuid: UUID):
+    def __init__(
+        self,
+        uuid: UUID,
+        auto_add_composed_components: bool,
+    ):
         self._components: dict[Type, dict[str, list[Component]]] = {}
         self._components_by_uuid: dict[UUID, Component] = {}
         self._uuid = uuid
+        self._auto_add_composed_components = auto_add_composed_components
+
+    @property
+    def auto_add_composed_components(self) -> bool:
+        """Return the setting for auto_add_composed_components."""
+        return self._auto_add_composed_components
+
+    @auto_add_composed_components.setter
+    def auto_add_composed_components(self, val: bool) -> None:
+        """Set auto_add_composed_components."""
+        self._auto_add_composed_components = val
 
     def add(self, *args, deserialization_in_progress=False) -> None:
         """Add one or more components to the system.
@@ -140,7 +155,11 @@ class ComponentManager:
         raise NotImplementedError("remove_component_by_uuid")
 
     def copy(
-        self, component: Type, new_name: str, attach_to_system=False, copy_time_series=True
+        self,
+        component: Type,
+        new_name: str,
+        attach_to_system=False,
+        copy_time_series=True,
     ) -> Component:
         """Create a copy of the component."""
         # TODO: must call change_uuid and clear system_uuid if attach_to_system=False
@@ -162,6 +181,7 @@ class ComponentManager:
         if not deserialization_in_progress:
             # TODO: Do we want any checks during deserialization? User could change the JSON.
             # We could prevent the user from changing the JSON with a checksum.
+            self._check_component_addition(component)
             component.check_component_addition(self._uuid)
         if component.uuid in self._components_by_uuid:
             msg = f"{component.summary} with UUID={component.uuid} is already stored"
@@ -179,3 +199,30 @@ class ComponentManager:
         self._components_by_uuid[component.uuid] = component
         component.system_uuid = self._uuid
         logger.debug("Added {} to the system", component.summary)
+
+    def _check_component_addition(self, component: Component) -> None:
+        for field in type(component).model_fields:
+            val = getattr(component, field)
+            if isinstance(val, Component):
+                self._check_composed_component(val)
+                # Recurse.
+                self._check_component_addition(val)
+            if isinstance(val, list) and val and isinstance(val[0], Component):
+                for item in val:
+                    self._check_composed_component(item)
+                    # Recurse.
+                    self._check_component_addition(item)
+
+    def _check_composed_component(self, component: Component) -> None:
+        if component.system_uuid is not None:
+            return
+
+        if self._auto_add_composed_components:
+            logger.debug("Auto-add composed component {}", component.summary)
+            self._add(component, False)
+        else:
+            msg = (
+                f"Component {component.summary} cannot be added to the system because "
+                f"its composed component {component.summary} is not already attached."
+            )
+            raise ISOperationNotAllowed(msg)
