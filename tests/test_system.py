@@ -72,6 +72,7 @@ def test_get_components(simple_system):
         gen = RenewableGenerator.example()
         system.add_component(gen)
     all_components = list(system.get_components(Component))
+    # 5 generators, each includes a bus and location
     assert len(all_components) == initial_count + 5 * 3
     generators = list(
         system.get_components(GeneratorBase, filter_func=lambda x: x.name == "renewable-gen")

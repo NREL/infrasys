@@ -201,19 +201,23 @@ class ComponentManager:
         logger.debug("Added {} to the system", component.summary)
 
     def _check_component_addition(self, component: Component) -> None:
+        """Check all the fields of a component against the setting
+        auto_add_composed_components. Recursive."""
         for field in type(component).model_fields:
             val = getattr(component, field)
             if isinstance(val, Component):
-                self._check_composed_component(val)
+                self._handle_composed_component(val)
                 # Recurse.
                 self._check_component_addition(val)
             if isinstance(val, list) and val and isinstance(val[0], Component):
                 for item in val:
-                    self._check_composed_component(item)
+                    self._handle_composed_component(item)
                     # Recurse.
                     self._check_component_addition(item)
 
-    def _check_composed_component(self, component: Component) -> None:
+    def _handle_composed_component(self, component: Component) -> None:
+        """Do what's needed for a composed component depending on system settings:
+        nothing, add, or raise an exception."""
         if component.system_uuid is not None:
             return
 
