@@ -22,7 +22,7 @@ those types.
     "fields": {
       "module": "infrasys.location",
       "type": "Location",
-      "serialized_type": "component"
+      "serialized_type": "base"
     }
   }
 },
@@ -61,7 +61,7 @@ de-serialized.
     "fields": {
       "module": "tests.models.simple_system",
       "type": "SimpleBus",
-      "serialized_type": "default"
+      "serialized_type": "base"
     }
   }
 },
@@ -116,7 +116,7 @@ instance. Here is an example of such a component:
     "fields": {
       "module": "tests.test_serialization",
       "type": "ComponentWithPintQuantity",
-      "serialized_type": "component"
+      "serialized_type": "base"
     }
   }
 }
