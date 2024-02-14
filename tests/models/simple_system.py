@@ -17,7 +17,7 @@ class SimpleBus(ComponentWithQuantities):
     voltage: float
     coordinates: Location | None = None
 
-    def check_component_addition(self, system_uuid: UUID):
+    def check_component_addition(self, system_uuid: UUID) -> None:
         if self.coordinates is not None and not self.coordinates.is_attached(
             system_uuid=system_uuid
         ):
@@ -91,7 +91,7 @@ class SimpleSubsystem(ComponentWithQuantities):
 class SimpleSystem(System):
     """System used for testing"""
 
-    def __init__(self, my_attr=5, *args, **kwargs):
+    def __init__(self, my_attr=5, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.data_format_version = "1.0.3"
         self.my_attr = my_attr
@@ -109,4 +109,4 @@ if __name__ == "__main__":
     gen = SimpleGenerator.example()
     system.add_components(bus, gen)
     bus2 = system.components.get(SimpleBus, "simple-bus")
-    gen2 = SimpleGenerator(active_power=3.0, rating=1.0, bus=bus2, available=True)
+    gen2 = SimpleGenerator(name="gen2", active_power=3.0, rating=1.0, bus=bus2, available=True)

@@ -36,8 +36,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "furo",
+    "mypy",
     "myst_parser",
     "pre-commit",
+    "pyarrow-stubs",
     "pytest",
     "pytest-cov",
     "ruff",

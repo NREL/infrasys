@@ -14,7 +14,7 @@ DEBUG_FORMAT = (
 def setup_logging(
     filename=None,
     level="DEBUG",
-):
+) -> None:
     """Configures logging to file and console.
 
     Parameters
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     from infrasys.component_models import Component
     from infrasys.system import System
 
-    logger = setup_logging(level="INFO")
+    setup_logging(level="INFO")
     system = System()
 
     component_1 = Component(name="TestComponent")
