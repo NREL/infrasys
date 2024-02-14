@@ -9,7 +9,7 @@ import pint
 ureg = pint.UnitRegistry()
 
 
-class BaseQuantity(ureg.Quantity, ABC):
+class BaseQuantity(ureg.Quantity, ABC):  # type: ignore
     """Interface for base quantity."""
 
     def __new__(cls, value, units, **kwargs):

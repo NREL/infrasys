@@ -8,6 +8,7 @@ from pathlib import Path
 from shutil import copytree
 from tempfile import mkdtemp
 from typing import Any, Type
+from uuid import UUID
 
 from loguru import logger
 
@@ -29,7 +30,7 @@ TIME_SERIES_KWARGS = {
 }
 
 
-def _process_time_series_kwarg(key: str, **kwargs):
+def _process_time_series_kwarg(key: str, **kwargs: Any) -> Any:
     return kwargs.get(key, TIME_SERIES_KWARGS[key])
 
 
@@ -43,7 +44,7 @@ class TimeSeriesMetadataTracker(InfraSysBaseModel):
 class TimeSeriesManager:
     """Manages time series for a system."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
 
         self._ts_directory = Path(mkdtemp(dir=base_directory))
@@ -51,15 +52,16 @@ class TimeSeriesManager:
         atexit.register(clean_tmp_folder, self._ts_directory)
 
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
-        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
-            self._storage = InMemoryTimeSeriesStorage()
-        else:
-            self._storage = ArrowTimeSeriesStorage(self._ts_directory)
+        self._storage = (
+            InMemoryTimeSeriesStorage()
+            if _process_time_series_kwarg("time_series_in_memory", **kwargs)
+            else ArrowTimeSeriesStorage(self._ts_directory)
+        )
 
         # This tracks the number of references to each time series array across components.
         # When an array is removed and no references remain, it can be deleted.
         # This is only tracked in memory and has to be rebuilt during deserialization.
-        self._ref_counts = defaultdict(lambda: 0)
+        self._ref_counts: dict[UUID, int] = defaultdict(lambda: 0)
 
         # TODO: enforce one resolution
         # TODO: create parsing mechanism? CSV, CSV + JSON
@@ -114,7 +116,7 @@ class TimeSeriesManager:
             self._ref_counts[time_series.uuid] += 1
             component.add_time_series_metadata(metadata)
 
-    def add_reference_counts(self, component: ComponentWithQuantities):
+    def add_reference_counts(self, component: ComponentWithQuantities) -> None:
         """Must be called for each component after deserialization in order to rebuild the
         reference counts for each time array.
         """
@@ -158,7 +160,7 @@ class TimeSeriesManager:
         time_series_type: Type = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-        **user_attributes,
+        **user_attributes: Any,
     ) -> list[TimeSeriesData]:
         """Return all time series that match the inputs."""
         metadata = component.list_time_series_metadata(
@@ -172,8 +174,8 @@ class TimeSeriesManager:
         self,
         *components: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type=SingleTimeSeries,
-        **user_attributes,
+        time_series_type: Type = SingleTimeSeries,
+        **user_attributes: Any,
     ):
         """Remove all time series arrays matching the inputs.
 
@@ -185,7 +187,7 @@ class TimeSeriesManager:
             Raised if the manager was created in read-only mode.
         """
         self._handle_read_only()
-        uuids = defaultdict(lambda: 0)
+        uuids: dict[UUID, int] = defaultdict(lambda: 0)
         all_metadata = []
         for component in components:
             for metadata in component.list_time_series_metadata(
@@ -262,7 +264,7 @@ class TimeSeriesManager:
             length=length,
         )
 
-    def serialize(self, dst, src=None):
+    def serialize(self, dst: Path | str, src: Path | str | None = None) -> None:
         """Serialize the time series data to base_dir."""
         # From the shutil documentation: the copying operation will continue if
         # it encounters existing directories, and files within the dst tree
@@ -277,7 +279,7 @@ class TimeSeriesManager:
         cls,
         data: dict[str, Any],
         parent_dir: Path | str,
-        **kwargs,
+        **kwargs: Any,
     ) -> "TimeSeriesManager":
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
@@ -290,11 +292,11 @@ class TimeSeriesManager:
             mgr._ts_directory = time_series_dir
         return mgr
 
-    def _handle_read_only(self):
+    def _handle_read_only(self) -> None:
         if self._read_only:
             raise ISOperationNotAllowed("Cannot modify time series in read-only mode.")
 
 
-def clean_tmp_folder(folder: Path | str):
+def clean_tmp_folder(folder: Path | str) -> None:
     shutil.rmtree(folder)
     logger.info("Wiped folder: {}", folder)

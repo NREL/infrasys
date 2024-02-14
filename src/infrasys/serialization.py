@@ -39,7 +39,7 @@ class SerializedComponentReference(SerializedTypeBase):
     uuid: UUID
 
     @field_serializer("uuid")
-    def _serialize_uuid(self, _):
+    def _serialize_uuid(self, _) -> str:
         return str(self.uuid)
 
 
@@ -67,7 +67,7 @@ class CachedTypeHelper:
         self._observed_types: dict[tuple[str, str], Type] = {}
         self._deserialized_types: set[Type] = set()
 
-    def add_deserialized_types(self, types: set[Type]):
+    def add_deserialized_types(self, types: set[Type]) -> None:
         """Add types that have been deserialized."""
         self._deserialized_types.update(types)
 
@@ -75,7 +75,7 @@ class CachedTypeHelper:
         """Return True if the type can be deserialized."""
         return component_type in self._deserialized_types
 
-    def get_type(self, metadata: SerializedTypeBase):
+    def get_type(self, metadata: SerializedTypeBase) -> Type:
         """Return the type contained in metadata, dynamically importing as necessary."""
         type_key = (metadata.module, metadata.type)
         component_type = self._observed_types.get(type_key)

@@ -8,7 +8,7 @@ from loguru import logger
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
     SingleTimeSeries,
-    SingleTimeSeriesMetadata,
+    SingleTimeSeriesMetadataBase,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
@@ -18,7 +18,7 @@ from infrasys.time_series_storage_base import TimeSeriesStorageBase
 class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
     """Stores time series in memory."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._arrays: dict[UUID, TimeSeriesData] = {}  # Time series UUID, not metadata UUID
 
     def add_time_series(self, metadata: TimeSeriesMetadata, time_series: TimeSeriesData) -> None:
@@ -39,7 +39,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
 
-        if metadata.get_time_series_data_type() == SingleTimeSeries:
+        if isinstance(metadata, SingleTimeSeriesMetadataBase):
             return self._get_single_time_series(metadata, start_time=start_time, length=length)
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
 
@@ -51,11 +51,12 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
 
     def _get_single_time_series(
         self,
-        metadata: SingleTimeSeriesMetadata,
+        metadata: SingleTimeSeriesMetadataBase,
         start_time: datetime | None = None,
         length: int | None = None,
     ) -> SingleTimeSeries:
         base_ts = self._arrays[metadata.time_series_uuid]
+        assert isinstance(base_ts, SingleTimeSeries)
         if start_time is None and length is None:
             return base_ts
 

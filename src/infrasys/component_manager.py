@@ -17,8 +17,8 @@ class ComponentManager:
         self,
         uuid: UUID,
         auto_add_composed_components: bool,
-    ):
-        self._components: dict[Type, dict[str, list[Component]]] = {}
+    ) -> None:
+        self._components: dict[Type, dict[str | None, list[Component]]] = {}
         self._components_by_uuid: dict[UUID, Component] = {}
         self._uuid = uuid
         self._auto_add_composed_components = auto_add_composed_components
@@ -33,7 +33,7 @@ class ComponentManager:
         """Set auto_add_composed_components."""
         self._auto_add_composed_components = val
 
-    def add(self, *args, deserialization_in_progress=False) -> None:
+    def add(self, *args: Component, deserialization_in_progress=False) -> None:
         """Add one or more components to the system.
 
         Raises
@@ -44,7 +44,7 @@ class ComponentManager:
         for component in args:
             self._add(component, deserialization_in_progress)
 
-    def get(self, component_type: Type, name: str) -> Component:
+    def get(self, component_type: Type, name: str) -> Any:
         """Return the component with the passed type and name.
 
         Raises
@@ -75,9 +75,7 @@ class ComponentManager:
         """Return an iterable of all stored types."""
         return self._components.keys()
 
-    def iter(
-        self, component_type: Type, filter_func: Callable | None = None
-    ) -> Iterable[Component]:
+    def iter(self, component_type: Type, filter_func: Callable | None = None) -> Iterable[Any]:
         """Return the components with the passed type and optionally match filter_func.
 
         If component_type is an abstract type, all matching subtypes will be returned.
@@ -99,14 +97,14 @@ class ComponentManager:
                     if filter_func(component):
                         yield component
 
-    def list_by_name(self, component_type: Type, name: str) -> list[Component]:
+    def list_by_name(self, component_type: Type, name: str) -> list[Any]:
         """Return all components that match component_type and name.
 
         The component_type can be an abstract type.
         """
         return list(self.iter(component_type, filter_func=lambda x: x.name == name))
 
-    def get_by_uuid(self, uuid: UUID) -> Component:
+    def get_by_uuid(self, uuid: UUID) -> Any:
         """Return the component with the input UUID.
 
         Raises
@@ -120,7 +118,7 @@ class ComponentManager:
             raise ISNotStored(msg)
         return component
 
-    def iter_all(self) -> Iterable[Component]:
+    def iter_all(self) -> Iterable[Any]:
         """Return an iterator over all components."""
         return self._components_by_uuid.values()
 
@@ -163,7 +161,7 @@ class ComponentManager:
             data.pop(field)
         if name is not None:
             data["name"] = name
-        new_component = type(component)(**data)
+        new_component = type(component)(**data)  # type: ignore
 
         logger.info("Copied {} to {}", component.summary, new_component.summary)
         if attach:
@@ -175,7 +173,9 @@ class ComponentManager:
         """Change the component UUID."""
         raise NotImplementedError("change_component_uuid")
 
-    def update(self, component_type: Type, update_func: Callable, filter_func=None) -> None:
+    def update(
+        self, component_type: Type, update_func: Callable, filter_func: Callable | None = None
+    ) -> None:
         """Update multiple components of a given type."""
 
         for component in self.iter(component_type, filter_func=filter_func):

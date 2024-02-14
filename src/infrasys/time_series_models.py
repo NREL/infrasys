@@ -1,8 +1,9 @@
 """Defines models for time series arrays."""
 
+import abc
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Literal, Optional, Type, Union, Sequence
+from typing import Any, Literal, Optional, Type, TypeAlias, Union, Sequence
 from uuid import UUID
 
 import numpy as np
@@ -17,7 +18,7 @@ TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
 
 
-ISArray = Sequence | pa.Array | np.ndarray
+ISArray: TypeAlias = Sequence | pa.Array | np.ndarray
 
 
 class TimeSeriesStorageType(str, Enum):
@@ -29,7 +30,7 @@ class TimeSeriesStorageType(str, Enum):
     PARQUET = "parquet"
 
 
-class TimeSeriesData(InfraSysBaseModelWithIdentifers):
+class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Base class for all time series models"""
 
     variable_name: str
@@ -38,6 +39,11 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers):
     def summary(self) -> str:
         """Return the variable_name of the time series array with its type."""
         return f"{self.__class__.__name__}.{self.variable_name}"
+
+    @staticmethod
+    @abc.abstractmethod
+    def get_time_series_metadata_type() -> Type:
+        """Return the metadata type associated with this time series type."""
 
 
 class SingleTimeSeries(TimeSeriesData):
@@ -56,7 +62,7 @@ class SingleTimeSeries(TimeSeriesData):
             msg = f"SingleTimeSeries length must be at least 2: {len(data)}"
             raise ValueError(msg)
 
-        if isinstance(data, ISArray) and not isinstance(data, pa.Array):
+        if not isinstance(data, pa.Array):
             data = pa.array(data)
 
         return data  # type: ignore
@@ -160,7 +166,6 @@ class SingleTimeSeries(TimeSeriesData):
 
     @staticmethod
     def get_time_series_metadata_type() -> Type:
-        """Return the metadata type associated with this time series type."""
         return SingleTimeSeriesMetadata
 
 
@@ -172,7 +177,7 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
 # read CSV and Parquet and convert each column to a SingleTimeSeries
 
 
-class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers):
+class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Defines common metadata for all time series."""
 
     variable_name: str
@@ -187,21 +192,30 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers):
         """Return the variable_name of the time series array with its type."""
         return f"{self.type}.{self.variable_name}"
 
+    @staticmethod
+    @abc.abstractmethod
+    def get_time_series_data_type() -> Type:
+        """Return the data type associated with this metadata type."""
+        pass
 
-class SingleTimeSeriesMetadata(TimeSeriesMetadata):
-    """Defines the metadata for a SingleTimeSeries."""
+    @staticmethod
+    @abc.abstractmethod
+    def get_time_series_type_str() -> str:
+        """Return the time series type as a string."""
+
+
+class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
+    """Base class for SingleTimeSeries metadata."""
 
     length: int
-    type: Literal["SingleTimeSeries"] = "SingleTimeSeries"
+    type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @classmethod
-    def from_data(
-        cls, time_series: SingleTimeSeries, **user_attributes
-    ) -> "SingleTimeSeriesMetadata":
+    def from_data(cls, time_series: SingleTimeSeries, **user_attributes) -> Any:
         """Construct a SingleTimeSeriesMetadata from a SingleTimeSeries."""
-
-        # TODO: We need to figure out how to tell pyright that this object has
-        # validation and not empty fields once created.
+        assert time_series.initial_time is not None
+        assert time_series.length is not None
+        assert time_series.resolution is not None
         return cls(
             variable_name=time_series.variable_name,
             resolution=time_series.resolution,
@@ -209,6 +223,7 @@ class SingleTimeSeriesMetadata(TimeSeriesMetadata):
             length=time_series.length,
             time_series_uuid=time_series.uuid,
             user_attributes=user_attributes,
+            type=cls.get_time_series_type_str(),  # type: ignore
         )
 
     def get_range(
@@ -246,17 +261,29 @@ class SingleTimeSeriesMetadata(TimeSeriesMetadata):
 
     @staticmethod
     def get_time_series_data_type() -> Type:
-        """Return the data type associated with this metadata type."""
         return SingleTimeSeries
 
 
-class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadata):
+class SingleTimeSeriesMetadata(SingleTimeSeriesMetadataBase):
+    """Defines the metadata for a SingleTimeSeries."""
+
+    type: Literal["SingleTimeSeries"] = "SingleTimeSeries"
+
+    @staticmethod
+    def get_time_series_type_str() -> str:
+        return "SingleTimeSeries"
+
+
+class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadataBase):
     """Defines the metadata for a SingleTimeSeriesScalingFactor."""
 
     type: Literal["SingleTimeSeriesScalingFactor"] = "SingleTimeSeriesScalingFactor"
 
+    @staticmethod
+    def get_time_series_type_str() -> str:
+        return "SingleTimeSeriesScalingFactor"
 
-# This needs to be a Union if we add other time series types.
+
 TimeSeriesMetadataUnion = Annotated[
     Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata],
     Field(discriminator="type"),
