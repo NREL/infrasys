@@ -158,7 +158,7 @@ class ComponentManager:
         self,
         component: Type,
         name: str | None = None,
-        attach_to_system=False,
+        attach=False,
     ) -> Component:
         """Create a copy of the component. Time series data is excluded."""
         # This uses model_dump and the component constructor because the 'name' field is frozen.
@@ -169,10 +169,9 @@ class ComponentManager:
         if name is not None:
             data["name"] = name
         new_component = type(component)(**data)
-        new_component.system_uuid = None
 
         logger.info("Copied {} to {}", component.summary, new_component.summary)
-        if attach_to_system:
+        if attach:
             self.add(new_component)
 
         return new_component

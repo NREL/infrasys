@@ -296,7 +296,7 @@ class System:
         self,
         component: Type,
         name: str | None = None,
-        attach_to_system: bool = False,
+        attach: bool = False,
     ) -> Any:
         """Create a copy of the component. Time series data is excluded.The new component will
         have a different UUID from the original.
@@ -306,17 +306,17 @@ class System:
         component : Type
             Type of the source component
         name : str
-            Name of the new component. If None, keep the original name.
-        attach_to_system : bool
+            Optional, if None, keep the original name.
+        attach : bool
             Optional, if True, attach the new component to the system.
 
         Examples
         --------
         >>> gen1 = system.get_component(Generator, "gen1")
         >>> gen2 = system.copy_component(gen, name="gen2")
-        >>> gen3 = system.copy_component(gen, name="gen3", attach_to_system=True)
+        >>> gen3 = system.copy_component(gen, name="gen3", attach=True)
         """
-        return self._component_mgr.copy(component, name=name, attach_to_system=attach_to_system)
+        return self._component_mgr.copy(component, name=name, attach=attach)
 
     def get_component(self, component_type: Type, name: str) -> Any:
         """Return the component with the passed type and name.

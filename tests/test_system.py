@@ -293,6 +293,6 @@ def test_copy_component(simple_system_with_time_series: SimpleSystem):
     assert gen3.name == "gen3"
     assert gen2.system_uuid is None
 
-    gen4 = system.copy_component(gen1, name="gen4", attach_to_system=True)
+    gen4 = system.copy_component(gen1, name="gen4", attach=True)
     assert gen4.name == "gen4"
     assert gen4.system_uuid == gen1.system_uuid
