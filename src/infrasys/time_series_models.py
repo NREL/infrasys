@@ -3,12 +3,12 @@
 import abc
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Literal, Optional, Type, TypeAlias, Union, Sequence
+from typing import Any, Literal, Type, TypeAlias, Union, Sequence
 from uuid import UUID
 
 import numpy as np
 import pyarrow as pa
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator, computed_field
 from typing_extensions import Annotated
 
 from infrasys.exceptions import ISConflictingArguments
@@ -50,9 +50,13 @@ class SingleTimeSeries(TimeSeriesData):
     """Defines a time array with a single dimension of floats."""
 
     data: ISArray
-    resolution: Optional[timedelta] = None
-    initial_time: Optional[datetime] = None
-    length: Optional[int] = None
+    resolution: timedelta
+    initial_time: datetime
+
+    @computed_field
+    def length(self) -> int:
+        """Return the length of the data."""
+        return len(self.data)
 
     @field_validator("data")
     @classmethod
@@ -66,19 +70,6 @@ class SingleTimeSeries(TimeSeriesData):
             data = pa.array(data)
 
         return data  # type: ignore
-
-    @model_validator(mode="after")  # type: ignore
-    def assign_values(self) -> "SingleTimeSeries":
-        """Assign parameters by inspecting data."""
-
-        # Check that length matches what user says.
-        actual_len = len(self.data)
-        if self.length is None:
-            self.length = actual_len
-        elif self.length != actual_len:
-            msg = f"length={self.length} does not match data length {actual_len}"
-            raise ValueError(msg)
-        return self
 
     @classmethod
     def from_array(
@@ -213,9 +204,6 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
     @classmethod
     def from_data(cls, time_series: SingleTimeSeries, **user_attributes) -> Any:
         """Construct a SingleTimeSeriesMetadata from a SingleTimeSeries."""
-        assert time_series.initial_time is not None
-        assert time_series.length is not None
-        assert time_series.resolution is not None
         return cls(
             variable_name=time_series.variable_name,
             resolution=time_series.resolution,

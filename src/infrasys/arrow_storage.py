@@ -82,7 +82,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             variable_name=metadata.variable_name,
             resolution=metadata.resolution,
             initial_time=start_time or metadata.initial_time,
-            length=length,
             data=base_ts[metadata.variable_name][index : index + length],
         )
 

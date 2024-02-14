@@ -66,6 +66,5 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             variable_name=base_ts.variable_name,
             resolution=base_ts.resolution,
             initial_time=start_time or base_ts.initial_time,
-            length=length,
             data=base_ts.data[index : index + length],
         )
