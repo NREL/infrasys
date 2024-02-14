@@ -13,7 +13,7 @@ def test_single_time_series_attributes():
     length = 8784
     variable_name = "active_power"
     data = range(length)
-    ts = SingleTimeSeries(
+    ts = SingleTimeSeries.from_array(
         data=data, variable_name=variable_name, initial_time=start, resolution=resolution
     )
     assert ts.length == length
@@ -65,19 +65,3 @@ def test_from_time_array_constructor():
     assert ts.initial_time == initial_time
     assert isinstance(ts.data, pa.Array)
     assert ts.data[-1].as_py() == length - 1
-
-
-def test_inconsistent_length():
-    start = datetime(year=2020, month=1, day=1)
-    resolution = timedelta(hours=1)
-    length = 8784
-    data = range(length)
-    variable_name = "active_power"
-    with pytest.raises(ValueError, match="does not match data length"):
-        SingleTimeSeries(
-            data=data,
-            variable_name=variable_name,
-            resolution=resolution,
-            initial_time=start,
-            length=10,
-        )

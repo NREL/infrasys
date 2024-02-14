@@ -22,7 +22,7 @@ def test_system() -> System:
 
 def test_file_creation(test_system: System):
     gen1 = test_system.components.get(SimpleGenerator, "gen1")
-    ts = SingleTimeSeries(
+    ts = SingleTimeSeries.from_array(
         data=range(8784),
         variable_name="active_power",
         initial_time=datetime(year=2020, month=1, day=1),
@@ -41,7 +41,7 @@ def test_copy_files(tmp_path):
     bus = SimpleBus(name="test-bus", voltage=1.1)
     gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
     system.add_components(bus, gen1)
-    ts = SingleTimeSeries(
+    ts = SingleTimeSeries.from_array(
         data=range(8784),
         variable_name="active_power",
         initial_time=datetime(year=2020, month=1, day=1),
@@ -68,7 +68,7 @@ def test_read_deserialize_time_series(tmp_path):
     bus = SimpleBus(name="test-bus", voltage=1.1)
     gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
     system.add_components(bus, gen1)
-    ts = SingleTimeSeries(
+    ts = SingleTimeSeries.from_array(
         data=range(8784),
         variable_name="active_power",
         initial_time=datetime(year=2020, month=1, day=1),

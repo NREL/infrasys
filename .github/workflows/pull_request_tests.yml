@@ -22,6 +22,14 @@ jobs:
     - name: Run pytest
       run: |
         python -m pytest -v --disable-warnings tests
+  mypy:
+    runs-on: cadet-runners
+    name: "mypy"
+    steps:
+      - uses: davidslusser/actions_python_mypy@v1.0.0
+        with:
+          src: "src"
+          options: "--ignore-missing-imports"
   ruff:
     runs-on: cadet-runners
     name: "ruff"

@@ -187,8 +187,8 @@ class System:
         cls,
         data: dict[str, Any],
         time_series_parent_dir: Path | str,
-        upgrade_handler=None,
-        **kwargs,
+        upgrade_handler: Callable | None = None,
+        **kwargs: Any,
     ) -> "System":
         """Deserialize a System from a dictionary.
 
@@ -295,17 +295,17 @@ class System:
 
     def copy_component(
         self,
-        component: Type,
+        component: Component,
         name: str | None = None,
         attach: bool = False,
     ) -> Any:
-        """Create a copy of the component. Time series data is excluded.The new component will
+        """Create a copy of the component. Time series data is excluded. The new component will
         have a different UUID from the original.
 
         Parameters
         ----------
-        component : Type
-            Type of the source component
+        component : Component
+            Source component
         name : str
             Optional, if None, keep the original name.
         attach : bool
@@ -319,12 +319,12 @@ class System:
         """
         return self._component_mgr.copy(component, name=name, attach=attach)
 
-    def get_component(self, component_type: Type, name: str) -> Any:
+    def get_component(self, component_type: Type[Component], name: str) -> Any:
         """Return the component with the passed type and name.
 
         Parameters
         ----------
-        component_type : Type
+        component_type : Type[Component]
             Type of component
         name : Type
             Name of component
@@ -364,13 +364,13 @@ class System:
         return self._component_mgr.get_by_uuid(uuid)
 
     def get_components(
-        self, component_type: Type, filter_func: Callable | None = None
+        self, component_type: Type[Component], filter_func: Callable | None = None
     ) -> Iterable[Any]:
         """Return the components with the passed type and that optionally match filter_func.
 
         Parameters
         ----------
-        component_type : Type
+        component_type : Type[Component]
             If component_type is an abstract type, all matching subtypes will be returned.
         filter_func : Callable | None
             Optional function to filter the returned values. The function must accept a component
@@ -389,7 +389,7 @@ class System:
         """
         return self._component_mgr.iter(component_type, filter_func=filter_func)
 
-    def get_component_types(self) -> Iterable[Type]:
+    def get_component_types(self) -> Iterable[Type[Component]]:
         """Return an iterable of all component types stored in the system.
 
         Examples
@@ -399,7 +399,7 @@ class System:
         """
         return self._component_mgr.get_types()
 
-    def list_components_by_name(self, component_type: Type, name: str) -> list[Any]:
+    def list_components_by_name(self, component_type: Type[Component], name: str) -> list[Any]:
         """Return all components that match component_type and name.
 
         Parameters
@@ -427,7 +427,7 @@ class System:
         """
         return self._component_mgr.iter_all()
 
-    def remove_component(self, component: Any) -> Any:
+    def remove_component(self, component: Component) -> Any:
         """Remove the component from the system and return it.
 
         Parameters
@@ -446,6 +446,7 @@ class System:
         """
         raise_if_not_attached(component, self.uuid)
         if component.has_time_series():
+            assert isinstance(component, ComponentWithQuantities)
             for metadata in component.list_time_series_metadata():
                 self.remove_time_series(
                     component,
@@ -455,8 +456,8 @@ class System:
                 )
         component = self._component_mgr.remove(component)
 
-    def remove_component_by_name(self, component_type: Type, name: str) -> list[Any]:
-        """Remove all components matching the inputs from the system and return them.
+    def remove_component_by_name(self, component_type: Type[Component], name: str) -> Any:
+        """Remove the component with component_type and name from the system and return it.
 
         Parameters
         ----------
@@ -499,7 +500,7 @@ class System:
 
     def update_components(
         self,
-        component_type: Type,
+        component_type: Type[Component],
         update_func: Callable,
         filter_func: Callable | None = None,
     ) -> None:
@@ -507,7 +508,7 @@ class System:
 
         Parameters
         ----------
-        component_type : Type
+        component_type : Type[Component]
             Type of component to update. Can be abstract.
         update_func : Callable
             Function to call on each component. Must take a component as a single argument.
@@ -596,7 +597,7 @@ class System:
         self,
         component: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
         **user_attributes: str,
@@ -609,7 +610,7 @@ class System:
             Return time series attached to this component.
         variable_name : str | None
             Optional, return time series with this name.
-        time_series_type : Type
+        time_series_type : Type[TimeSeriesData]
             Optional, return time series with this type.
         start_time : datetime | None
             Return a slice of the time series starting at this time. Defaults to the first value.
@@ -654,10 +655,10 @@ class System:
         self,
         component: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-        **user_attributes,
+        **user_attributes: Any,
     ) -> list[TimeSeriesData]:
         """Return all time series that match the inputs.
 
@@ -667,7 +668,7 @@ class System:
             Return time series attached to this component.
         variable_name : str | None
             Optional, return time series with this name.
-        time_series_type : Type
+        time_series_type : Type[TimeSeriesData]
             Optional, return time series with this type.
         start_time : datetime | None
             Return a slice of the time series starting at this time. Defaults to the first value.
@@ -695,9 +696,9 @@ class System:
         self,
         *components: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
-        **user_attributes,
-    ):
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **user_attributes: Any,
+    ) -> None:
         """Remove all time series arrays attached to the components matching the inputs.
 
         Parameters
@@ -706,7 +707,7 @@ class System:
             Affected components
         variable_name : str | None
             Optional, defaults to any name.
-        time_series_type : Type | None
+        time_series_type : Type[TimeSeriesData] | None
             Optional, defaults to any type.
         user_attributes : str
             Remove only time series with these attributes.
@@ -739,7 +740,9 @@ class System:
         The method should modify self with its custom attributes in data.
         """
 
-    def handle_data_format_upgrade(self, data: dict[str, Any], from_version, to_version) -> None:
+    def handle_data_format_upgrade(
+        self, data: dict[str, Any], from_version: str | None, to_version: str | None
+    ) -> None:
         """Allows subclasses to upgrade data models.
 
         The parameter data contains the full contents of the serialized JSON file.
@@ -768,7 +771,7 @@ class System:
         self._data_format_version = data_format_version
 
     @property
-    def name(self):
+    def name(self) -> str | None:
         """Return the name of the system."""
         return self._name
 
@@ -784,7 +787,7 @@ class System:
         return self._time_series_mgr
 
     @property
-    def uuid(self):
+    def uuid(self) -> UUID:
         """Return the UUID of the system."""
         return self._uuid
 
@@ -797,9 +800,9 @@ class System:
 
     def _deserialize_components_first_pass(
         self, components: list[dict], cached_types: CachedTypeHelper
-    ) -> dict:
+    ) -> dict[Type, list[dict[str, Any]]]:
         deserialized_types = set()
-        skipped_types = defaultdict(list)
+        skipped_types: dict[Type, list[dict[str, Any]]] = defaultdict(list)
         for component_dict in components:
             component = self._try_deserialize_component(component_dict, cached_types)
             if component is None:
@@ -817,7 +820,7 @@ class System:
         self,
         skipped_types: dict[Type, list[dict[str, Any]]],
         cached_types: CachedTypeHelper,
-    ):
+    ) -> None:
         max_iterations = len(skipped_types)
         for _ in range(max_iterations):
             deserialized_types = set()
@@ -839,7 +842,9 @@ class System:
             msg = f"Bug: still have types remaining to be deserialized: {skipped_types.keys()}"
             raise Exception(msg)
 
-    def _try_deserialize_component(self, component: dict, cached_types: CachedTypeHelper) -> Any:
+    def _try_deserialize_component(
+        self, component: dict[str, Any], cached_types: CachedTypeHelper
+    ) -> Any:
         actual_component = None
         values = self._deserialize_fields(component, cached_types)
         if values is None:
@@ -863,7 +868,9 @@ class System:
 
         return actual_component
 
-    def _deserialize_fields(self, component: dict, cached_types: CachedTypeHelper) -> dict | None:
+    def _deserialize_fields(
+        self, component: dict[str, Any], cached_types: CachedTypeHelper
+    ) -> dict | None:
         values = {}
         for field, value in component.items():
             if isinstance(value, dict) and TYPE_METADATA in value:
@@ -909,7 +916,7 @@ class System:
         return None
 
     def _deserialize_composed_list(
-        self, components: list[dict], cached_types: CachedTypeHelper
+        self, components: list[dict[str, Any]], cached_types: CachedTypeHelper
     ) -> list[Any] | None:
         deserialized_components = []
         for component in components:

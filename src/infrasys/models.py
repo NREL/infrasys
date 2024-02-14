@@ -1,13 +1,14 @@
 """Base models for the package"""
 
 import abc
+from typing import Any
 from uuid import UUID, uuid4
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
-def make_model_config(**kwargs) -> ConfigDict:
+def make_model_config(**kwargs: Any) -> ConfigDict:
     """Return a Pydantic config"""
     return ConfigDict(
         str_strip_whitespace=True,
@@ -17,7 +18,7 @@ def make_model_config(**kwargs) -> ConfigDict:
         use_enum_values=False,
         arbitrary_types_allowed=True,
         populate_by_name=True,
-        **kwargs,
+        **kwargs,  # type: ignore
     )
 
 
@@ -33,7 +34,7 @@ class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
     uuid: UUID = Field(default_factory=uuid4)
 
     @field_serializer("uuid")
-    def _serialize_uuid(self, _):
+    def _serialize_uuid(self, _) -> str:
         return str(self.uuid)
 
     def assign_new_uuid(self):

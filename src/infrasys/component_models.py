@@ -36,10 +36,10 @@ class Component(InfraSysBaseModelWithIdentifers):
     system_uuid: Optional[UUID] = None
 
     @field_serializer("system_uuid")
-    def _serialize_system_uuid(self, _):
+    def _serialize_system_uuid(self, _) -> str:
         return str(self.system_uuid)
 
-    def check_component_addition(self, system_uuid: UUID):
+    def check_component_addition(self, system_uuid: UUID) -> None:
         """Perform checks on the component before adding it to a system."""
 
     def is_attached(self, system_uuid: Optional[UUID] = None) -> bool:
@@ -58,12 +58,12 @@ class Component(InfraSysBaseModelWithIdentifers):
         self,
         variable_name: Optional[str] = None,
         time_series_type: Optional[Type] = None,
-        **user_attributes,
+        **user_attributes: Any,
     ) -> bool:
         """Return True if the component has time series data matching the inputs."""
         return False
 
-    def model_dump_custom(self, *args, **kwargs):
+    def model_dump_custom(self, *args, **kwargs) -> dict[str, Any]:
         """Custom serialization for this package"""
         refs = {x: self._model_dump_field(x) for x in self.model_fields}
         exclude = kwargs.get("exclude", [])
@@ -73,7 +73,7 @@ class Component(InfraSysBaseModelWithIdentifers):
         data.update(refs)
         return data
 
-    def _model_dump_field(self, field):
+    def _model_dump_field(self, field) -> Any:
         val = getattr(self, field)
         if isinstance(val, Component):
             val = {TYPE_METADATA: serialize_component_reference(val)}
@@ -127,7 +127,7 @@ class ComponentWithQuantities(Component):
         self,
         variable_name: Optional[str] = None,
         time_series_type: Optional[Type] = None,
-        **user_attributes,
+        **user_attributes: Any,
     ) -> bool:
         return bool(
             self._find_time_series_indexes(
@@ -159,7 +159,7 @@ class ComponentWithQuantities(Component):
         self,
         variable_name: Optional[str] = None,
         time_series_type: Optional[Type] = None,
-        **user_attributes,
+        **user_attributes: Any,
     ) -> TimeSeriesMetadata:
         """Return the time series metadata matching the inputs.
 
@@ -193,7 +193,7 @@ class ComponentWithQuantities(Component):
         self,
         variable_name: Optional[str] = None,
         time_series_type: Optional[Type] = None,
-        **user_attributes,
+        **user_attributes: Any,
     ) -> list[TimeSeriesMetadata]:
         """Return the time series metadata matching the inputs."""
         return [
@@ -207,7 +207,7 @@ class ComponentWithQuantities(Component):
         self,
         variable_name: Optional[str] = None,
         time_series_type: Optional[Type] = None,
-        **user_attributes,
+        **user_attributes: Any,
     ) -> list[TimeSeriesMetadata]:
         """Remove and return all time series metadata matching the inputs."""
         indexes = self._find_time_series_indexes(
@@ -227,7 +227,7 @@ class ComponentWithQuantities(Component):
         self,
         variable_name: Optional[str] = None,
         time_series_type: Optional[Type] = None,
-        **user_attributes,
+        **user_attributes: Any,
     ) -> list[int]:
         indexes = []
         for i, metadata in enumerate(self.time_series_metadata):
