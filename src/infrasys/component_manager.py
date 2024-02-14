@@ -172,14 +172,21 @@ class ComponentManager:
         attach=False,
     ) -> Component:
         """Create a copy of the component. Time series data is excluded."""
-        # This uses model_dump and the component constructor because the 'name' field is frozen.
-        data = component.model_dump()
-        data.pop("time_series_metadata", None)
-        for field in ("system_uuid", "uuid"):
-            data.pop(field)
-        if name is not None:
-            data["name"] = name
-        new_component = type(component)(**data)  # type: ignore
+        values = {}
+        for field in type(component).model_fields:
+            cur_val = getattr(component, field)
+            if field == "name" and name is not None:
+                # Name is special-cased because it is a frozen field.
+                val = name
+            elif field in ("system_uuid", "time_series_metadata", "uuid"):
+                # The copied component cannot have time series. The UUIDs will get set
+                # automatically.
+                continue
+            else:
+                val = cur_val
+            values[field] = val
+
+        new_component = type(component)(**values)  # type: ignore
 
         logger.info("Copied {} to {}", component.summary, new_component.summary)
         if attach:
