@@ -35,8 +35,8 @@ component, `infrasys` checks the type of each of that component's fields. If a v
 component (which means that it must also be attached to system), `infrasys` replaces that instance
 with its UUID. It does this to avoid duplicating data in the JSON file.
 
-Here is an example of a serialized `Bus`. Note the value for the `location` field. It contains the
-type and UUID of the actual `location`. During de-serialization, `infrasys` will detect this
+Here is an example of a serialized `Bus`. Note the value for the `coordinates` field. It contains the
+type and UUID of the actual `coordinates`. During de-serialization, `infrasys` will detect this
 condition and only attempt to de-serialize the bus once all `Location` instances have been
 de-serialized.
 
