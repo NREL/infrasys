@@ -57,7 +57,7 @@ class ComponentManager:
         list_by_name
         """
         if component_type not in self._components or name not in self._components[component_type]:
-            summary = make_summary(str(component_type), name)
+            summary = make_summary(component_type.__name__, name)
             msg = f"{summary} is not stored"
             raise ISNotStored(msg)
 
