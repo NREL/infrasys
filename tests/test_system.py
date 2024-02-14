@@ -296,3 +296,32 @@ def test_copy_component(simple_system_with_time_series: SimpleSystem):
     gen4 = system.copy_component(gen1, name="gen4", attach=True)
     assert gen4.name == "gen4"
     assert gen4.system_uuid == gen1.system_uuid
+
+
+def test_remove_component(simple_system: SimpleSystem):
+    system = simple_system
+    gen1 = system.get_component(SimpleGenerator, "test-gen")
+    gen2 = system.copy_component(gen1, name="gen2", attach=True)
+    variable_name = "active_power"
+    length = 8784
+    df = range(length)
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(df, variable_name, start, resolution)
+    system.add_time_series(ts, gen1, gen2)
+
+    with pytest.raises(ISOperationNotAllowed):
+        system.components.remove(gen1)
+
+    system.remove_component_by_name(type(gen1), gen1.name)
+    assert not gen1.has_time_series()
+    assert gen2.has_time_series()
+
+    system.remove_component_by_uuid(gen2.uuid)
+    assert not gen2.has_time_series()
+
+    with pytest.raises(ISNotStored):
+        system.remove_component(gen2)
+
+    with pytest.raises(ISNotStored):
+        system.components.remove(gen2)

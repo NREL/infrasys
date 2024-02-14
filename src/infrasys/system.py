@@ -18,6 +18,7 @@ from infrasys.models import make_summary
 from infrasys.component_models import (
     Component,
     ComponentWithQuantities,
+    raise_if_not_attached,
 )
 from infrasys.component_manager import ComponentManager
 from infrasys.serialization import (
@@ -426,7 +427,7 @@ class System:
         """
         return self._component_mgr.iter_all()
 
-    def remove_component(self, component: Component) -> Any:
+    def remove_component(self, component: Any) -> Any:
         """Remove the component from the system and return it.
 
         Parameters
@@ -443,7 +444,16 @@ class System:
         >>> gen = system.get_component(Generator, "gen1")
         >>> system.remove_component(gen)
         """
-        return self._component_mgr.remove(component)
+        raise_if_not_attached(component, self.uuid)
+        if component.has_time_series():
+            for metadata in component.list_time_series_metadata():
+                self.remove_time_series(
+                    component,
+                    time_series_type=metadata.get_time_series_data_type(),
+                    variable_name=metadata.variable_name,
+                    **metadata.user_attributes,
+                )
+        component = self._component_mgr.remove(component)
 
     def remove_component_by_name(self, component_type: Type, name: str) -> list[Any]:
         """Remove all components matching the inputs from the system and return them.
@@ -457,12 +467,15 @@ class System:
         ------
         ISNotStored
             Raised if the inputs do not match any components in the system.
+        ISOperationNotAllowed
+            Raised if there is more than one component with component type and name.
 
         Examples
         --------
         >>> generators = system.remove_by_name(Generator, "gen1")
         """
-        return self._component_mgr.remove_by_name(component_type, name)
+        component = self.get_component(component_type, name)
+        return self.remove_component(component)
 
     def remove_component_by_uuid(self, uuid: UUID) -> Any:
         """Remove the component with uuid from the system and return it.
@@ -481,7 +494,8 @@ class System:
         >>> uuid = UUID("714c8311-8dff-4ae2-aa2e-30779a317d42")
         >>> generator = system.remove_component_by_uuid(uuid)
         """
-        return self._component_mgr.remove_by_uuid(uuid)
+        component = self.get_component_by_uuid(uuid)
+        return self.remove_component(component)
 
     def update_components(
         self,
