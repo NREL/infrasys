@@ -299,4 +299,4 @@ class TimeSeriesManager:
 
 def clean_tmp_folder(folder: Path | str) -> None:
     shutil.rmtree(folder)
-    logger.info("Wiped folder: {}", folder)
+    logger.info("Wiped time series folder: {}", folder)
