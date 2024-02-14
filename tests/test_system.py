@@ -388,9 +388,14 @@ def test_remove_component(in_memory):
 
     system.remove_component_by_uuid(gen2.uuid)
     assert not gen2.has_time_series()
+    assert gen2.system_uuid is None
 
     with pytest.raises(ISNotStored):
         system.remove_component(gen2)
 
     with pytest.raises(ISNotStored):
         system.components.remove(gen2)
+
+    for gen in (gen1, gen2):
+        with pytest.raises(ISNotStored):
+            system.components.get(SimpleGenerator, gen.name)

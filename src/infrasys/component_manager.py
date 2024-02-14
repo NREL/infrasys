@@ -69,6 +69,7 @@ class ComponentManager:
             )
             raise ISOperationNotAllowed(msg)
 
+        assert components
         return components[0]
 
     def get_types(self) -> Iterable[Type[Component]]:
@@ -139,12 +140,25 @@ class ComponentManager:
             )
             raise ISOperationNotAllowed(msg)
 
-        # The system method should have already performed the check. KeyError may happen if
-        # someone uses this incorrectly.
-        container = self._components[type(component)][component.name]
+        component_type = type(component)
+        # The system method should have already performed the check, but for completeness in case
+        # someone calls it directly, check here.
+        if (
+            component_type not in self._components
+            or component.name not in self._components[component_type]
+        ):
+            msg = f"{component.summary} is not stored"
+            raise ISNotStored(msg)
+
+        container = self._components[component_type][component.name]
         for i, comp in enumerate(container):
             if comp.uuid == component.uuid:
                 container.pop(i)
+                component.system_uuid = None
+                if not self._components[component_type][component.name]:
+                    self._components[component_type].pop(component.name)
+                if not self._components[component_type]:
+                    self._components.pop(component_type)
                 logger.debug("Removed component {}", component.summary)
                 return
 
