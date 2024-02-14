@@ -44,7 +44,7 @@ class ComponentManager:
         for component in args:
             self._add(component, deserialization_in_progress)
 
-    def get(self, component_type: Type, name: str) -> Any:
+    def get(self, component_type: Type[Component], name: str) -> Any:
         """Return the component with the passed type and name.
 
         Raises
@@ -71,18 +71,22 @@ class ComponentManager:
 
         return components[0]
 
-    def get_types(self) -> Iterable[Type]:
+    def get_types(self) -> Iterable[Type[Component]]:
         """Return an iterable of all stored types."""
         return self._components.keys()
 
-    def iter(self, component_type: Type, filter_func: Callable | None = None) -> Iterable[Any]:
+    def iter(
+        self, component_type: Type[Component], filter_func: Callable | None = None
+    ) -> Iterable[Any]:
         """Return the components with the passed type and optionally match filter_func.
 
         If component_type is an abstract type, all matching subtypes will be returned.
         """
         yield from self._iter(component_type, filter_func)
 
-    def _iter(self, component_type: Type, filter_func: Callable | None) -> Iterable[Component]:
+    def _iter(
+        self, component_type: Type[Component], filter_func: Callable | None
+    ) -> Iterable[Any]:
         subclasses = component_type.__subclasses__()
         if subclasses:
             for subclass in subclasses:
@@ -97,7 +101,7 @@ class ComponentManager:
                     if filter_func(component):
                         yield component
 
-    def list_by_name(self, component_type: Type, name: str) -> list[Any]:
+    def list_by_name(self, component_type: Type[Component], name: str) -> list[Any]:
         """Return all components that match component_type and name.
 
         The component_type can be an abstract type.
@@ -149,7 +153,7 @@ class ComponentManager:
 
     def copy(
         self,
-        component: Type,
+        component: Component,
         name: str | None = None,
         attach=False,
     ) -> Component:
@@ -174,7 +178,10 @@ class ComponentManager:
         raise NotImplementedError("change_component_uuid")
 
     def update(
-        self, component_type: Type, update_func: Callable, filter_func: Callable | None = None
+        self,
+        component_type: Type[Component],
+        update_func: Callable,
+        filter_func: Callable | None = None,
     ) -> None:
         """Update multiple components of a given type."""
 

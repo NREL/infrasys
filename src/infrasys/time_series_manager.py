@@ -127,7 +127,7 @@ class TimeSeriesManager:
         self,
         component: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
         **user_attributes,
@@ -157,7 +157,7 @@ class TimeSeriesManager:
         self,
         component: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
         **user_attributes: Any,
@@ -174,7 +174,7 @@ class TimeSeriesManager:
         self,
         *components: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes: Any,
     ):
         """Remove all time series arrays matching the inputs.

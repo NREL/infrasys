@@ -295,17 +295,17 @@ class System:
 
     def copy_component(
         self,
-        component: Type,
+        component: Component,
         name: str | None = None,
         attach: bool = False,
     ) -> Any:
-        """Create a copy of the component. Time series data is excluded.The new component will
+        """Create a copy of the component. Time series data is excluded. The new component will
         have a different UUID from the original.
 
         Parameters
         ----------
-        component : Type
-            Type of the source component
+        component : Component
+            Source component
         name : str
             Optional, if None, keep the original name.
         attach : bool
@@ -319,12 +319,12 @@ class System:
         """
         return self._component_mgr.copy(component, name=name, attach=attach)
 
-    def get_component(self, component_type: Type, name: str) -> Any:
+    def get_component(self, component_type: Type[Component], name: str) -> Any:
         """Return the component with the passed type and name.
 
         Parameters
         ----------
-        component_type : Type
+        component_type : Type[Component]
             Type of component
         name : Type
             Name of component
@@ -364,13 +364,13 @@ class System:
         return self._component_mgr.get_by_uuid(uuid)
 
     def get_components(
-        self, component_type: Type, filter_func: Callable | None = None
+        self, component_type: Type[Component], filter_func: Callable | None = None
     ) -> Iterable[Any]:
         """Return the components with the passed type and that optionally match filter_func.
 
         Parameters
         ----------
-        component_type : Type
+        component_type : Type[Component]
             If component_type is an abstract type, all matching subtypes will be returned.
         filter_func : Callable | None
             Optional function to filter the returned values. The function must accept a component
@@ -389,7 +389,7 @@ class System:
         """
         return self._component_mgr.iter(component_type, filter_func=filter_func)
 
-    def get_component_types(self) -> Iterable[Type]:
+    def get_component_types(self) -> Iterable[Type[Component]]:
         """Return an iterable of all component types stored in the system.
 
         Examples
@@ -399,7 +399,7 @@ class System:
         """
         return self._component_mgr.get_types()
 
-    def list_components_by_name(self, component_type: Type, name: str) -> list[Any]:
+    def list_components_by_name(self, component_type: Type[Component], name: str) -> list[Any]:
         """Return all components that match component_type and name.
 
         Parameters
@@ -456,7 +456,7 @@ class System:
                 )
         component = self._component_mgr.remove(component)
 
-    def remove_component_by_name(self, component_type: Type, name: str) -> Any:
+    def remove_component_by_name(self, component_type: Type[Component], name: str) -> Any:
         """Remove the component with component_type and name from the system and return it.
 
         Parameters
@@ -500,7 +500,7 @@ class System:
 
     def update_components(
         self,
-        component_type: Type,
+        component_type: Type[Component],
         update_func: Callable,
         filter_func: Callable | None = None,
     ) -> None:
@@ -508,7 +508,7 @@ class System:
 
         Parameters
         ----------
-        component_type : Type
+        component_type : Type[Component]
             Type of component to update. Can be abstract.
         update_func : Callable
             Function to call on each component. Must take a component as a single argument.
@@ -597,7 +597,7 @@ class System:
         self,
         component: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
         **user_attributes: str,
@@ -610,7 +610,7 @@ class System:
             Return time series attached to this component.
         variable_name : str | None
             Optional, return time series with this name.
-        time_series_type : Type
+        time_series_type : Type[TimeSeriesData]
             Optional, return time series with this type.
         start_time : datetime | None
             Return a slice of the time series starting at this time. Defaults to the first value.
@@ -655,7 +655,7 @@ class System:
         self,
         component: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
         **user_attributes: Any,
@@ -668,7 +668,7 @@ class System:
             Return time series attached to this component.
         variable_name : str | None
             Optional, return time series with this name.
-        time_series_type : Type
+        time_series_type : Type[TimeSeriesData]
             Optional, return time series with this type.
         start_time : datetime | None
             Return a slice of the time series starting at this time. Defaults to the first value.
@@ -696,7 +696,7 @@ class System:
         self,
         *components: ComponentWithQuantities,
         variable_name: str | None = None,
-        time_series_type: Type = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes: Any,
     ) -> None:
         """Remove all time series arrays attached to the components matching the inputs.
@@ -707,7 +707,7 @@ class System:
             Affected components
         variable_name : str | None
             Optional, defaults to any name.
-        time_series_type : Type | None
+        time_series_type : Type[TimeSeriesData] | None
             Optional, defaults to any type.
         user_attributes : str
             Remove only time series with these attributes.
