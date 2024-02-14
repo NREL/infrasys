@@ -1,7 +1,7 @@
 """Manages components"""
 
 import itertools
-from typing import Callable, Iterable, Type
+from typing import Any, Callable, Iterable, Type
 from uuid import UUID
 from loguru import logger
 
@@ -124,46 +124,52 @@ class ComponentManager:
         """Return an iterator over all components."""
         return self._components_by_uuid.values()
 
-    def remove(self, component: Component) -> Component:
+    def remove(self, component: Component) -> Any:
         """Remove the component from the system and return it.
 
-        Raises
-        ------
-        ISNotStored
-            Raised if the component is not stored in the system.
+        Note: users should not call this directly. It should be called through the system
+        so that time series is handled.
         """
-        raise NotImplementedError("remove_component")
+        if component.has_time_series():
+            msg = (
+                "remove cannot be called when there is time series data. Call "
+                "System.remove_component instead"
+            )
+            raise ISOperationNotAllowed(msg)
 
-    def remove_by_name(self, component_type: Type, name: str) -> list[Component]:
-        """Remove all components matching the inputs from the system and return them.
+        # The system method should have already performed the check. KeyError may happen if
+        # someone uses this incorrectly.
+        container = self._components[type(component)][component.name]
+        for i, comp in enumerate(container):
+            if comp.uuid == component.uuid:
+                container.pop(i)
+                logger.debug("Removed component {}", component.summary)
+                return
 
-        Raises
-        ------
-        ISNotStored
-            Raised if the inputs do not match any components in the system.
-        """
-        raise NotImplementedError("remove_component_by_name")
-
-    def remove_by_uuid(self, uuid: UUID) -> Component:
-        """Remove the components with uuid from the system and return it.
-
-        Raises
-        ------
-        ISNotStored
-            Raised if the UUID is not stored in the system.
-        """
-        raise NotImplementedError("remove_component_by_uuid")
+        msg = f"Component {component.summary} is not stored"
+        raise ISNotStored(msg)
 
     def copy(
         self,
         component: Type,
-        new_name: str,
-        attach_to_system=False,
-        copy_time_series=True,
+        name: str | None = None,
+        attach=False,
     ) -> Component:
-        """Create a copy of the component."""
-        # TODO: must call change_uuid and clear system_uuid if attach_to_system=False
-        raise NotImplementedError("copy")
+        """Create a copy of the component. Time series data is excluded."""
+        # This uses model_dump and the component constructor because the 'name' field is frozen.
+        data = component.model_dump()
+        data.pop("time_series_metadata", None)
+        for field in ("system_uuid", "uuid"):
+            data.pop(field)
+        if name is not None:
+            data["name"] = name
+        new_component = type(component)(**data)
+
+        logger.info("Copied {} to {}", component.summary, new_component.summary)
+        if attach:
+            self.add(new_component)
+
+        return new_component
 
     def change_uuid(self, component: Component) -> None:
         """Change the component UUID."""
