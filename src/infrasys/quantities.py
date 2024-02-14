@@ -1,4 +1,5 @@
-""" This module contains basic unit quantities."""
+"""This module defines basic unit quantities."""
+
 from infrasys.base_quantity import BaseQuantity
 
 # ruff:noqa

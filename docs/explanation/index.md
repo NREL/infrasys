@@ -12,4 +12,5 @@
     components
     time_series
     location
+    serialization
 ```

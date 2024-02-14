@@ -61,13 +61,6 @@ class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
         return make_summary(class_name, name)
 
 
-class SerializedTypeInfo(InfraSysBaseModel):
-    """Defines the type of a serialized object."""
-
-    module: str
-    type: str
-
-
 def make_summary(class_name: str, name: str) -> str:
     """Make a string summarizing an instance."""
     return f"{class_name}.{name}"

@@ -1,6 +1,5 @@
 """Defines a System"""
 
-import importlib
 import json
 from collections import defaultdict
 from datetime import datetime
@@ -10,19 +9,26 @@ from uuid import UUID, uuid4
 
 from loguru import logger
 
-from infrasys.common import COMPOSED_TYPE_INFO, TYPE_INFO
 from infrasys.exceptions import (
     ISFileExists,
     ISConflictingArguments,
     ISConflictingSystem,
 )
-from infrasys.models import SerializedTypeInfo, make_summary
+from infrasys.models import make_summary
 from infrasys.component_models import (
     Component,
     ComponentWithQuantities,
-    SerializedComponentReference,
 )
 from infrasys.component_manager import ComponentManager
+from infrasys.serialization import (
+    CachedTypeHelper,
+    SerializedTypeMetadata,
+    SerializedBaseType,
+    SerializedComponentReference,
+    SerializedQuantityType,
+    SerializedType,
+    TYPE_METADATA,
+)
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData
 from infrasys.utils.json import ExtendedJSONEncoder
@@ -37,7 +43,7 @@ class System:
         time_series_manager: None | TimeSeriesManager = None,
         uuid: UUID | None = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         """Constructs a System.
 
         Parameters
@@ -64,7 +70,7 @@ class System:
         self._component_mgr = ComponentManager(self._uuid)
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
         self._time_series_mgr = time_series_manager or TimeSeriesManager(**time_series_kwargs)
-        self._data_format_version = None
+        self._data_format_version: None | str = None
 
         # TODO: add pretty printing of components and time series
 
@@ -276,7 +282,7 @@ class System:
         new_name: str,
         attach_to_system: bool = False,
         copy_time_series: bool = True,
-    ) -> Component:
+    ) -> Any:
         """Create a copy of the component. The new component will have a different UUID from the
         original.
 
@@ -303,7 +309,7 @@ class System:
             copy_time_series=copy_time_series,
         )
 
-    def get_component(self, component_type: Type, name: str) -> Component:
+    def get_component(self, component_type: Type, name: str) -> Any:
         """Return the component with the passed type and name.
 
         Parameters
@@ -328,7 +334,7 @@ class System:
         """
         return self._component_mgr.get(component_type, name)
 
-    def get_component_by_uuid(self, uuid: UUID) -> Component:
+    def get_component_by_uuid(self, uuid: UUID) -> Any:
         """Return the component with the input UUID.
 
         Parameters
@@ -349,7 +355,7 @@ class System:
 
     def get_components(
         self, component_type: Type, filter_func: Callable | None = None
-    ) -> Iterable[Component]:
+    ) -> Iterable[Any]:
         """Return the components with the passed type and that optionally match filter_func.
 
         Parameters
@@ -373,7 +379,7 @@ class System:
         """
         return self._component_mgr.iter(component_type, filter_func=filter_func)
 
-    def list_components_by_name(self, component_type: Type, name: str) -> list[Component]:
+    def list_components_by_name(self, component_type: Type, name: str) -> list[Any]:
         """Return all components that match component_type and name.
 
         Parameters
@@ -387,7 +393,7 @@ class System:
         """
         return self._component_mgr.list_by_name(component_type, name)
 
-    def iter_all_components(self) -> Iterable[Component]:
+    def iter_all_components(self) -> Iterable[Any]:
         """Return an iterator over all components.
 
         Examples
@@ -401,7 +407,7 @@ class System:
         """
         return self._component_mgr.iter_all()
 
-    def remove_component(self, component: Component) -> Component:
+    def remove_component(self, component: Component) -> Any:
         """Remove the component from the system and return it.
 
         Parameters
@@ -420,7 +426,7 @@ class System:
         """
         return self._component_mgr.remove(component)
 
-    def remove_component_by_name(self, component_type: Type, name: str) -> list[Component]:
+    def remove_component_by_name(self, component_type: Type, name: str) -> list[Any]:
         """Remove all components matching the inputs from the system and return them.
 
         Parameters
@@ -439,7 +445,7 @@ class System:
         """
         return self._component_mgr.remove_by_name(component_type, name)
 
-    def remove_component_by_uuid(self, uuid: UUID) -> Component:
+    def remove_component_by_uuid(self, uuid: UUID) -> Any:
         """Remove the component with uuid from the system and return it.
 
         Parameters
@@ -561,7 +567,7 @@ class System:
         start_time: datetime | None = None,
         length: int | None = None,
         **user_attributes: str,
-    ) -> TimeSeriesData:
+    ) -> Any:
         """Return a time series array.
 
         Parameters
@@ -751,22 +757,22 @@ class System:
 
     def _deserialize_components(self, components: list[dict[str, Any]]) -> None:
         """Deserialize components from dictionaries and add them to the system."""
-        cached_types = _CachedTypeHelper()
+        cached_types = CachedTypeHelper()
         skipped_types = self._deserialize_components_first_pass(components, cached_types)
         if skipped_types:
             self._deserialize_components_nested(skipped_types, cached_types)
 
     def _deserialize_components_first_pass(
-        self, components: list[dict], cached_types: "_CachedTypeHelper"
+        self, components: list[dict], cached_types: CachedTypeHelper
     ) -> dict:
         deserialized_types = set()
         skipped_types = defaultdict(list)
         for component_dict in components:
             component = self._try_deserialize_component(component_dict, cached_types)
             if component is None:
-                component_type = cached_types.get_type(
-                    SerializedTypeInfo(**component_dict[TYPE_INFO])
-                )
+                metadata = SerializedTypeMetadata(**component_dict[TYPE_METADATA])
+                assert isinstance(metadata.fields, SerializedBaseType)
+                component_type = cached_types.get_type(metadata.fields)
                 skipped_types[component_type].append(component_dict)
             else:
                 deserialized_types.add(type(component))
@@ -777,7 +783,7 @@ class System:
     def _deserialize_components_nested(
         self,
         skipped_types: dict[Type, list[dict[str, Any]]],
-        cached_types: "_CachedTypeHelper",
+        cached_types: CachedTypeHelper,
     ):
         max_iterations = len(skipped_types)
         for _ in range(max_iterations):
@@ -800,15 +806,14 @@ class System:
             msg = f"Bug: still have types remaining to be deserialized: {skipped_types.keys()}"
             raise Exception(msg)
 
-    def _try_deserialize_component(
-        self, component: dict, cached_types: "_CachedTypeHelper"
-    ) -> Component | None:
+    def _try_deserialize_component(self, component: dict, cached_types: CachedTypeHelper) -> Any:
         actual_component = None
         values = self._deserialize_fields(component, cached_types)
         if values is None:
             return None
 
-        component_type = cached_types.get_type(SerializedTypeInfo(**component[TYPE_INFO]))
+        metadata = SerializedTypeMetadata(**component[TYPE_METADATA])
+        component_type = cached_types.get_type(metadata.fields)
         system_uuid = values.pop("system_uuid")
         if str(self.uuid) != system_uuid:
             msg = (
@@ -825,73 +830,61 @@ class System:
 
         return actual_component
 
-    def _deserialize_fields(self, component: dict, cached_types) -> dict | None:
+    def _deserialize_fields(self, component: dict, cached_types: CachedTypeHelper) -> dict | None:
         values = {}
         for field, value in component.items():
-            if isinstance(value, dict) and COMPOSED_TYPE_INFO in value:
-                composed_value = self._deserialize_composed_value(value, cached_types)
-                if composed_value is None:
-                    return None
-                values[field] = composed_value
+            if isinstance(value, dict) and TYPE_METADATA in value:
+                metadata = SerializedTypeMetadata(**value[TYPE_METADATA])
+                if isinstance(metadata.fields, SerializedComponentReference):
+                    composed_value = self._deserialize_composed_value(
+                        metadata.fields, cached_types
+                    )
+                    if composed_value is None:
+                        return None
+                    values[field] = composed_value
+                elif isinstance(metadata.fields, SerializedQuantityType):
+                    quantity_type = cached_types.get_type(metadata.fields)
+                    values[field] = quantity_type.from_dict(value)
+                else:
+                    msg = f"Bug: unhandled type: {field=} {value=}"
+                    raise NotImplementedError(msg)
             elif (
                 isinstance(value, list)
                 and value
                 and isinstance(value[0], dict)
-                and COMPOSED_TYPE_INFO in value[0]
+                and TYPE_METADATA in value[0]
+                and value[0][TYPE_METADATA]["fields"]["serialized_type"]
+                == SerializedType.COMPOSED_COMPONENT.value
             ):
+                metadata = SerializedTypeMetadata(**value[0][TYPE_METADATA])
+                assert isinstance(metadata.fields, SerializedComponentReference)
                 composed_values = self._deserialize_composed_list(value, cached_types)
                 if composed_values is None:
                     return None
                 values[field] = composed_values
-            elif isinstance(value, dict) and TYPE_INFO in value:
-                values[field] = cached_types.get_type(
-                    SerializedTypeInfo(**value[TYPE_INFO])
-                ).from_dict(value)
-            elif field != TYPE_INFO:
+            elif field != TYPE_METADATA:
                 values[field] = value
 
         return values
 
-    def _deserialize_composed_value(self, value: dict, cached_types) -> Component | None:
-        ref = SerializedComponentReference(**value)
-        component_type = cached_types.get_type(ref)
+    def _deserialize_composed_value(
+        self, metadata: SerializedComponentReference, cached_types: CachedTypeHelper
+    ) -> Any:
+        component_type = cached_types.get_type(metadata)
         if cached_types.allowed_to_deserialize(component_type):
-            return self.components.get_by_uuid(ref.uuid)
+            return self.components.get_by_uuid(metadata.uuid)
         return None
 
     def _deserialize_composed_list(
-        self, components: list[dict], cached_types
-    ) -> list[Component] | None:
+        self, components: list[dict], cached_types: CachedTypeHelper
+    ) -> list[Any] | None:
         deserialized_components = []
         for component in components:
-            ref = SerializedComponentReference(**component)
-            component_type = cached_types.get_type(ref)
+            metadata = SerializedTypeMetadata(**component[TYPE_METADATA])
+            assert isinstance(metadata.fields, SerializedComponentReference)
+            component_type = cached_types.get_type(metadata.fields)
             if cached_types.allowed_to_deserialize(component_type):
-                deserialized_components.append(self.components.get_by_uuid(ref.uuid))
+                deserialized_components.append(self.components.get_by_uuid(metadata.fields.uuid))
             else:
                 return None
         return deserialized_components
-
-
-class _CachedTypeHelper:
-    def __init__(self):
-        self._observed_types = {}
-        self._deserialized_types: set[Type] = set()
-
-    def add_deserialized_types(self, types: set[Type]):
-        """Add types that have been deserialized."""
-        self._deserialized_types.update(types)
-
-    def allowed_to_deserialize(self, component_type: Type) -> bool:
-        """Return True if the type can be deserialized."""
-        return component_type in self._deserialized_types
-
-    def get_type(self, ref: SerializedComponentReference | SerializedTypeInfo):
-        """Return the type contained in ref, dynamically importing as necessary."""
-        type_key = (ref.module, ref.type)
-        component_type = self._observed_types.get(type_key)
-        if component_type is None:
-            mod = importlib.import_module(type_key[0])
-            component_type = getattr(mod, type_key[1])
-            self._observed_types[type_key] = component_type
-        return component_type

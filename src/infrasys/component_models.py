@@ -1,35 +1,39 @@
 """Defines base models for components."""
 
-from typing import Any, Literal, Type
+from typing import Any, Optional, Type
 from uuid import UUID
-from infrasys.base_quantity import BaseQuantity
 
 from loguru import logger
-from pydantic import Field, field_serializer
+from pydantic import Field, field_serializer, field_validator
 from typing_extensions import Annotated
 
-from infrasys.common import COMPOSED_TYPE_INFO, TYPE_INFO
+from infrasys.base_quantity import BaseQuantity
 from infrasys.exceptions import (
     ISNotStored,
     ISOperationNotAllowed,
     ISAlreadyAttached,
 )
 from infrasys.models import (
-    InfraSysBaseModel,
     InfraSysBaseModelWithIdentifers,
-    SerializedTypeInfo,
+)
+from infrasys.serialization import (
+    SerializedTypeMetadata,
+    SerializedComponentReference,
+    SerializedQuantityType,
+    TYPE_METADATA,
+    serialize_value,
+    deserialize_value,
 )
 from infrasys.time_series_models import (
     TimeSeriesMetadata,
-    TimeSeriesMetadataUnion,
 )
 
 
 class Component(InfraSysBaseModelWithIdentifers):
     """Base class for all models representing entities that get attached to a System."""
 
-    name: Annotated[str | None, Field(frozen=True)] = None
-    system_uuid: UUID | None = None
+    name: Annotated[Optional[str], Field(frozen=True)] = None
+    system_uuid: Optional[UUID] = None
 
     @field_serializer("system_uuid")
     def _serialize_system_uuid(self, _):
@@ -38,7 +42,7 @@ class Component(InfraSysBaseModelWithIdentifers):
     def check_component_addition(self, system_uuid: UUID):
         """Perform checks on the component before adding it to a system."""
 
-    def is_attached(self, system_uuid: UUID | None = None) -> bool:
+    def is_attached(self, system_uuid: Optional[UUID] = None) -> bool:
         """Return True if the component is attached to a system.
 
         Parameters
@@ -52,8 +56,8 @@ class Component(InfraSysBaseModelWithIdentifers):
 
     def has_time_series(
         self,
-        variable_name: str | None = None,
-        time_series_type: Type = None,
+        variable_name: Optional[str] = None,
+        time_series_type: Optional[Type] = None,
         **user_attributes,
     ) -> bool:
         """Return True if the component has time series data matching the inputs."""
@@ -61,35 +65,57 @@ class Component(InfraSysBaseModelWithIdentifers):
 
     def model_dump_custom(self, *args, **kwargs):
         """Custom serialization for this package"""
-
-        refs = {}
-        for field in self.model_fields:
-            val = getattr(self, field)
-            if isinstance(val, Component):
-                refs[field] = serialize_component_reference(val)
-            elif isinstance(val, list) and val and isinstance(val[0], Component):
-                refs[field] = [serialize_component_reference(x) for x in val]
-            elif isinstance(val, BaseQuantity):
-                refs[field] = val.to_dict()
-            # TODO: other composite types may need handling.
-            # Parent packages can always implement a field_serializer themselves.
-
+        refs = {x: self._model_dump_field(x) for x in self.model_fields}
         exclude = kwargs.get("exclude", [])
         exclude += list(set(exclude).union(refs))
         kwargs["exclude"] = exclude
-        data = self.model_dump(*args, **kwargs)
+        data = serialize_value(self, *args, **kwargs)
         data.update(refs)
-        data[TYPE_INFO] = SerializedTypeInfo(
-            module=self.__module__, type=self.__class__.__name__
-        ).model_dump()
         return data
+
+    def _model_dump_field(self, field):
+        val = getattr(self, field)
+        if isinstance(val, Component):
+            val = {TYPE_METADATA: serialize_component_reference(val)}
+        elif isinstance(val, list) and val and isinstance(val[0], Component):
+            val = [{TYPE_METADATA: serialize_component_reference(x)} for x in val]
+        elif isinstance(val, BaseQuantity):
+            data = val.to_dict()
+            data[TYPE_METADATA] = SerializedTypeMetadata(
+                fields=SerializedQuantityType(
+                    module=val.__module__,
+                    type=val.__class__.__name__,
+                ),
+            ).model_dump()
+            val = data
+        # TODO: other composite types may need handling.
+        # Parent packages can always implement a field_serializer themselves.
+        return val
 
 
 class ComponentWithQuantities(Component):
     """Base class for all models representing physical components"""
 
     name: Annotated[str, Field(frozen=True)]
-    time_series_metadata: list[TimeSeriesMetadataUnion] = []
+    time_series_metadata: list[TimeSeriesMetadata] = []
+
+    @field_validator("time_series_metadata", mode="before")
+    @classmethod
+    def handle_time_series_metadata(cls, val):
+        """Handle de-serialization of time series metadata."""
+        if not val:
+            return val
+        if isinstance(val[0], TimeSeriesMetadata):
+            # This could be initial construction or assignment.
+            return val
+
+        # This must be de-serialization from the encoding done by self._model_dump_field.
+        deserialized = []
+        for item in val:
+            metadata = SerializedTypeMetadata(**item[TYPE_METADATA])
+            item.pop(TYPE_METADATA)
+            deserialized.append(deserialize_value(item, metadata.fields))
+        return deserialized
 
     def check_component_addition(self, system_uuid: UUID):
         super().check_component_addition(system_uuid)
@@ -99,8 +125,8 @@ class ComponentWithQuantities(Component):
 
     def has_time_series(
         self,
-        variable_name: str | None = None,
-        time_series_type: Type = None,
+        variable_name: Optional[str] = None,
+        time_series_type: Optional[Type] = None,
         **user_attributes,
     ) -> bool:
         return bool(
@@ -131,8 +157,8 @@ class ComponentWithQuantities(Component):
 
     def get_time_series_metadata(
         self,
-        variable_name: str | None = None,
-        time_series_type: Type = None,
+        variable_name: Optional[str] = None,
+        time_series_type: Optional[Type] = None,
         **user_attributes,
     ) -> TimeSeriesMetadata:
         """Return the time series metadata matching the inputs.
@@ -164,7 +190,10 @@ class ComponentWithQuantities(Component):
         return self.time_series_metadata[indexes[0]]
 
     def list_time_series_metadata(
-        self, variable_name: str | None = None, time_series_type: Type = None, **user_attributes
+        self,
+        variable_name: Optional[str] = None,
+        time_series_type: Optional[Type] = None,
+        **user_attributes,
     ) -> list[TimeSeriesMetadata]:
         """Return the time series metadata matching the inputs."""
         return [
@@ -175,7 +204,10 @@ class ComponentWithQuantities(Component):
         ]
 
     def remove_time_series_metadata(
-        self, variable_name: str | None = None, time_series_type: Type = None, **user_attributes
+        self,
+        variable_name: Optional[str] = None,
+        time_series_type: Optional[Type] = None,
+        **user_attributes,
     ) -> list[TimeSeriesMetadata]:
         """Remove and return all time series metadata matching the inputs."""
         indexes = self._find_time_series_indexes(
@@ -193,8 +225,8 @@ class ComponentWithQuantities(Component):
 
     def _find_time_series_indexes(
         self,
-        variable_name: str | None = None,
-        time_series_type: Type | None = None,
+        variable_name: Optional[str] = None,
+        time_series_type: Optional[Type] = None,
         **user_attributes,
     ) -> list[int]:
         indexes = []
@@ -216,18 +248,11 @@ class ComponentWithQuantities(Component):
 
         return indexes
 
+    def _model_dump_field(self, field):
+        if field == "time_series_metadata":
+            return [serialize_value(x) for x in getattr(self, field)]
 
-class SerializedComponentReference(InfraSysBaseModel):
-    """Reference information for a component that has been serialized as a UUID within another."""
-
-    composed_type_info: Annotated[Literal[True], Field(default=True, alias=COMPOSED_TYPE_INFO)]
-    module: str
-    type: str
-    uuid: UUID
-
-    @field_serializer("uuid")
-    def _serialize_uuid(self, _):
-        return str(self.uuid)
+        return super()._model_dump_field(field)
 
 
 def raise_if_attached(component: Component):
@@ -255,8 +280,10 @@ def raise_if_not_attached(component: Component, system_uuid: UUID):
 
 def serialize_component_reference(component: Component) -> dict[str, Any]:
     """Make a JSON serializable reference to a component."""
-    return SerializedComponentReference(
-        module=component.__module__,
-        type=component.__class__.__name__,
-        uuid=str(component.uuid),
+    return SerializedTypeMetadata(
+        fields=SerializedComponentReference(
+            module=component.__module__,
+            type=component.__class__.__name__,
+            uuid=component.uuid,
+        ),
     ).model_dump(by_alias=True)
