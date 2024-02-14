@@ -18,6 +18,7 @@ from infrasys.models import make_summary
 from infrasys.component_models import (
     Component,
     ComponentWithQuantities,
+    raise_if_not_attached,
 )
 from infrasys.component_manager import ComponentManager
 from infrasys.serialization import (
@@ -40,6 +41,7 @@ class System:
     def __init__(
         self,
         name: str | None = None,
+        auto_add_composed_components: bool = False,
         time_series_manager: None | TimeSeriesManager = None,
         uuid: UUID | None = None,
         **kwargs: Any,
@@ -50,6 +52,11 @@ class System:
         ----------
         name : str | None
             Optional system name
+        auto_add_composed_components : bool
+            Set to True to automatically add composed components to the system in add_components.
+            The default behavior is to raise an ISOperationNotAllowed when this condition occurs.
+            This handles values that are components, such as generator.bus, and lists of
+            components, such as subsystem.generators, but not any other form of nested components.
         time_series_manager : None | TimeSeriesManager
             Users should not pass this. De-serialization (from_json) will pass a constructed
             manager.
@@ -67,12 +74,22 @@ class System:
         """
         self._uuid = uuid or uuid4()
         self._name = name
-        self._component_mgr = ComponentManager(self._uuid)
+        self._component_mgr = ComponentManager(self._uuid, auto_add_composed_components)
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
         self._time_series_mgr = time_series_manager or TimeSeriesManager(**time_series_kwargs)
         self._data_format_version: None | str = None
 
         # TODO: add pretty printing of components and time series
+
+    @property
+    def auto_add_composed_components(self) -> bool:
+        """Return the setting for auto_add_composed_components."""
+        return self._component_mgr.auto_add_composed_components
+
+    @auto_add_composed_components.setter
+    def auto_add_composed_components(self, val: bool) -> None:
+        """Set auto_add_composed_components."""
+        self._component_mgr.auto_add_composed_components = val
 
     def to_json(self, filename: Path | str, overwrite=False, indent=None, data=None) -> None:
         """Write the contents of a system to a JSON file. Time series will be written to a
@@ -279,35 +296,28 @@ class System:
     def copy_component(
         self,
         component: Type,
-        new_name: str,
-        attach_to_system: bool = False,
-        copy_time_series: bool = True,
+        name: str | None = None,
+        attach: bool = False,
     ) -> Any:
-        """Create a copy of the component. The new component will have a different UUID from the
-        original.
+        """Create a copy of the component. Time series data is excluded.The new component will
+        have a different UUID from the original.
 
         Parameters
         ----------
         component : Type
             Type of the source component
-        new_name : str
-            Name of the new component
-        attach_to_system : bool
+        name : str
+            Optional, if None, keep the original name.
+        attach : bool
             Optional, if True, attach the new component to the system.
-        copy_time_series : bool
-            Optional, if True, copy all time series to the new component.
 
         Examples
         --------
         >>> gen1 = system.get_component(Generator, "gen1")
-        >>> gen2 = system.copy_component(gen, "gen2")
+        >>> gen2 = system.copy_component(gen, name="gen2")
+        >>> gen3 = system.copy_component(gen, name="gen3", attach=True)
         """
-        return self._component_mgr.copy(
-            component,
-            new_name,
-            attach_to_system=attach_to_system,
-            copy_time_series=copy_time_series,
-        )
+        return self._component_mgr.copy(component, name=name, attach=attach)
 
     def get_component(self, component_type: Type, name: str) -> Any:
         """Return the component with the passed type and name.
@@ -417,7 +427,7 @@ class System:
         """
         return self._component_mgr.iter_all()
 
-    def remove_component(self, component: Component) -> Any:
+    def remove_component(self, component: Any) -> Any:
         """Remove the component from the system and return it.
 
         Parameters
@@ -434,7 +444,16 @@ class System:
         >>> gen = system.get_component(Generator, "gen1")
         >>> system.remove_component(gen)
         """
-        return self._component_mgr.remove(component)
+        raise_if_not_attached(component, self.uuid)
+        if component.has_time_series():
+            for metadata in component.list_time_series_metadata():
+                self.remove_time_series(
+                    component,
+                    time_series_type=metadata.get_time_series_data_type(),
+                    variable_name=metadata.variable_name,
+                    **metadata.user_attributes,
+                )
+        component = self._component_mgr.remove(component)
 
     def remove_component_by_name(self, component_type: Type, name: str) -> list[Any]:
         """Remove all components matching the inputs from the system and return them.
@@ -448,12 +467,15 @@ class System:
         ------
         ISNotStored
             Raised if the inputs do not match any components in the system.
+        ISOperationNotAllowed
+            Raised if there is more than one component with component type and name.
 
         Examples
         --------
         >>> generators = system.remove_by_name(Generator, "gen1")
         """
-        return self._component_mgr.remove_by_name(component_type, name)
+        component = self.get_component(component_type, name)
+        return self.remove_component(component)
 
     def remove_component_by_uuid(self, uuid: UUID) -> Any:
         """Remove the component with uuid from the system and return it.
@@ -472,7 +494,8 @@ class System:
         >>> uuid = UUID("714c8311-8dff-4ae2-aa2e-30779a317d42")
         >>> generator = system.remove_component_by_uuid(uuid)
         """
-        return self._component_mgr.remove_by_uuid(uuid)
+        component = self.get_component_by_uuid(uuid)
+        return self.remove_component(component)
 
     def update_components(
         self,

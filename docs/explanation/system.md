@@ -11,13 +11,11 @@ Parent packages must choose one of the following:
 1. Derive a custom System class that inherits from `infrasys.System`. Re-implement methods
 as desired. Add custom attributes to the System that will be serialized to JSON.
 
-    - Reimplement `System.add_components` in order to perform custom validation
-      or custom behavior. For example, a package may implement a load that
-      contains a bus. Here are some possible desired behaviors when adding the
-      load to the system if its bus is not already attached to the system:
-
-      - Raise an exception.
-      - Automatically add the bus to the system.
+    - Reimplement `System.add_components` in order to perform custom validation or custom behavior.
+      This is only needed for validation that needs information from both the system and the
+      component. Note that the `System` constructor provides the keyword argument
+      `auto_add_composed_components` that dictates how to handle the condition where a component
+      contains another component which is not already attached to the system.
 
     - Reimplement `System.serialize_system_attributes` and `System.deserialize_system_attributes`.
       `infrasys` will call those methods during `to_json` and `from_json` and serialize/de-serialize

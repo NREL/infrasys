@@ -1,7 +1,7 @@
 """Manages components"""
 
 import itertools
-from typing import Callable, Iterable, Type
+from typing import Any, Callable, Iterable, Type
 from uuid import UUID
 from loguru import logger
 
@@ -13,10 +13,25 @@ from infrasys.models import make_summary
 class ComponentManager:
     """Manages components"""
 
-    def __init__(self, uuid: UUID):
+    def __init__(
+        self,
+        uuid: UUID,
+        auto_add_composed_components: bool,
+    ):
         self._components: dict[Type, dict[str, list[Component]]] = {}
         self._components_by_uuid: dict[UUID, Component] = {}
         self._uuid = uuid
+        self._auto_add_composed_components = auto_add_composed_components
+
+    @property
+    def auto_add_composed_components(self) -> bool:
+        """Return the setting for auto_add_composed_components."""
+        return self._auto_add_composed_components
+
+    @auto_add_composed_components.setter
+    def auto_add_composed_components(self, val: bool) -> None:
+        """Set auto_add_composed_components."""
+        self._auto_add_composed_components = val
 
     def add(self, *args, deserialization_in_progress=False) -> None:
         """Add one or more components to the system.
@@ -109,42 +124,52 @@ class ComponentManager:
         """Return an iterator over all components."""
         return self._components_by_uuid.values()
 
-    def remove(self, component: Component) -> Component:
+    def remove(self, component: Component) -> Any:
         """Remove the component from the system and return it.
 
-        Raises
-        ------
-        ISNotStored
-            Raised if the component is not stored in the system.
+        Note: users should not call this directly. It should be called through the system
+        so that time series is handled.
         """
-        raise NotImplementedError("remove_component")
+        if component.has_time_series():
+            msg = (
+                "remove cannot be called when there is time series data. Call "
+                "System.remove_component instead"
+            )
+            raise ISOperationNotAllowed(msg)
 
-    def remove_by_name(self, component_type: Type, name: str) -> list[Component]:
-        """Remove all components matching the inputs from the system and return them.
+        # The system method should have already performed the check. KeyError may happen if
+        # someone uses this incorrectly.
+        container = self._components[type(component)][component.name]
+        for i, comp in enumerate(container):
+            if comp.uuid == component.uuid:
+                container.pop(i)
+                logger.debug("Removed component {}", component.summary)
+                return
 
-        Raises
-        ------
-        ISNotStored
-            Raised if the inputs do not match any components in the system.
-        """
-        raise NotImplementedError("remove_component_by_name")
-
-    def remove_by_uuid(self, uuid: UUID) -> Component:
-        """Remove the components with uuid from the system and return it.
-
-        Raises
-        ------
-        ISNotStored
-            Raised if the UUID is not stored in the system.
-        """
-        raise NotImplementedError("remove_component_by_uuid")
+        msg = f"Component {component.summary} is not stored"
+        raise ISNotStored(msg)
 
     def copy(
-        self, component: Type, new_name: str, attach_to_system=False, copy_time_series=True
+        self,
+        component: Type,
+        name: str | None = None,
+        attach=False,
     ) -> Component:
-        """Create a copy of the component."""
-        # TODO: must call change_uuid and clear system_uuid if attach_to_system=False
-        raise NotImplementedError("copy")
+        """Create a copy of the component. Time series data is excluded."""
+        # This uses model_dump and the component constructor because the 'name' field is frozen.
+        data = component.model_dump()
+        data.pop("time_series_metadata", None)
+        for field in ("system_uuid", "uuid"):
+            data.pop(field)
+        if name is not None:
+            data["name"] = name
+        new_component = type(component)(**data)
+
+        logger.info("Copied {} to {}", component.summary, new_component.summary)
+        if attach:
+            self.add(new_component)
+
+        return new_component
 
     def change_uuid(self, component: Component) -> None:
         """Change the component UUID."""
@@ -162,6 +187,7 @@ class ComponentManager:
         if not deserialization_in_progress:
             # TODO: Do we want any checks during deserialization? User could change the JSON.
             # We could prevent the user from changing the JSON with a checksum.
+            self._check_component_addition(component)
             component.check_component_addition(self._uuid)
         if component.uuid in self._components_by_uuid:
             msg = f"{component.summary} with UUID={component.uuid} is already stored"
@@ -179,3 +205,34 @@ class ComponentManager:
         self._components_by_uuid[component.uuid] = component
         component.system_uuid = self._uuid
         logger.debug("Added {} to the system", component.summary)
+
+    def _check_component_addition(self, component: Component) -> None:
+        """Check all the fields of a component against the setting
+        auto_add_composed_components. Recursive."""
+        for field in type(component).model_fields:
+            val = getattr(component, field)
+            if isinstance(val, Component):
+                self._handle_composed_component(val)
+                # Recurse.
+                self._check_component_addition(val)
+            if isinstance(val, list) and val and isinstance(val[0], Component):
+                for item in val:
+                    self._handle_composed_component(item)
+                    # Recurse.
+                    self._check_component_addition(item)
+
+    def _handle_composed_component(self, component: Component) -> None:
+        """Do what's needed for a composed component depending on system settings:
+        nothing, add, or raise an exception."""
+        if component.system_uuid is not None:
+            return
+
+        if self._auto_add_composed_components:
+            logger.debug("Auto-add composed component {}", component.summary)
+            self._add(component, False)
+        else:
+            msg = (
+                f"Component {component.summary} cannot be added to the system because "
+                f"its composed component {component.summary} is not already attached."
+            )
+            raise ISOperationNotAllowed(msg)

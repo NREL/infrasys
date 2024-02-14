@@ -7,6 +7,7 @@ from infrasys.exceptions import (
     ISAlreadyAttached,
     ISNotStored,
     ISOperationNotAllowed,
+    ISConflictingArguments,
 )
 from infrasys.location import Location
 from infrasys.component_models import Component
@@ -37,13 +38,43 @@ def test_system():
         system.get_component(SimpleGenerator, "not-present")
 
 
-def test_get_components(simple_system):
+def test_system_auto_add_composed_components():
+    system = SimpleSystem(auto_add_composed_components=False)
+    assert not system.auto_add_composed_components
+    geo = Location(x=1.0, y=2.0)
+    bus = SimpleBus(name="test-bus", voltage=1.1, coordinates=geo)
+
+    with pytest.raises(ISOperationNotAllowed):
+        system.add_component(bus)
+
+    system.auto_add_composed_components = True
+    assert system.auto_add_composed_components
+    system.add_component(bus)
+    assert len(list(system.get_components(Location))) == 1
+
+
+def test_system_auto_add_composed_components_list():
+    system = SimpleSystem(auto_add_composed_components=False)
+    assert not system.auto_add_composed_components
+    subsystem = SimpleSubsystem.example()
+    with pytest.raises(ISOperationNotAllowed):
+        system.add_component(subsystem)
+    system.auto_add_composed_components = True
+    assert system.auto_add_composed_components
+    system.add_component(subsystem)
+
+
+def test_get_components(simple_system: SimpleSystem):
     system = simple_system
+    initial_count = 4
+    assert len(list(system.get_components(Component))) == initial_count
+    system.auto_add_composed_components = True
     for _ in range(5):
         gen = RenewableGenerator.example()
         system.add_component(gen)
     all_components = list(system.get_components(Component))
-    assert len(all_components) == 9
+    # 5 generators, each includes a bus and location
+    assert len(all_components) == initial_count + 5 * 3
     generators = list(
         system.get_components(GeneratorBase, filter_func=lambda x: x.name == "renewable-gen")
     )
@@ -248,3 +279,118 @@ def test_serialize_time_series(tmp_path):
     gen1b = system.get_component(SimpleGenerator, gen1.name)
     with pytest.raises(ISOperationNotAllowed):
         system2.remove_time_series(gen1b, variable_name=variable_name)
+
+
+@pytest.mark.parametrize("in_memory", [True, False])
+def test_time_series_slices(in_memory):
+    system = SimpleSystem(
+        name="test-system", auto_add_composed_components=True, time_series_in_memory=in_memory
+    )
+    gen = SimpleGenerator.example()
+    system.components.add(gen)
+    variable_name = "active_power"
+    length = 8784
+    data = list(range(length))
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
+    system.add_time_series(ts, gen)
+
+    first_timestamp = start
+    second_timestamp = start + resolution
+    last_timestamp = start + (length - 1) * resolution
+    assert len(system.time_series.get(gen, variable_name=variable_name).data) == length
+    assert len(system.time_series.get(gen, variable_name=variable_name, length=10).data) == 10
+    ts2 = system.time_series.get(
+        gen, variable_name=variable_name, start_time=second_timestamp, length=5
+    )
+    assert len(ts2.data) == 5
+    assert ts2.data.tolist() == data[1:6]
+
+    assert (
+        len(
+            system.time_series.get(
+                gen, variable_name=variable_name, start_time=second_timestamp
+            ).data
+        )
+        == len(data) - 1
+    )
+
+    with pytest.raises(ISConflictingArguments, match="is less than"):
+        system.time_series.get(
+            gen,
+            variable_name=variable_name,
+            start_time=first_timestamp - ts.resolution,
+            length=5,
+        )
+    with pytest.raises(ISConflictingArguments, match="is too large"):
+        system.time_series.get(
+            gen,
+            variable_name=variable_name,
+            start_time=last_timestamp + ts.resolution,
+            length=5,
+        )
+    with pytest.raises(ISConflictingArguments, match="conflicts with initial_time"):
+        system.time_series.get(
+            gen,
+            variable_name=variable_name,
+            start_time=first_timestamp + timedelta(minutes=1),
+        )
+    with pytest.raises(ISConflictingArguments, match=r"start_time.*length.*conflicts with"):
+        system.time_series.get(
+            gen,
+            variable_name=variable_name,
+            start_time=second_timestamp,
+            length=len(data),
+        )
+
+
+def test_copy_component(simple_system_with_time_series: SimpleSystem):
+    system = simple_system_with_time_series
+    gen1 = system.get_component(SimpleGenerator, "test-gen")
+
+    gen2 = system.copy_component(gen1)
+    assert gen2.uuid != gen1.uuid
+    assert gen2.name == gen1.name
+    assert gen2.system_uuid is None
+
+    gen3 = system.copy_component(gen1, name="gen3")
+    assert gen3.name == "gen3"
+    assert gen2.system_uuid is None
+
+    gen4 = system.copy_component(gen1, name="gen4", attach=True)
+    assert gen4.name == "gen4"
+    assert gen4.system_uuid == gen1.system_uuid
+
+
+@pytest.mark.parametrize("in_memory", [True, False])
+def test_remove_component(in_memory):
+    system = SimpleSystem(
+        name="test-system", auto_add_composed_components=True, time_series_in_memory=in_memory
+    )
+    gen1 = SimpleGenerator.example()
+    system.components.add(gen1)
+    gen2 = system.copy_component(gen1, name="gen2", attach=True)
+    variable_name = "active_power"
+    length = 8784
+    data = range(length)
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
+    system.add_time_series(ts, gen1, gen2)
+
+    with pytest.raises(ISOperationNotAllowed):
+        system.components.remove(gen1)
+
+    system.remove_component_by_name(type(gen1), gen1.name)
+    assert not gen1.has_time_series()
+    assert gen2.has_time_series()
+
+    system.remove_component_by_uuid(gen2.uuid)
+    assert not gen2.has_time_series()
+
+    with pytest.raises(ISNotStored):
+        system.remove_component(gen2)
+
+    with pytest.raises(ISNotStored):
+        system.components.remove(gen2)
