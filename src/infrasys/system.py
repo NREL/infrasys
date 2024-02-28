@@ -5,7 +5,7 @@ from operator import itemgetter
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Type
+from typing import Any, Callable, Iterable, Optional, Type
 from uuid import UUID, uuid4
 
 from loguru import logger
@@ -43,10 +43,11 @@ class System:
 
     def __init__(
         self,
-        name: str | None = None,
+        name: Optional[None] = None,
+        description: Optional[str] = None,
         auto_add_composed_components: bool = False,
-        time_series_manager: None | TimeSeriesManager = None,
-        uuid: UUID | None = None,
+        time_series_manager: Optional[TimeSeriesManager] = None,
+        uuid: Optional[UUID] = None,
         **kwargs: Any,
     ) -> None:
         """Constructs a System.
@@ -55,6 +56,8 @@ class System:
         ----------
         name : str | None
             Optional system name
+        description : str | None
+            Optional system description
         auto_add_composed_components : bool
             Set to True to automatically add composed components to the system in add_components.
             The default behavior is to raise an ISOperationNotAllowed when this condition occurs.
@@ -77,11 +80,12 @@ class System:
         """
         self._uuid = uuid or uuid4()
         self._name = name
+        self._description = description
         self._component_mgr = ComponentManager(self._uuid, auto_add_composed_components)
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
         self._time_series_mgr = time_series_manager or TimeSeriesManager(**time_series_kwargs)
-        self._data_format_version: None | str = None
-        self._description: None | str = None
+        self._data_format_version: Optional[str] = None
+        # Note to devs: if you add new fields, add support in to_json/from_json as appropriate.
 
         # TODO: add pretty printing of components and time series
 
@@ -132,6 +136,7 @@ class System:
         time_series_dir = filename.parent / (filename.stem + "_time_series")
         system_data = {
             "name": self.name,
+            "description": self.description,
             "uuid": str(self.uuid),
             "data_format_version": self.data_format_version,
             "components": [x.model_dump_custom() for x in self._component_mgr.iter_all()],
@@ -218,6 +223,7 @@ class System:
         )
         system = cls(
             name=system_data.get("name"),
+            description=system_data.get("description"),
             time_series_manager=time_series_manager,
             uuid=UUID(system_data["uuid"]),
             **kwargs,
@@ -778,6 +784,21 @@ class System:
     def name(self) -> str | None:
         """Return the name of the system."""
         return self._name
+
+    @name.setter
+    def name(self, name: str | None) -> None:
+        """Set the name of the system."""
+        self._name = name
+
+    @property
+    def description(self) -> str | None:
+        """Return the description of the system."""
+        return self._description
+
+    @description.setter
+    def description(self, description: str | None) -> None:
+        """Set the description of the system."""
+        self._description = description
 
     @property
     def summary(self) -> str:
