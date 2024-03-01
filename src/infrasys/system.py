@@ -1,6 +1,7 @@
 """Defines a System"""
 
 import json
+from operator import itemgetter
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -8,6 +9,8 @@ from typing import Any, Callable, Iterable, Type
 from uuid import UUID, uuid4
 
 from loguru import logger
+from rich import print as _pprint
+from rich.table import Table
 
 from infrasys.exceptions import (
     ISFileExists,
@@ -78,6 +81,7 @@ class System:
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
         self._time_series_mgr = time_series_manager or TimeSeriesManager(**time_series_kwargs)
         self._data_format_version: None | str = None
+        self._description: None | str = None
 
         # TODO: add pretty printing of components and time series
 
@@ -928,3 +932,110 @@ class System:
             else:
                 return None
         return deserialized_components
+
+    def show_components(self, component_type):
+        # Filtered view of certain concrete types (not really concrete types)
+        # We can implement custom printing if we want
+        # Dan suggest to remove UUID, system.UUID, time_series_metadata from component.
+        # Nested components gets special handling.
+        # What we do with components w/o names? Use .summary for nested components.
+        raise NotImplementedError
+
+    def info(self):
+        info = SystemInfo(system=self)
+        info.render()
+
+
+class SystemInfo:
+    """Class to store system component info"""
+
+    def __init__(self, system) -> None:
+        self.system = system
+
+    def extract_system_counts(self) -> tuple[int, dict, dict]:
+        component_count: int = 0
+        component_type_count: dict = defaultdict(int)
+        time_series_counts: dict = defaultdict(int)
+        for component in self.system.components.iter_all():
+            component_type_count[component.__class__.__name__] += 1
+            if getattr(component, "time_series_metadata", False):
+                for time_series_metadata in component.time_series_metadata:
+                    time_series_counts[
+                        (
+                            component.__class__.__name__,
+                            time_series_metadata.type,
+                            time_series_metadata.initial_time,
+                            time_series_metadata.resolution,
+                        )
+                    ] += 1
+            component_count += 1
+        return component_count, component_type_count, time_series_counts
+
+    def render(self) -> None:
+        """Render summary information from the system."""
+        component_count, component_type_count, time_series_counts = self.extract_system_counts()
+
+        # System table
+        system_table = Table(
+            title="System",
+            show_header=True,
+            title_justify="left",
+            title_style="bold",
+        )
+        system_table.add_column("Property")
+        system_table.add_column("Value", justify="right")
+        system_table.add_row("System name", self.system.name)
+        system_table.add_row("Data format version", self.system._data_format_version)
+        system_table.add_row("Components attached", f"{component_count}")
+        system_table.add_row("Description", self.system._description)
+        _pprint(system_table)
+
+        # Component and time series table
+        component_table = Table(
+            title="Component Information",
+            show_header=True,
+            title_justify="left",
+            title_style="bold",
+        )
+        component_table.add_column("Type", width=20)
+        component_table.add_column("Count", justify="right")
+
+        for component_type, component_count in sorted(component_type_count.items()):
+            component_table.add_row(
+                f"{component_type}",
+                f"{component_count}",
+            )
+
+        if component_table.rows:
+            _pprint(component_table)
+
+        time_series_table = Table(
+            title="Time Series Summary",
+            show_header=True,
+            title_justify="left",
+            title_style="bold",
+        )
+        time_series_table.add_column("Component Type", width=20)
+        time_series_table.add_column("Time Series Type", justify="right")
+        time_series_table.add_column("Initial time", justify="right")
+        time_series_table.add_column("Resolution", justify="right")
+        time_series_table.add_column("No. Components", justify="right")
+        time_series_table.add_column("No. Components with Time Series", justify="right")
+
+        for (
+            component_type,
+            time_series_type,
+            time_series_start_time,
+            time_series_resolution,
+        ), time_series_count in sorted(time_series_counts.items(), key=itemgetter(slice(4))):
+            time_series_table.add_row(
+                f"{component_type}",
+                f"{time_series_type}",
+                f"{time_series_start_time}",
+                f"{time_series_resolution}",
+                f"{component_type_count[component_type]}",
+                f"{time_series_count}",
+            )
+
+        if time_series_table.rows:
+            _pprint(time_series_table)
