@@ -5,6 +5,7 @@ from uuid import UUID
 
 from loguru import logger
 from pydantic import Field, field_serializer, field_validator
+from rich import print as _pprint
 from typing_extensions import Annotated
 
 from infrasys.base_quantity import BaseQuantity
@@ -33,7 +34,7 @@ class Component(InfraSysBaseModelWithIdentifers):
     """Base class for all models representing entities that get attached to a System."""
 
     name: Annotated[Optional[str], Field(frozen=True)] = None
-    system_uuid: Optional[UUID] = None
+    system_uuid: Annotated[Optional[UUID], Field(repr=False)] = None
 
     @field_serializer("system_uuid")
     def _serialize_system_uuid(self, _) -> str:
@@ -91,6 +92,9 @@ class Component(InfraSysBaseModelWithIdentifers):
         # TODO: other composite types may need handling.
         # Parent packages can always implement a field_serializer themselves.
         return val
+
+    def pprint(self):
+        return _pprint(self)
 
 
 class ComponentWithQuantities(Component):

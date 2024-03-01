@@ -31,7 +31,7 @@ class InfraSysBaseModel(BaseModel):
 class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
     """Base class for all Infrastructure Systems types with names and UUIDs"""
 
-    uuid: UUID = Field(default_factory=uuid4)
+    uuid: UUID = Field(default_factory=uuid4, repr=False)
 
     @field_serializer("uuid")
     def _serialize_uuid(self, _) -> str:

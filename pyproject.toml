@@ -31,6 +31,7 @@ dependencies = [
     "pyarrow",
     "pint",
     "loguru",
+    "rich",
     "pydantic >= 2.4, <= 3",
 ]
 [project.optional-dependencies]
