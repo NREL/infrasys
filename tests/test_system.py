@@ -1,3 +1,4 @@
+import itertools
 from datetime import timedelta, datetime
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from infrasys.exceptions import (
 )
 from infrasys.location import Location
 from infrasys.component_models import Component
+from infrasys.quantities import ActivePower
 from infrasys.time_series_models import SingleTimeSeries
 from .models.simple_system import (
     GeneratorBase,
@@ -106,10 +108,10 @@ def test_time_series_attach_from_array():
     system.add_components(bus, gen1, gen2)
     variable_name = "active_power"
     length = 8784
-    df = range(length)
+    data = range(length)
     start = datetime(year=2020, month=1, day=1)
     resolution = timedelta(hours=1)
-    ts = SingleTimeSeries.from_array(df, variable_name, start, resolution)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     system.add_time_series(ts, gen1, gen2)
     assert gen1.has_time_series(variable_name=variable_name)
     assert gen2.has_time_series(variable_name=variable_name)
@@ -141,8 +143,10 @@ def test_time_series():
     assert not gen2.has_time_series(variable_name=variable_name)
 
 
-def test_time_series_retrieval():
-    system = SimpleSystem()
+@pytest.mark.parametrize("params", list(itertools.product([True, False], [True, False])))
+def test_time_series_retrieval(params):
+    in_memory, use_quantity = params
+    system = SimpleSystem(time_series_in_memory=in_memory)
     bus = SimpleBus(name="test-bus", voltage=1.1)
     gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     system.add_components(bus, gen)
@@ -150,7 +154,8 @@ def test_time_series_retrieval():
     length = 10
     initial_time = datetime(year=2020, month=1, day=1)
     time_array = [initial_time + timedelta(hours=i) for i in range(length)]
-    data = range(length)
+    iterable = range(length)
+    data = ActivePower(iterable, "watts") if use_quantity else iterable
     variable_name = "active_power"
     ts = SingleTimeSeries.from_time_array(data, variable_name, time_array)
     system.add_time_series(ts, gen, scenario="high", model_year="2030")
@@ -194,10 +199,10 @@ def test_time_series_removal():
     uuids = []
     for variable_name in variable_names:
         length = 8784
-        df = range(length)
+        data = range(length)
         start = datetime(year=2020, month=1, day=1)
         resolution = timedelta(hours=1)
-        ts = SingleTimeSeries.from_array(df, variable_name, start, resolution)
+        ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
         uuids.append(ts.uuid)
         for gen in (gen1, gen2):
             system.add_time_series(ts, gen, scenario="high", model_year="2030")
@@ -225,10 +230,10 @@ def test_time_series_read_only():
 
     variable_name = "active_power"
     length = 8784
-    df = range(length)
+    data = range(length)
     start = datetime(year=2020, month=1, day=1)
     resolution = timedelta(hours=1)
-    ts = SingleTimeSeries.from_array(df, variable_name, start, resolution)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     with pytest.raises(ISOperationNotAllowed):
         system.add_time_series(ts, gen)
 
@@ -267,10 +272,10 @@ def test_serialize_time_series(tmp_path):
 
     variable_name = "active_power"
     length = 8784
-    df = range(length)
+    data = range(length)
     start = datetime(year=2020, month=1, day=1)
     resolution = timedelta(hours=1)
-    ts = SingleTimeSeries.from_array(df, variable_name, start, resolution)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
     filename = tmp_path / "system.json"
     system.to_json(filename)

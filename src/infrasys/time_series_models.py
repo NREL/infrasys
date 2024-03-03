@@ -1,24 +1,26 @@
 """Defines models for time series arrays."""
 
 import abc
+import importlib
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Literal, Type, TypeAlias, Union, Sequence
+from typing import Any, Literal, Optional, Type, TypeAlias, Union, Sequence
 from uuid import UUID
 
 import numpy as np
 import pyarrow as pa
-from pydantic import Field, field_validator, computed_field
+from pydantic import Field, field_serializer, field_validator, computed_field, model_validator
 from typing_extensions import Annotated
 
+from infrasys.base_quantity import BaseQuantity
 from infrasys.exceptions import ISConflictingArguments
-from infrasys.models import InfraSysBaseModelWithIdentifers
+from infrasys.models import InfraSysBaseModelWithIdentifers, InfraSysBaseModel
 
 TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
 
 
-ISArray: TypeAlias = Sequence | pa.Array | np.ndarray
+ISArray: TypeAlias = Sequence | pa.Array | np.ndarray | BaseQuantity
 
 
 class TimeSeriesStorageType(str, Enum):
@@ -33,6 +35,7 @@ class TimeSeriesStorageType(str, Enum):
 class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Base class for all time series models"""
 
+    units: Optional[str] = None
     variable_name: str
 
     @property
@@ -49,7 +52,7 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
 class SingleTimeSeries(TimeSeriesData):
     """Defines a time array with a single dimension of floats."""
 
-    data: ISArray
+    data: pa.Array | BaseQuantity
     resolution: timedelta
     initial_time: datetime
 
@@ -58,18 +61,24 @@ class SingleTimeSeries(TimeSeriesData):
         """Return the length of the data."""
         return len(self.data)
 
-    @field_validator("data")
+    @field_validator("data", mode="before")
     @classmethod
-    def check_data(cls, data) -> pa.Array:  # Standarize what object we receive.
+    def check_data(cls, data) -> pa.Array | BaseQuantity:  # Standarize what object we receive.
         """Check time series data."""
         if len(data) < 2:
             msg = f"SingleTimeSeries length must be at least 2: {len(data)}"
             raise ValueError(msg)
 
-        if not isinstance(data, pa.Array):
-            data = pa.array(data)
+        if isinstance(data, BaseQuantity):
+            if not isinstance(data.magnitude, pa.Array):
+                cls = type(data)
+                return cls(pa.array(data.magnitude), data.units)
+            return data
 
-        return data  # type: ignore
+        if not isinstance(data, pa.Array):
+            return pa.array(data)
+
+        return data
 
     @classmethod
     def from_array(
@@ -168,6 +177,30 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
 # read CSV and Parquet and convert each column to a SingleTimeSeries
 
 
+class QuantityMetadata(InfraSysBaseModel):
+    """Contains the metadata needed to de-serialize time series stored within a BaseQuantity."""
+
+    module: str
+    quantity_type: Type
+    units: str
+
+    @field_serializer("quantity_type")
+    def serialize_type(self, _):
+        return self.quantity_type.__name__
+
+    @model_validator(mode="before")
+    @classmethod
+    def deserialize_from_strings(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if isinstance(values["quantity_type"], str):
+            module = importlib.import_module(values["module"])
+            return {
+                "module": values["module"],
+                "quantity_type": getattr(module, values["quantity_type"]),
+                "units": values["units"],
+            }
+        return values
+
+
 class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Defines common metadata for all time series."""
 
@@ -176,6 +209,7 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     resolution: timedelta
     time_series_uuid: UUID
     user_attributes: dict[str, Any] = {}
+    quantity_metadata: Optional[QuantityMetadata] = None
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @property
@@ -204,13 +238,23 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
     @classmethod
     def from_data(cls, time_series: SingleTimeSeries, **user_attributes) -> Any:
         """Construct a SingleTimeSeriesMetadata from a SingleTimeSeries."""
+        quantity_metadata = (
+            QuantityMetadata(
+                module=type(time_series.data).__module__,
+                quantity_type=type(time_series.data),
+                units=str(time_series.data.units),
+            )
+            if isinstance(time_series.data, BaseQuantity)
+            else None
+        )
         return cls(
             variable_name=time_series.variable_name,
             resolution=time_series.resolution,
             initial_time=time_series.initial_time,
-            length=time_series.length,
+            length=time_series.length,  # type: ignore
             time_series_uuid=time_series.uuid,
             user_attributes=user_attributes,
+            quantity_metadata=quantity_metadata,
             type=cls.get_time_series_type_str(),  # type: ignore
         )
 

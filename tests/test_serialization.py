@@ -1,11 +1,14 @@
 import random
+from datetime import datetime, timedelta
 
 import numpy as np
+import pyarrow as pa
 import pytest
 
 from infrasys.location import Location
 from infrasys.component_models import ComponentWithQuantities
-from infrasys.quantities import Distance
+from infrasys.quantities import Distance, ActivePower
+from infrasys.time_series_models import SingleTimeSeries
 from .models.simple_system import (
     SimpleSystem,
     SimpleBus,
@@ -85,3 +88,31 @@ def test_serialize_quantity(tmp_path, distance):
         assert (c2.distance == c1.distance).all()
     else:
         assert c2.distance == c1.distance
+
+
+def test_with_time_series_quantity(tmp_path):
+    """Test serialization of SingleTimeSeries with a Pint quantity."""
+    system = SimpleSystem(auto_add_composed_components=True)
+    gen = SimpleGenerator.example()
+    system.add_components(gen)
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    data = ActivePower(range(length), "watts")
+    variable_name = "active_power"
+    ts = SingleTimeSeries.from_array(data, variable_name, initial_time, resolution)
+    system.add_time_series(ts, gen)
+
+    sys_file = tmp_path / "system.json"
+    system.to_json(sys_file)
+
+    system2 = SimpleSystem.from_json(sys_file)
+    gen2 = system2.get_component(SimpleGenerator, gen.name)
+    ts2 = system2.get_time_series(gen2, variable_name=variable_name)
+    assert isinstance(ts, SingleTimeSeries)
+    assert ts.length == length
+    assert ts.resolution == resolution
+    assert ts.initial_time == initial_time
+    assert isinstance(ts2.data.magnitude, pa.Array)
+    assert ts2.data[-1].as_py() == length - 1
+    assert ts2.data.magnitude == pa.array(range(length))

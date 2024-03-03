@@ -8,6 +8,7 @@ import pyarrow as pa
 from loguru import logger
 
 from infrasys.exceptions import ISNotStored
+from infrasys.base_quantity import BaseQuantity
 from infrasys.time_series_models import (
     SingleTimeSeries,
     SingleTimeSeriesMetadata,
@@ -77,17 +78,20 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             base_ts = pa.ipc.open_file(source).get_record_batch(0)
             logger.trace("Reading time series from {}", fpath)
         index, length = metadata.get_range(start_time=start_time, length=length)
+        data = base_ts[metadata.variable_name][index : index + length]
+        if metadata.quantity_metadata is not None:
+            data = metadata.quantity_metadata.quantity_type(data, metadata.quantity_metadata.units)
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
             variable_name=metadata.variable_name,
             resolution=metadata.resolution,
             initial_time=start_time or metadata.initial_time,
-            data=base_ts[metadata.variable_name][index : index + length],
+            data=data,
         )
 
     def _convert_to_record_batch(self, array: SingleTimeSeries, variable_name: str):
         """Create record batch to save array to disk."""
-        pa_array = array.data  # Extracting it from SingleTimeSeries
+        pa_array = array.data.magnitude if isinstance(array.data, BaseQuantity) else array.data
         assert isinstance(pa_array, pa.Array)
         schema = pa.schema([pa.field(variable_name, pa_array.type)])
         return pa.record_batch([pa_array], schema=schema)
