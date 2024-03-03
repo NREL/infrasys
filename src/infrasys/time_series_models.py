@@ -22,6 +22,8 @@ from typing_extensions import Annotated
 from infrasys.base_quantity import BaseQuantity
 from infrasys.exceptions import ISConflictingArguments
 from infrasys.models import InfraSysBaseModelWithIdentifers, InfraSysBaseModel
+from infrasys.normalization import NormalizationType, normalize_array
+
 
 TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
@@ -94,6 +96,7 @@ class SingleTimeSeries(TimeSeriesData):
         variable_name: str,
         initial_time: datetime,
         resolution: timedelta,
+        normalization_type: Optional[NormalizationType] = None,
     ) -> "SingleTimeSeries":
         """Method of SingleTimeSeries that creates an instance from a sequence.
 
@@ -120,6 +123,10 @@ class SingleTimeSeries(TimeSeriesData):
         ----
         - Length of the sequence is inferred from the data.
         """
+        if normalization_type is not None:
+            npa = data if isinstance(data, np.ndarray) else np.array(data)
+            data = pa.array(normalize_array(npa, normalization_type))
+
         return SingleTimeSeries(
             data=data,
             variable_name=variable_name,
@@ -133,6 +140,7 @@ class SingleTimeSeries(TimeSeriesData):
         data: ISArray,
         variable_name: str,
         time_index: Sequence[datetime],
+        normalization_type: Optional[NormalizationType] = None,
     ) -> "SingleTimeSeries":
         """Create SingleTimeSeries using time_index provided.
 
@@ -169,6 +177,7 @@ class SingleTimeSeries(TimeSeriesData):
             variable_name,
             initial_time,
             resolution,
+            normalization_type=normalization_type,
         )
 
     @staticmethod
