@@ -157,6 +157,7 @@ class ComponentManager:
                 component.system_uuid = None
                 if not self._components[component_type][component.name]:
                     self._components[component_type].pop(component.name)
+                    self._components_by_uuid.pop(component.uuid)
                 if not self._components[component_type]:
                     self._components.pop(component_type)
                 logger.debug("Removed component {}", component.summary)
