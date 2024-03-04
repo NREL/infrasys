@@ -1,13 +1,9 @@
 """Manages time series arrays"""
 
-import atexit
-import shutil
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from shutil import copytree
-from tempfile import mkdtemp
-from typing import Any, Type
+from typing import Any, Optional, Type
 from uuid import UUID
 
 from loguru import logger
@@ -21,6 +17,7 @@ from infrasys.time_series_models import (
     TimeSeriesData,
     TimeSeriesMetadata,
 )
+from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
 TIME_SERIES_KWARGS = {
     "time_series_in_memory": False,
@@ -36,18 +33,13 @@ def _process_time_series_kwarg(key: str, **kwargs: Any) -> Any:
 class TimeSeriesManager:
     """Manages time series for a system."""
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, storage: Optional[TimeSeriesStorageBase] = None, **kwargs) -> None:
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
-
-        self._ts_directory = Path(mkdtemp(dir=base_directory))
-        logger.debug("Creating tmp folder at {}", self._ts_directory)
-        atexit.register(clean_tmp_folder, self._ts_directory)
-
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
-        self._storage = (
+        self._storage = storage or (
             InMemoryTimeSeriesStorage()
             if _process_time_series_kwarg("time_series_in_memory", **kwargs)
-            else ArrowTimeSeriesStorage(self._ts_directory)
+            else ArrowTimeSeriesStorage.create_with_temp_directory(base_directory)
         )
 
         # This tracks the number of references to each time series array across components.
@@ -256,15 +248,9 @@ class TimeSeriesManager:
             length=length,
         )
 
-    def serialize(self, dst: Path | str, src: Path | str | None = None) -> None:
+    def serialize(self, dst: Path | str, src: Optional[Path | str] = None) -> None:
         """Serialize the time series data to base_dir."""
-        # From the shutil documentation: the copying operation will continue if
-        # it encounters existing directories, and files within the dst tree
-        # will be overwritten by corresponding files from the src tree.
-        if src is None:
-            src = self._ts_directory
-        copytree(src, dst, dirs_exist_ok=True)
-        logger.info("Copied time series data to {}", dst)
+        self._storage.serialize(dst, src)
 
     @classmethod
     def deserialize(
@@ -276,19 +262,20 @@ class TimeSeriesManager:
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
+        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
+            msg = "De-serialization does not support time_series_in_memory"
+            raise ISOperationNotAllowed(msg)
+
         time_series_dir = Path(parent_dir) / data["directory"]
-        mgr = cls(**kwargs)
-        if not mgr._read_only:
-            mgr.serialize(src=time_series_dir, dst=mgr._ts_directory)
+        if _process_time_series_kwarg("time_series_read_only", **kwargs):
+            storage = ArrowTimeSeriesStorage.create_with_permanent_directory(time_series_dir)
         else:
-            mgr._ts_directory = time_series_dir
+            storage = ArrowTimeSeriesStorage.create_with_temp_directory(time_series_dir)
+            storage.serialize(src=time_series_dir, dst=storage.time_series_directory)
+
+        mgr = cls(storage=storage, **kwargs)
         return mgr
 
     def _handle_read_only(self) -> None:
         if self._read_only:
             raise ISOperationNotAllowed("Cannot modify time series in read-only mode.")
-
-
-def clean_tmp_folder(folder: Path | str) -> None:
-    shutil.rmtree(folder)
-    logger.info("Wiped time series folder: {}", folder)

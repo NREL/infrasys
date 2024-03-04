@@ -11,6 +11,7 @@ from typing_extensions import Annotated
 from infrasys.location import Location
 from infrasys.component_models import ComponentWithQuantities
 from infrasys.quantities import Distance, ActivePower
+from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.time_series_models import SingleTimeSeries
 from .models.simple_system import (
     SimpleSystem,
@@ -67,6 +68,33 @@ def test_serialization(tmp_path):
         component2 = system2.get_component_by_uuid(component.uuid)
         for key, val in component.__dict__.items():
             assert getattr(component2, key) == val
+
+
+@pytest.mark.parametrize("time_series_in_memory", [True, False])
+def test_serialize_time_series(tmp_path, time_series_in_memory):
+    system = SimpleSystem(time_series_in_memory=time_series_in_memory)
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
+    gen2 = SimpleGenerator(name="gen2", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen1, gen2)
+
+    variable_name = "active_power"
+    length = 8784
+    df = range(length)
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(df, variable_name, start, resolution)
+    system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
+    filename = tmp_path / "system.json"
+    system.to_json(filename)
+
+    system2 = SimpleSystem.from_json(filename, time_series_read_only=True)
+    gen1b = system.get_component(SimpleGenerator, gen1.name)
+    with pytest.raises(ISOperationNotAllowed):
+        system2.remove_time_series(gen1b, variable_name=variable_name)
+
+    ts2 = system.get_time_series(gen1b, variable_name=variable_name)
+    assert ts2.data == ts.data
 
 
 @pytest.mark.parametrize(

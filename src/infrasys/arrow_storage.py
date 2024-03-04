@@ -1,8 +1,11 @@
 """Implementation of arrow storage for time series."""
 
+import atexit
+import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from tempfile import mkdtemp
+from typing import Any, Optional
 
 import pyarrow as pa
 from loguru import logger
@@ -23,8 +26,29 @@ EXTENSION = ".arrow"
 class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
     """Stores time series in disk"""
 
-    def __init__(self, ts_directory: Path) -> None:
-        self._ts_directory = ts_directory
+    def __init__(self, directory: Path) -> None:
+        self._ts_directory = directory
+
+    @classmethod
+    def create_with_temp_directory(
+        cls, base_directory: Optional[Path]
+    ) -> "ArrowTimeSeriesStorage":
+        """Construct ArrowTimeSeriesStorage with a temporary directory."""
+        directory = Path(mkdtemp(dir=base_directory))
+        logger.debug("Creating tmp folder at {}", directory)
+        atexit.register(clean_tmp_folder, directory)
+        return cls(directory)
+
+    @classmethod
+    def create_with_permanent_directory(cls, directory: Path) -> "ArrowTimeSeriesStorage":
+        """Construct ArrowTimeSeriesStorage with a permanent directory."""
+        directory.mkdir(exist_ok=True)
+        return cls(directory)
+
+    @property
+    def time_series_directory(self) -> Path:
+        """Return the time series directory."""
+        return self._ts_directory
 
     def add_time_series(
         self,
@@ -67,6 +91,15 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             raise ISNotStored(msg)
         fpath.unlink()
 
+    def serialize(self, dst: Path | str, src: Optional[Path | str] = None) -> None:
+        # From the shutil documentation: the copying operation will continue if
+        # it encounters existing directories, and files within the dst tree
+        # will be overwritten by corresponding files from the src tree.
+        if src is None:
+            src = self._ts_directory
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        logger.info("Copied time series data to {}", dst)
+
     def _get_single_time_series(
         self,
         metadata: SingleTimeSeriesMetadata,
@@ -95,3 +128,8 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         assert isinstance(pa_array, pa.Array)
         schema = pa.schema([pa.field(variable_name, pa_array.type)])
         return pa.record_batch([pa_array], schema=schema)
+
+
+def clean_tmp_folder(folder: Path | str) -> None:
+    shutil.rmtree(folder)
+    logger.info("Wiped time series folder: {}", folder)
