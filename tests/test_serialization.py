@@ -1,9 +1,12 @@
+import json
 import random
 from datetime import datetime, timedelta
 
 import numpy as np
 import pyarrow as pa
 import pytest
+from pydantic import WithJsonSchema
+from typing_extensions import Annotated
 
 from infrasys.location import Location
 from infrasys.component_models import ComponentWithQuantities
@@ -20,11 +23,11 @@ from .models.simple_system import (
 class ComponentWithPintQuantity(ComponentWithQuantities):
     """Test component with a container of quantities."""
 
-    distance: Distance
+    distance: Annotated[Distance, WithJsonSchema({"type": "string"})]
 
 
 def test_serialization(tmp_path):
-    system = SimpleSystem(name="test-system", my_attr=5)
+    system = SimpleSystem(name="test-system", description="a test system", my_attr=5)
     num_components_by_type = 5
     for i in range(num_components_by_type):
         geo = Location(x=random.random(), y=random.random())
@@ -116,3 +119,8 @@ def test_with_time_series_quantity(tmp_path):
     assert isinstance(ts2.data.magnitude, pa.Array)
     assert ts2.data[-1].as_py() == length - 1
     assert ts2.data.magnitude == pa.array(range(length))
+
+
+def test_json_schema():
+    schema = ComponentWithPintQuantity.model_json_schema()
+    assert isinstance(json.loads(json.dumps(schema)), dict)

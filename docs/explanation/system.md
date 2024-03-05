@@ -40,6 +40,20 @@ Package developers should consider storing fields that are quantities as subtype
 [Base.Quantity](#base-quantity-api). Pint performs unit conversion automatically when performing
 arithmetic.
 
+If you want to be able to generate JSON schema for a model that contains a Pint quantity, you must
+add an annotation as shown below. Otherwise, Pydantic will raise an exception.
+
+```python
+from pydantic import WithJsonSchema
+from infrasys.component_models import ComponentWithQuantities
+
+class ComponentWithPintQuantity(ComponentWithQuantities):
+
+    distance: Annotated[Distance, WithJsonSchema({"type": "string"})]
+
+ComponentWithQuantities.model_json_schema()
+```
+
 **Notes**:
 - `infrasys` includes some basic quantities in [infrasys.quantities](#quantity-api).
 - Pint will automatically convert a list or list of lists of values into a `numpy.ndarray`.

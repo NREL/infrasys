@@ -51,7 +51,7 @@ class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
         NotImplementedError
             Raised if the model does not implement this method.
         """
-        msg = f"{cls.model_json_schema()['title']} does not implement example()"
+        msg = f"{cls.__name__} does not implement example()"
         raise NotImplementedError(msg)
 
     @property

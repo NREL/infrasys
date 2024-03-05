@@ -9,7 +9,14 @@ from uuid import UUID
 
 import numpy as np
 import pyarrow as pa
-from pydantic import Field, field_serializer, field_validator, computed_field, model_validator
+from pydantic import (
+    Field,
+    WithJsonSchema,
+    field_serializer,
+    field_validator,
+    computed_field,
+    model_validator,
+)
 from typing_extensions import Annotated
 
 from infrasys.base_quantity import BaseQuantity
@@ -181,7 +188,7 @@ class QuantityMetadata(InfraSysBaseModel):
     """Contains the metadata needed to de-serialize time series stored within a BaseQuantity."""
 
     module: str
-    quantity_type: Type
+    quantity_type: Annotated[Type, WithJsonSchema({"type": "string"})]
     units: str
 
     @field_serializer("quantity_type")
