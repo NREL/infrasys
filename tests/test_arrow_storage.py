@@ -1,10 +1,12 @@
 """Test related to the pyarrow storage manager."""
 import pytest
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pyarrow as pa
 from loguru import logger
 
+from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.system import System
 from infrasys.time_series_models import SingleTimeSeries
 
@@ -30,7 +32,9 @@ def test_file_creation(test_system: System):
     )
     test_system.time_series.add(ts, gen1, scenario="one", model_year="2030")
     time_series = test_system.time_series.get(gen1)
-    base_directory = test_system.time_series._ts_directory
+    assert isinstance(test_system.time_series.storage, ArrowTimeSeriesStorage)
+    base_directory = test_system.get_time_series_directory()
+    assert isinstance(base_directory, Path)
     time_series_fpath = base_directory.joinpath(str(time_series.uuid) + ".arrow")
     assert time_series_fpath.exists()
 
@@ -56,7 +60,7 @@ def test_copy_files(tmp_path):
     gen1b = system2.components.get(SimpleGenerator, gen1.name)
     time_series = system2.time_series.get(gen1b)
     time_series_fpath = (
-        tmp_path / system2.time_series._ts_directory / (str(time_series.uuid) + ".arrow")
+        tmp_path / system2.get_time_series_directory() / (str(time_series.uuid) + ".arrow")
     )
 
     assert time_series_fpath.exists()

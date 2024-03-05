@@ -1,9 +1,12 @@
 """In-memory time series storage"""
 
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 from uuid import UUID
 
 from loguru import logger
+from infrasys.arrow_storage import ArrowTimeSeriesStorage
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
@@ -20,6 +23,9 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
 
     def __init__(self) -> None:
         self._arrays: dict[UUID, TimeSeriesData] = {}  # Time series UUID, not metadata UUID
+
+    def get_time_series_directory(self) -> None:
+        return None
 
     def add_time_series(self, metadata: TimeSeriesMetadata, time_series: TimeSeriesData) -> None:
         if metadata.time_series_uuid not in self._arrays:
@@ -48,6 +54,14 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         if time_series is None:
             msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
+
+    def serialize(self, dst: Path | str, _: Optional[Path | str] = None) -> None:
+        base_directory = dst if isinstance(dst, Path) else Path(dst)
+        storage = ArrowTimeSeriesStorage.create_with_permanent_directory(base_directory)
+        for ts in self._arrays.values():
+            metadata_type = ts.get_time_series_metadata_type()
+            metadata = metadata_type.from_data(ts)
+            storage.add_time_series(metadata, ts)
 
     def _get_single_time_series(
         self,

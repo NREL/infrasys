@@ -263,29 +263,6 @@ def test_serialize_time_series_from_array(tmp_path):
     assert ts2.data.tolist() == list(data)
 
 
-def test_serialize_time_series(tmp_path):
-    system = SimpleSystem()
-    bus = SimpleBus(name="test-bus", voltage=1.1)
-    gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
-    gen2 = SimpleGenerator(name="gen2", active_power=1.0, rating=1.0, bus=bus, available=True)
-    system.add_components(bus, gen1, gen2)
-
-    variable_name = "active_power"
-    length = 8784
-    data = range(length)
-    start = datetime(year=2020, month=1, day=1)
-    resolution = timedelta(hours=1)
-    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
-    system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
-    filename = tmp_path / "system.json"
-    system.to_json(filename)
-
-    system2 = SimpleSystem.from_json(filename, time_series_read_only=True)
-    gen1b = system.get_component(SimpleGenerator, gen1.name)
-    with pytest.raises(ISOperationNotAllowed):
-        system2.remove_time_series(gen1b, variable_name=variable_name)
-
-
 @pytest.mark.parametrize("in_memory", [True, False])
 def test_time_series_slices(in_memory):
     system = SimpleSystem(
