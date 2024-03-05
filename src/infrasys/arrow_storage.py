@@ -45,9 +45,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         directory.mkdir(exist_ok=True)
         return cls(directory)
 
-    @property
-    def time_series_directory(self) -> Path:
-        """Return the time series directory."""
+    def get_time_series_directory(self) -> Path:
         return self._ts_directory
 
     def add_time_series(

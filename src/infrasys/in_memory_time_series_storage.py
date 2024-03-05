@@ -24,6 +24,9 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
     def __init__(self) -> None:
         self._arrays: dict[UUID, TimeSeriesData] = {}  # Time series UUID, not metadata UUID
 
+    def get_time_series_directory(self) -> None:
+        return None
+
     def add_time_series(self, metadata: TimeSeriesMetadata, time_series: TimeSeriesData) -> None:
         if metadata.time_series_uuid not in self._arrays:
             self._arrays[metadata.time_series_uuid] = time_series

@@ -50,6 +50,11 @@ class TimeSeriesManager:
         # TODO: enforce one resolution
         # TODO: create parsing mechanism? CSV, CSV + JSON
 
+    @property
+    def storage(self) -> TimeSeriesStorageBase:
+        """Return the time series storage object."""
+        return self._storage
+
     def add(
         self,
         time_series: TimeSeriesData,
@@ -271,7 +276,7 @@ class TimeSeriesManager:
             storage = ArrowTimeSeriesStorage.create_with_permanent_directory(time_series_dir)
         else:
             storage = ArrowTimeSeriesStorage.create_with_temp_directory(time_series_dir)
-            storage.serialize(src=time_series_dir, dst=storage.time_series_directory)
+            storage.serialize(src=time_series_dir, dst=storage.get_time_series_directory())
 
         mgr = cls(storage=storage, **kwargs)
         return mgr

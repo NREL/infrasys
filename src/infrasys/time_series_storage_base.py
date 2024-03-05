@@ -17,6 +17,12 @@ class TimeSeriesStorageBase(abc.ABC):
         """Store a time series array."""
 
     @abc.abstractmethod
+    def get_time_series_directory(self) -> Path | None:
+        """Return the directory containing time series files. Will be none for in-memory time
+        series.
+        """
+
+    @abc.abstractmethod
     def get_time_series(
         self,
         metadata: TimeSeriesMetadata,

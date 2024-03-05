@@ -816,6 +816,12 @@ class System:
         """Return the UUID of the system."""
         return self._uuid
 
+    def get_time_series_directory(self) -> Path | None:
+        """Return the directory containing time series files. Will be none for in-memory time
+        series.
+        """
+        return self.time_series.storage.get_time_series_directory()
+
     def _deserialize_components(self, components: list[dict[str, Any]]) -> None:
         """Deserialize components from dictionaries and add them to the system."""
         cached_types = CachedTypeHelper()
