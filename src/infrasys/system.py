@@ -43,7 +43,7 @@ class System:
 
     def __init__(
         self,
-        name: Optional[None] = None,
+        name: Optional[str] = None,
         description: Optional[str] = None,
         auto_add_composed_components: bool = False,
         time_series_manager: Optional[TimeSeriesManager] = None,
@@ -786,7 +786,7 @@ class System:
         return self._name
 
     @name.setter
-    def name(self, name: str | None) -> None:
+    def name(self, name: Optional[str]) -> None:
         """Set the name of the system."""
         self._name = name
 
