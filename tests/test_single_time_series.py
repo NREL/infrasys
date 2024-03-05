@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 import pyarrow as pa
 
+from infrasys.quantities import ActivePower
 from infrasys.time_series_models import SingleTimeSeries
 
 
@@ -64,4 +65,21 @@ def test_from_time_array_constructor():
     assert ts.resolution == resolution
     assert ts.initial_time == initial_time
     assert isinstance(ts.data, pa.Array)
+    assert ts.data[-1].as_py() == length - 1
+
+
+def test_with_quantity():
+    """Test SingleTimeSeries with a Pint quantity."""
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    time_array = [initial_time + timedelta(hours=i) for i in range(length)]
+    data = ActivePower(range(length), "watts")
+    variable_name = "active_power"
+    ts = SingleTimeSeries.from_time_array(data, variable_name, time_array)
+    assert isinstance(ts, SingleTimeSeries)
+    assert ts.length == length
+    assert ts.resolution == resolution
+    assert ts.initial_time == initial_time
+    assert isinstance(ts.data.magnitude, pa.Array)
     assert ts.data[-1].as_py() == length - 1

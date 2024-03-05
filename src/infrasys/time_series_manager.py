@@ -16,7 +16,6 @@ from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.component_models import ComponentWithQuantities
 from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
-from infrasys.models import InfraSysBaseModel
 from infrasys.time_series_models import (
     SingleTimeSeries,
     TimeSeriesData,
@@ -32,13 +31,6 @@ TIME_SERIES_KWARGS = {
 
 def _process_time_series_kwarg(key: str, **kwargs: Any) -> Any:
     return kwargs.get(key, TIME_SERIES_KWARGS[key])
-
-
-class TimeSeriesMetadataTracker(InfraSysBaseModel):
-    """Tracks metadata in memory"""
-
-    metadata: TimeSeriesMetadata
-    count: int = 0
 
 
 class TimeSeriesManager:
