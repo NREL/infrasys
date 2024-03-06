@@ -100,6 +100,26 @@ def test_get_components(simple_system: SimpleSystem):
     ]
 
 
+def test_get_components_multiple_types():
+    system = SimpleSystem()
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
+    gen2 = SimpleGenerator(name="gen2", active_power=1.0, rating=1.0, bus=bus, available=True)
+    gen3 = RenewableGenerator(name="gen2", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen1, gen2, gen3)
+
+    selected_components = list(system.get_components(SimpleBus, SimpleGenerator))
+    assert len(selected_components) == 3  # 2 SimpleGenerator + 1 SimpleBus
+
+    # Validate that filter_function works as well
+    selected_components = list(
+        system.get_components(
+            SimpleGenerator, RenewableGenerator, filter_func=lambda x: x.name == "gen2"
+        )
+    )
+    assert len(selected_components) == 2  # 1 SimpleGenerator + 1 RenewableGenerator
+
+
 def test_time_series_attach_from_array():
     system = SimpleSystem()
     bus = SimpleBus(name="test-bus", voltage=1.1)

@@ -77,13 +77,14 @@ class ComponentManager:
         return self._components.keys()
 
     def iter(
-        self, component_type: Type[Component], filter_func: Callable | None = None
+        self, *component_types: Type[Component], filter_func: Callable | None = None
     ) -> Iterable[Any]:
         """Return the components with the passed type and optionally match filter_func.
 
         If component_type is an abstract type, all matching subtypes will be returned.
         """
-        yield from self._iter(component_type, filter_func)
+        for component_type in component_types:
+            yield from self._iter(component_type, filter_func)
 
     def _iter(
         self, component_type: Type[Component], filter_func: Callable | None

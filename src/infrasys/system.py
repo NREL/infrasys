@@ -374,14 +374,15 @@ class System:
         return self._component_mgr.get_by_uuid(uuid)
 
     def get_components(
-        self, component_type: Type[Component], filter_func: Callable | None = None
+        self, *component_type: Type[Component], filter_func: Callable | None = None
     ) -> Iterable[Any]:
-        """Return the components with the passed type and that optionally match filter_func.
+        """Return the components with the passed type(s) and that optionally match filter_func.
 
         Parameters
         ----------
         component_type : Type[Component]
             If component_type is an abstract type, all matching subtypes will be returned.
+            The function will return all the matching `component_type` passed.
         filter_func : Callable | None
             Optional function to filter the returned values. The function must accept a component
             as a single argument.
@@ -396,8 +397,12 @@ class System:
             filter_func=lambda x: x.name in names,
         ):
             print(component.summary)
+
+        To request multiple component types:
+        >>> for component in system.get_components(SimpleGenerator, SimpleBus)
+            print(component.summary)
         """
-        return self._component_mgr.iter(component_type, filter_func=filter_func)
+        return self._component_mgr.iter(*component_type, filter_func=filter_func)
 
     def get_component_types(self) -> Iterable[Type[Component]]:
         """Return an iterable of all component types stored in the system.
