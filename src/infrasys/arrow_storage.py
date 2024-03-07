@@ -31,7 +31,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
 
     @classmethod
     def create_with_temp_directory(
-        cls, base_directory: Optional[Path]
+        cls, base_directory: Optional[Path] = None
     ) -> "ArrowTimeSeriesStorage":
         """Construct ArrowTimeSeriesStorage with a temporary directory."""
         directory = Path(mkdtemp(dir=base_directory))

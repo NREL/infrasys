@@ -39,7 +39,7 @@ class TimeSeriesManager:
         self._storage = storage or (
             InMemoryTimeSeriesStorage()
             if _process_time_series_kwarg("time_series_in_memory", **kwargs)
-            else ArrowTimeSeriesStorage.create_with_temp_directory(base_directory)
+            else ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
         )
 
         # This tracks the number of references to each time series array across components.
@@ -275,7 +275,7 @@ class TimeSeriesManager:
         if _process_time_series_kwarg("time_series_read_only", **kwargs):
             storage = ArrowTimeSeriesStorage.create_with_permanent_directory(time_series_dir)
         else:
-            storage = ArrowTimeSeriesStorage.create_with_temp_directory(time_series_dir)
+            storage = ArrowTimeSeriesStorage.create_with_temp_directory()
             storage.serialize(src=time_series_dir, dst=storage.get_time_series_directory())
 
         mgr = cls(storage=storage, **kwargs)

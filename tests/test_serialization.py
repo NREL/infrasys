@@ -89,12 +89,23 @@ def test_serialize_time_series(tmp_path, time_series_in_memory):
     system.to_json(filename)
 
     system2 = SimpleSystem.from_json(filename, time_series_read_only=True)
+    system2_ts_dir = system2.get_time_series_directory()
+    assert system2_ts_dir is not None
+    assert system2_ts_dir == SimpleSystem._make_time_series_directory(filename)
     gen1b = system.get_component(SimpleGenerator, gen1.name)
     with pytest.raises(ISOperationNotAllowed):
         system2.remove_time_series(gen1b, variable_name=variable_name)
 
     ts2 = system.get_time_series(gen1b, variable_name=variable_name)
     assert ts2.data == ts.data
+
+    system3 = SimpleSystem.from_json(filename, time_series_read_only=False)
+    assert system3.get_time_series_directory() != SimpleSystem._make_time_series_directory(
+        filename
+    )
+    system3_ts_dir = system3.get_time_series_directory()
+    assert system3_ts_dir is not None
+    assert not system3_ts_dir.is_relative_to(system2_ts_dir)
 
 
 @pytest.mark.parametrize(
