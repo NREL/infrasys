@@ -988,15 +988,16 @@ class SystemInfo:
     def __init__(self, system) -> None:
         self.system = system
 
-    def extract_system_counts(self) -> tuple[int, dict, dict]:
+    def extract_system_counts(self) -> tuple[int, int, dict, dict]:
         component_count: int = 0
+        time_series_count: int = 0
         component_type_count: dict = defaultdict(int)
-        time_series_counts: dict = defaultdict(int)
+        time_series_type_count: dict = defaultdict(int)
         for component in self.system.components.iter_all():
             component_type_count[component.__class__.__name__] += 1
             if getattr(component, "time_series_metadata", False):
                 for time_series_metadata in component.time_series_metadata:
-                    time_series_counts[
+                    time_series_type_count[
                         (
                             component.__class__.__name__,
                             time_series_metadata.type,
@@ -1004,12 +1005,18 @@ class SystemInfo:
                             time_series_metadata.resolution,
                         )
                     ] += 1
+                    time_series_count += 1
             component_count += 1
-        return component_count, component_type_count, time_series_counts
+        return component_count, time_series_count, component_type_count, time_series_type_count
 
     def render(self) -> None:
         """Render summary information from the system."""
-        component_count, component_type_count, time_series_counts = self.extract_system_counts()
+        (
+            component_count,
+            time_series_count,
+            component_type_count,
+            time_series_type_count,
+        ) = self.extract_system_counts()
 
         # System table
         system_table = Table(
@@ -1023,7 +1030,8 @@ class SystemInfo:
         system_table.add_row("System name", self.system.name)
         system_table.add_row("Data format version", self.system._data_format_version)
         system_table.add_row("Components attached", f"{component_count}")
-        system_table.add_row("Description", self.system._description)
+        system_table.add_row("Time Series attached", f"{time_series_count}")
+        system_table.add_row("Description", self.system.description)
         _pprint(system_table)
 
         # Component and time series table
@@ -1063,7 +1071,7 @@ class SystemInfo:
             time_series_type,
             time_series_start_time,
             time_series_resolution,
-        ), time_series_count in sorted(time_series_counts.items(), key=itemgetter(slice(4))):
+        ), time_series_count in sorted(time_series_type_count.items(), key=itemgetter(slice(4))):
             time_series_table.add_row(
                 f"{component_type}",
                 f"{time_series_type}",
