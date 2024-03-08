@@ -163,7 +163,7 @@ class System:
             json.dump(data, f_out, indent=indent, cls=ExtendedJSONEncoder)
             logger.info("Wrote system data to {}", filename)
 
-        self._time_series_mgr.serialize(filename.parent / (filename.stem + "_time_series"))
+        self._time_series_mgr.serialize(self._make_time_series_directory(filename))
 
     @classmethod
     def from_json(
@@ -964,6 +964,10 @@ class System:
             else:
                 return None
         return deserialized_components
+
+    @staticmethod
+    def _make_time_series_directory(filename: Path) -> Path:
+        return filename.parent / (filename.stem + "_time_series")
 
     def show_components(self, component_type):
         # Filtered view of certain concrete types (not really concrete types)
