@@ -91,14 +91,12 @@ def test_normalization():
     initial_time = datetime(year=2020, month=1, day=1)
     time_array = [initial_time + timedelta(hours=i) for i in range(length)]
     data = [1.1, 2.2, 3.3, 4.5, 5.5]
-    min_val = data[0]
     max_val = data[-1]
     variable_name = "active_power"
     ts = SingleTimeSeries.from_time_array(
-        data, variable_name, time_array, normalization_type=NormalizationType.MIN_MAX
+        data, variable_name, time_array, normalization_type=NormalizationType.MAX
     )
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == len(data)
-    diff = max_val - min_val
     for i, val in enumerate(ts.data):
-        assert val.as_py() == (data[i] - min_val) / diff
+        assert val.as_py() == data[i] / max_val
