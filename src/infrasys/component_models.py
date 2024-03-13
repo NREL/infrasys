@@ -34,7 +34,7 @@ class Component(InfraSysBaseModelWithIdentifers):
     """Base class for all models representing entities that get attached to a System."""
 
     name: Annotated[Optional[str], Field(frozen=True)] = None
-    system_uuid: Annotated[Optional[UUID], Field(repr=False)] = None
+    system_uuid: Annotated[Optional[UUID], Field(repr=False, exclude=True)] = None
 
     @field_serializer("system_uuid")
     def _serialize_system_uuid(self, _) -> str:
@@ -262,10 +262,7 @@ class ComponentWithQuantities(Component):
 def raise_if_attached(component: Component):
     """Raise an exception if this component is attached to a system."""
     if component.system_uuid is not None:
-        msg = (
-            f"{component.summary} is attached to system %s",
-            component.system_uuid,
-        )
+        msg = f"{component.summary} is attached to system {component.system_uuid}"
         raise ISAlreadyAttached(msg)
 
 

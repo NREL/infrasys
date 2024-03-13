@@ -191,6 +191,47 @@ class System:
             data, time_series_parent_dir, upgrade_handler=upgrade_handler, **kwargs
         )
 
+    def to_records(
+        self,
+        component_type: Type[Component],
+        filter_func: Callable | None = None,
+        **kwargs,
+    ) -> Iterable[dict]:
+        """Return a list of dictionaries of components (records) with the requested type(s) and
+        optionally match filter_func.
+
+        Parameters
+        ----------
+        components:
+            Component types to get as dictionaries
+        filter_func:
+            A function to filter components. Default is None
+        kwargs
+            Configures Pydantic model_dump behaviour
+              - exclude: List or dict of excluded fields.
+        Notes
+        -----
+        If a component type is an abstract type, all matching concrete subtypes will be included in the output.
+
+        It is only recommended to use this function on a single "concrete" types. For example, if
+        you have an abstract type called Generator and you create two subtypes called
+        ThermalGenerator and RenewableGenerator where some fields are different, if you pass the
+        return of System.to_records(Generator) to pandas.DataFrame.from_records, each
+        ThermalGenerator row will have NaN values for RenewableGenerator-specific fields.
+
+        Examples
+        --------
+        To get a tabular representation of a certain type you can use:
+        >>> import pandas as pd
+        >>> df = pd.DataFrame.from_records(System.to_records(SimpleGen))
+
+        With polars:
+        >>> import polars as pl
+        >>> df = pl.DataFrame(System.to_records(SimpleGen))
+
+        """
+        return self._component_mgr.to_records(component_type, filter_func=filter_func, **kwargs)
+
     @classmethod
     def from_dict(
         cls,

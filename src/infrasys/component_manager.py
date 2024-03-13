@@ -128,10 +128,34 @@ class ComponentManager:
         """Return an iterator over all components."""
         return self._components_by_uuid.values()
 
+    def to_records(
+        self, component_type: Type[Component], filter_func: Callable | None = None, **kwargs
+    ) -> Iterable[dict]:
+        """Return a dictionary representation of the requested components.
+
+        For nested components we only return the summary instead of the full component.
+        """
+        for component in self.iter(component_type, filter_func=filter_func):
+            data = component.model_dump(**kwargs)
+            for key in data:
+                subcomponent = getattr(component, key)
+                if issubclass(type(subcomponent), Component):
+                    data[key] = subcomponent.summary
+                elif (
+                    isinstance(subcomponent, list)
+                    and subcomponent
+                    and issubclass(type(subcomponent[0]), Component)
+                ):
+                    for i, sub_component_ in enumerate(subcomponent):
+                        subcomponent[i] = sub_component_.summary
+            yield data
+
     def remove(self, component: Component) -> Any:
         """Remove the component from the system and return it.
 
-        Note: users should not call this directly. It should be called through the system
+        Notes
+        -----
+        Users should not call this directly. It should be called through the system
         so that time series is handled.
         """
         if component.has_time_series():

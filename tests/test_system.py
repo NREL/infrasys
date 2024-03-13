@@ -401,3 +401,41 @@ def test_remove_component(in_memory):
     for gen in (gen1, gen2):
         with pytest.raises(ISNotStored):
             system.components.get(SimpleGenerator, gen.name)
+
+
+def test_system_to_dict():
+    system = SimpleSystem(
+        name="test-system",
+        auto_add_composed_components=True,
+    )
+    gen1 = SimpleGenerator.example()
+    gen2 = SimpleGenerator.example()
+    gen3 = SimpleGenerator.example()
+    system.components.add(gen1, gen2, gen3)
+
+    component_dict: list[dict] = list(system.to_records(SimpleGenerator))
+    assert len(component_dict) == 3  # 3 generators
+    assert component_dict[0].get("uuid", None) is None
+    assert component_dict[0]["bus"] == gen1.bus.summary
+
+    exclude_first_level_fields = {"name": True, "available": True}
+    component_dict = list(system.to_records(SimpleGenerator, exclude=exclude_first_level_fields))
+    assert len(component_dict) == 3
+    assert component_dict[0].get("name", None) is None
+    assert component_dict[0].get("available", None) is None
+
+    component_dict = list(system.to_records(SimpleGenerator))
+    assert len(component_dict) == 3  # 3 generators
+    assert component_dict[0]["bus"] == gen1.bus.summary
+
+    exclude_nested_list = {"time_series_metadata": {"__all__": {"resolution"}}}
+    variable_name = "active_power"
+    length = 8784
+    data = range(length)
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
+    system.add_time_series(ts, gen1)
+    component_dict = list(system.to_records(SimpleGenerator, exclude=exclude_nested_list))
+    assert len(component_dict) == 3  # 3 generators
+    assert component_dict[0]["time_series_metadata"][0].get("resolution", None) is None
