@@ -12,6 +12,7 @@ from infrasys.location import Location
 from infrasys.component_models import ComponentWithQuantities
 from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
+from infrasys.normalization import NormalizationMax
 from infrasys.time_series_models import SingleTimeSeries
 from .models.simple_system import (
     SimpleSystem,
@@ -158,6 +159,31 @@ def test_with_time_series_quantity(tmp_path):
     assert isinstance(ts2.data.magnitude, pa.Array)
     assert ts2.data[-1].as_py() == length - 1
     assert ts2.data.magnitude == pa.array(range(length))
+
+
+@pytest.mark.parametrize("in_memory", [True, False])
+def test_system_with_time_series_normalization(tmp_path, in_memory):
+    system = SimpleSystem(
+        name="test-system", auto_add_composed_components=True, time_series_in_memory=in_memory
+    )
+    gen = SimpleGenerator.example()
+    system.components.add(gen)
+    variable_name = "active_power"
+    length = 8784
+    data = list(range(length))
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(
+        data, variable_name, start, resolution, normalization=NormalizationMax()
+    )
+    system.add_time_series(ts, gen)
+    filename = tmp_path / "sys.json"
+    system.to_json(filename)
+
+    system2 = SimpleSystem.from_json(filename)
+    gen2 = system2.get_component(SimpleGenerator, gen.name)
+    ts2 = system2.get_time_series(gen2, variable_name=variable_name)
+    assert ts2.normalization.max_value == length - 1
 
 
 def test_json_schema():

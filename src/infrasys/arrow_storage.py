@@ -118,6 +118,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             resolution=metadata.resolution,
             initial_time=start_time or metadata.initial_time,
             data=data,
+            normalization=metadata.normalization,
         )
 
     def _convert_to_record_batch(self, array: SingleTimeSeries, variable_name: str):

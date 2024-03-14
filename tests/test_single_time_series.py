@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 import pyarrow as pa
 
-from infrasys.normalization import NormalizationType
+from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower
 from infrasys.time_series_models import SingleTimeSeries
 
@@ -94,7 +94,7 @@ def test_normalization():
     max_val = data[-1]
     variable_name = "active_power"
     ts = SingleTimeSeries.from_time_array(
-        data, variable_name, time_array, normalization_type=NormalizationType.MAX
+        data, variable_name, time_array, normalization=NormalizationMax()
     )
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == len(data)
