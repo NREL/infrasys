@@ -22,6 +22,8 @@ from typing_extensions import Annotated
 from infrasys.base_quantity import BaseQuantity
 from infrasys.exceptions import ISConflictingArguments
 from infrasys.models import InfraSysBaseModelWithIdentifers, InfraSysBaseModel
+from infrasys.normalization import NormalizationModel
+
 
 TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
@@ -44,6 +46,7 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
 
     units: Optional[str] = None
     variable_name: str
+    normalization: NormalizationModel = None
 
     @property
     def summary(self) -> str:
@@ -94,6 +97,7 @@ class SingleTimeSeries(TimeSeriesData):
         variable_name: str,
         initial_time: datetime,
         resolution: timedelta,
+        normalization: NormalizationModel = None,
     ) -> "SingleTimeSeries":
         """Method of SingleTimeSeries that creates an instance from a sequence.
 
@@ -120,11 +124,16 @@ class SingleTimeSeries(TimeSeriesData):
         ----
         - Length of the sequence is inferred from the data.
         """
+        if normalization is not None:
+            npa = data if isinstance(data, np.ndarray) else np.array(data)
+            data = normalization.normalize_array(npa)
+
         return SingleTimeSeries(
-            data=data,
+            data=data,  # type: ignore
             variable_name=variable_name,
             initial_time=initial_time,
             resolution=resolution,
+            normalization=normalization,
         )
 
     @classmethod
@@ -133,6 +142,7 @@ class SingleTimeSeries(TimeSeriesData):
         data: ISArray,
         variable_name: str,
         time_index: Sequence[datetime],
+        normalization: NormalizationModel = None,
     ) -> "SingleTimeSeries":
         """Create SingleTimeSeries using time_index provided.
 
@@ -169,6 +179,7 @@ class SingleTimeSeries(TimeSeriesData):
             variable_name,
             initial_time,
             resolution,
+            normalization=normalization,
         )
 
     @staticmethod
@@ -217,6 +228,7 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     time_series_uuid: UUID
     user_attributes: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
+    normalization: NormalizationModel = None
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @property
@@ -262,6 +274,7 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
             time_series_uuid=time_series.uuid,
             user_attributes=user_attributes,
             quantity_metadata=quantity_metadata,
+            normalization=time_series.normalization,
             type=cls.get_time_series_type_str(),  # type: ignore
         )
 

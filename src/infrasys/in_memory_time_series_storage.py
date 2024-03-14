@@ -81,4 +81,5 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             resolution=base_ts.resolution,
             initial_time=start_time or base_ts.initial_time,
             data=base_ts.data[index : index + length],
+            normalization=metadata.normalization,
         )

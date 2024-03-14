@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 import pyarrow as pa
 
+from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower
 from infrasys.time_series_models import SingleTimeSeries
 
@@ -83,3 +84,19 @@ def test_with_quantity():
     assert ts.initial_time == initial_time
     assert isinstance(ts.data.magnitude, pa.Array)
     assert ts.data[-1].as_py() == length - 1
+
+
+def test_normalization():
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    time_array = [initial_time + timedelta(hours=i) for i in range(length)]
+    data = [1.1, 2.2, 3.3, 4.5, 5.5]
+    max_val = data[-1]
+    variable_name = "active_power"
+    ts = SingleTimeSeries.from_time_array(
+        data, variable_name, time_array, normalization=NormalizationMax()
+    )
+    assert isinstance(ts, SingleTimeSeries)
+    assert ts.length == len(data)
+    for i, val in enumerate(ts.data):
+        assert val.as_py() == data[i] / max_val
