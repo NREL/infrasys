@@ -93,7 +93,7 @@ class TimeSeriesManager:
                 **metadata.user_attributes,
             ):
                 msg = (
-                    f"{component.summary} already has a time series with "
+                    f"{component.label} already has a time series with "
                     f"{ts_type} {variable_name} {user_attributes=}"
                 )
                 raise ISAlreadyAttached(msg)

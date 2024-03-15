@@ -124,7 +124,7 @@ class ComponentWithQuantities(Component):
     def check_component_addition(self, system_uuid: UUID):
         super().check_component_addition(system_uuid)
         if self.has_time_series():
-            msg = f"{self.summary} cannot be added to the system because it has time series." ""
+            msg = f"{self.label} cannot be added to the system because it has time series." ""
             raise ISOperationNotAllowed(msg)
 
     def has_time_series(
@@ -153,11 +153,11 @@ class ComponentWithQuantities(Component):
             time_series_type=metadata.get_time_series_data_type(),
             **metadata.user_attributes,
         ):
-            msg = f"time series {metadata.summary} is already attached to component {self.summary}"
+            msg = f"time series {metadata.label} is already attached to component {self.label}"
             raise ISAlreadyAttached(msg)
 
         self.time_series_metadata.append(metadata)
-        logger.debug("Added time series {} to {}", metadata.summary, self.summary)
+        logger.debug("Added time series {} to {}", metadata.label, self.label)
 
     def get_time_series_metadata(
         self,
@@ -262,7 +262,7 @@ class ComponentWithQuantities(Component):
 def raise_if_attached(component: Component):
     """Raise an exception if this component is attached to a system."""
     if component.system_uuid is not None:
-        msg = f"{component.summary} is attached to system {component.system_uuid}"
+        msg = f"{component.label} is attached to system {component.system_uuid}"
         raise ISAlreadyAttached(msg)
 
 
@@ -275,7 +275,7 @@ def raise_if_not_attached(component: Component, system_uuid: UUID):
         The component must be attached to the system with this UUID.
     """
     if component.system_uuid is None or component.system_uuid != system_uuid:
-        msg = f"{component.summary} is not attached to the system"
+        msg = f"{component.label} is not attached to the system"
         raise ISNotStored(msg)
 
 

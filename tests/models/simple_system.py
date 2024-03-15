@@ -22,7 +22,7 @@ class SimpleBus(ComponentWithQuantities):
             system_uuid=system_uuid
         ):
             # Other packages might want to auto-add in the System class.
-            msg = f"{self.summary} has coordinates that are not attached to the system"
+            msg = f"{self.label} has coordinates that are not attached to the system"
             raise ISOperationNotAllowed(msg)
 
     @classmethod

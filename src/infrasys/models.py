@@ -40,7 +40,7 @@ class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
     def assign_new_uuid(self):
         """Generate a new UUID."""
         self.uuid = uuid4()
-        logger.debug("Assigned new UUID for %s: %s", self.summary, self.uuid)
+        logger.debug("Assigned new UUID for %s: %s", self.label, self.uuid)
 
     @classmethod
     def example(cls) -> "InfraSysBaseModelWithIdentifers":
@@ -55,13 +55,13 @@ class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
         raise NotImplementedError(msg)
 
     @property
-    def summary(self) -> str:
+    def label(self) -> str:
         """Provides a description of an instance."""
         class_name = self.__class__.__name__
         name = getattr(self, "name", None) or str(self.uuid)
-        return make_summary(class_name, name)
+        return make_label(class_name, name)
 
 
-def make_summary(class_name: str, name: str) -> str:
-    """Make a string summarizing an instance."""
+def make_label(class_name: str, name: str) -> str:
+    """Make a string label of an instance."""
     return f"{class_name}.{name}"

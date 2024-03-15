@@ -416,7 +416,7 @@ def test_system_to_dict():
     component_dict: list[dict] = list(system.to_records(SimpleGenerator))
     assert len(component_dict) == 3  # 3 generators
     assert component_dict[0].get("uuid", None) is None
-    assert component_dict[0]["bus"] == gen1.bus.summary
+    assert component_dict[0]["bus"] == gen1.bus.label
 
     exclude_first_level_fields = {"name": True, "available": True}
     component_dict = list(system.to_records(SimpleGenerator, exclude=exclude_first_level_fields))
@@ -426,7 +426,7 @@ def test_system_to_dict():
 
     component_dict = list(system.to_records(SimpleGenerator))
     assert len(component_dict) == 3  # 3 generators
-    assert component_dict[0]["bus"] == gen1.bus.summary
+    assert component_dict[0]["bus"] == gen1.bus.label
 
     exclude_nested_list = {"time_series_metadata": {"__all__": {"resolution"}}}
     variable_name = "active_power"

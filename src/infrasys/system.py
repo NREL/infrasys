@@ -17,7 +17,7 @@ from infrasys.exceptions import (
     ISConflictingArguments,
     ISConflictingSystem,
 )
-from infrasys.models import make_summary
+from infrasys.models import make_label
 from infrasys.component_models import (
     Component,
     ComponentWithQuantities,
@@ -285,7 +285,7 @@ class System:
                 )
         system.deserialize_system_attributes(system_data)
         system._deserialize_components(system_data["components"])
-        logger.info("Deserialized system {}", system.summary)
+        logger.info("Deserialized system {}", system.label)
         return system
 
     def add_component(self, component: Component, **kwargs) -> None:
@@ -431,17 +431,17 @@ class System:
         Examples
         --------
         >>> for component in system.get_components(Component)
-            print(component.summary)
+            print(component.label)
         >>> names = {"bus1", "bus2", "gen1", "gen2"}
         >>> for component in system.get_components(
             Component,
             filter_func=lambda x: x.name in names,
         ):
-            print(component.summary)
+            print(component.label)
 
         To request multiple component types:
         >>> for component in system.get_components(SimpleGenerator, SimpleBus)
-            print(component.summary)
+            print(component.label)
         """
         return self._component_mgr.iter(*component_type, filter_func=filter_func)
 
@@ -475,7 +475,7 @@ class System:
         Examples
         --------
         >>> for component in system.iter_all_components()
-            print(component.summary)
+            print(component.label)
 
         See Also
         --------
@@ -847,10 +847,10 @@ class System:
         self._description = description
 
     @property
-    def summary(self) -> str:
+    def label(self) -> str:
         """Provides a description of the system."""
         name = self.name or str(self.uuid)
-        return make_summary(self.__class__.__name__, name)
+        return make_label(self.__class__.__name__, name)
 
     @property
     def time_series(self) -> TimeSeriesManager:
@@ -1015,7 +1015,7 @@ class System:
         # We can implement custom printing if we want
         # Dan suggest to remove UUID, system.UUID, time_series_metadata from component.
         # Nested components gets special handling.
-        # What we do with components w/o names? Use .summary for nested components.
+        # What we do with components w/o names? Use .label for nested components.
         raise NotImplementedError
 
     def info(self):
@@ -1051,7 +1051,7 @@ class SystemInfo:
         return component_count, time_series_count, component_type_count, time_series_type_count
 
     def render(self) -> None:
-        """Render summary information from the system."""
+        """Render Summary information from the system."""
         (
             component_count,
             time_series_count,

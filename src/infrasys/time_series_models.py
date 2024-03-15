@@ -232,7 +232,7 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @property
-    def summary(self) -> str:
+    def label(self) -> str:
         """Return the variable_name of the time series array with its type."""
         return f"{self.type}.{self.variable_name}"
 

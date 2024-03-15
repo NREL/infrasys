@@ -7,7 +7,7 @@ from loguru import logger
 
 from infrasys.component_models import Component, raise_if_attached
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
-from infrasys.models import make_summary
+from infrasys.models import make_label
 
 
 class ComponentManager:
@@ -57,8 +57,8 @@ class ComponentManager:
         list_by_name
         """
         if component_type not in self._components or name not in self._components[component_type]:
-            summary = make_summary(component_type.__name__, name)
-            msg = f"{summary} is not stored"
+            label = make_label(component_type.__name__, name)
+            msg = f"{label} is not stored"
             raise ISNotStored(msg)
 
         components = self._components[component_type][name]
@@ -133,21 +133,21 @@ class ComponentManager:
     ) -> Iterable[dict]:
         """Return a dictionary representation of the requested components.
 
-        For nested components we only return the summary instead of the full component.
+        For nested components we only return the label instead of the full component.
         """
         for component in self.iter(component_type, filter_func=filter_func):
             data = component.model_dump(**kwargs)
             for key in data:
                 subcomponent = getattr(component, key)
                 if issubclass(type(subcomponent), Component):
-                    data[key] = subcomponent.summary
+                    data[key] = subcomponent.label
                 elif (
                     isinstance(subcomponent, list)
                     and subcomponent
                     and issubclass(type(subcomponent[0]), Component)
                 ):
                     for i, sub_component_ in enumerate(subcomponent):
-                        subcomponent[i] = sub_component_.summary
+                        subcomponent[i] = sub_component_.label
             yield data
 
     def remove(self, component: Component) -> Any:
@@ -172,7 +172,7 @@ class ComponentManager:
             component_type not in self._components
             or component.name not in self._components[component_type]
         ):
-            msg = f"{component.summary} is not stored"
+            msg = f"{component.label} is not stored"
             raise ISNotStored(msg)
 
         container = self._components[component_type][component.name]
@@ -185,10 +185,10 @@ class ComponentManager:
                     self._components_by_uuid.pop(component.uuid)
                 if not self._components[component_type]:
                     self._components.pop(component_type)
-                logger.debug("Removed component {}", component.summary)
+                logger.debug("Removed component {}", component.label)
                 return
 
-        msg = f"Component {component.summary} is not stored"
+        msg = f"Component {component.label} is not stored"
         raise ISNotStored(msg)
 
     def copy(
@@ -214,7 +214,7 @@ class ComponentManager:
 
         new_component = type(component)(**values)  # type: ignore
 
-        logger.info("Copied {} to {}", component.summary, new_component.summary)
+        logger.info("Copied {} to {}", component.label, new_component.label)
         if attach:
             self.add(new_component)
 
@@ -244,21 +244,21 @@ class ComponentManager:
             self._check_component_addition(component)
             component.check_component_addition(self._uuid)
         if component.uuid in self._components_by_uuid:
-            msg = f"{component.summary} with UUID={component.uuid} is already stored"
+            msg = f"{component.label} with UUID={component.uuid} is already stored"
             raise ISAlreadyAttached(msg)
 
         cls = type(component)
         if cls not in self._components:
             self._components[cls] = {}
 
-        name = component.name or component.summary
+        name = component.name or component.label
         if name not in self._components[cls]:
             self._components[cls][name] = []
 
         self._components[cls][name].append(component)
         self._components_by_uuid[component.uuid] = component
         component.system_uuid = self._uuid
-        logger.debug("Added {} to the system", component.summary)
+        logger.debug("Added {} to the system", component.label)
 
     def _check_component_addition(self, component: Component) -> None:
         """Check all the fields of a component against the setting
@@ -282,11 +282,11 @@ class ComponentManager:
             return
 
         if self._auto_add_composed_components:
-            logger.debug("Auto-add composed component {}", component.summary)
+            logger.debug("Auto-add composed component {}", component.label)
             self._add(component, False)
         else:
             msg = (
-                f"Component {component.summary} cannot be added to the system because "
-                f"its composed component {component.summary} is not already attached."
+                f"Component {component.label} cannot be added to the system because "
+                f"its composed component {component.label} is not already attached."
             )
             raise ISOperationNotAllowed(msg)
