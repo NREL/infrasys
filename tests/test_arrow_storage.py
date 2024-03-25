@@ -23,7 +23,7 @@ def test_system() -> System:
 
 
 def test_file_creation(test_system: System):
-    gen1 = test_system.components.get(SimpleGenerator, "gen1")
+    gen1 = test_system.get_component(SimpleGenerator, "gen1")
     ts = SingleTimeSeries.from_array(
         data=range(8784),
         variable_name="active_power",
@@ -57,7 +57,7 @@ def test_copy_files(tmp_path):
 
     logger.info("Starting deserialization")
     system2 = SimpleSystem.from_json(filename, base_directory=tmp_path)
-    gen1b = system2.components.get(SimpleGenerator, gen1.name)
+    gen1b = system2.get_component(SimpleGenerator, gen1.name)
     time_series = system2.time_series.get(gen1b)
     time_series_fpath = (
         tmp_path / system2.get_time_series_directory() / (str(time_series.uuid) + ".arrow")
@@ -83,7 +83,7 @@ def test_read_deserialize_time_series(tmp_path):
     system.to_json(filename)
 
     system2 = SimpleSystem.from_json(filename, time_series_directory=tmp_path)
-    gen1b = system2.components.get(SimpleGenerator, gen1.name)
+    gen1b = system2.get_component(SimpleGenerator, gen1.name)
     deserialize_ts = system2.time_series.get(gen1b)
     assert isinstance(deserialize_ts, SingleTimeSeries)
     assert deserialize_ts.resolution == ts.resolution

@@ -219,7 +219,7 @@ class QuantityMetadata(InfraSysBaseModel):
         return values
 
 
-class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
+class TimeSeriesMetadata(InfraSysBaseModel, abc.ABC):
     """Defines common metadata for all time series."""
 
     variable_name: str

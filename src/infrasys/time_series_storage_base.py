@@ -5,6 +5,7 @@ import abc
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from uuid import UUID
 
 from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
 
@@ -32,7 +33,7 @@ class TimeSeriesStorageBase(abc.ABC):
         """Return a time series array."""
 
     @abc.abstractmethod
-    def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
+    def remove_time_series(self, uuid: UUID) -> None:
         """Remove a time series array and return it."""
 
     @abc.abstractmethod

@@ -45,7 +45,6 @@ de-serialized.
   "uuid": "e503984a-3285-43b6-84c2-805eb3889210",
   "name": "bus1",
   "system_uuid": "9c33cd43-38ac-4ecf-97b8-0eccd1aa1fb5",
-  "time_series_metadata": [],
   "voltage": 1.1,
   "coordinates": {
     "__metadata__": {
@@ -78,7 +77,6 @@ Here is an example of a bus serialized that way (`bus.model_dump_json(indent=2)`
   "uuid": "e503984a-3285-43b6-84c2-805eb3889210",
   "name": "bus1",
   "system_uuid": "9c33cd43-38ac-4ecf-97b8-0eccd1aa1fb5",
-  "time_series_metadata": [],
   "voltage": 1.1,
   "coordinates": {
     "uuid": "1e5f90ae-a386-4c8a-89ae-0ed123da3e26",
@@ -100,7 +98,6 @@ instance. Here is an example of such a component:
   "uuid": "711d2724-5814-4e0e-be5f-4b0b825b7f07",
   "name": "test",
   "system_uuid": "264a2e80-64f4-42ea-b2c4-87aa708287b4",
-  "time_series_metadata": [],
   "distance": {
     "value": 2,
     "units": "meter",

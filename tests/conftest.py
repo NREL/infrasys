@@ -17,7 +17,7 @@ def simple_system() -> SimpleSystem:
     bus = SimpleBus(name="test-bus", voltage=1.1, coordinates=geo)
     gen = SimpleGenerator(name="test-gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen])
-    system.components.add(geo, bus, gen, subsystem)
+    system.add_components(geo, bus, gen, subsystem)
     return system
 
 

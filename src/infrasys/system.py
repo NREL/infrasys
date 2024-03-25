@@ -18,9 +18,8 @@ from infrasys.exceptions import (
     ISConflictingSystem,
 )
 from infrasys.models import make_label
-from infrasys.component_models import (
+from infrasys.component import (
     Component,
-    ComponentWithQuantities,
     raise_if_not_attached,
 )
 from infrasys.component_manager import ComponentManager
@@ -34,7 +33,7 @@ from infrasys.serialization import (
     TYPE_METADATA,
 )
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
-from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData
+from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData, TimeSeriesMetadata
 from infrasys.utils.json import ExtendedJSONEncoder
 
 
@@ -501,9 +500,8 @@ class System:
         >>> system.remove_component(gen)
         """
         raise_if_not_attached(component, self.uuid)
-        if component.has_time_series():
-            assert isinstance(component, ComponentWithQuantities)
-            for metadata in component.list_time_series_metadata():
+        if self.has_time_series(component):
+            for metadata in self._time_series_mgr.list_time_series_metadata(component):
                 self.remove_time_series(
                     component,
                     time_series_type=metadata.get_time_series_data_type(),
@@ -581,7 +579,7 @@ class System:
     def add_time_series(
         self,
         time_series: TimeSeriesData,
-        *components: ComponentWithQuantities,
+        *components: Component,
         **user_attributes: Any,
     ) -> None:
         """Store a time series array for one or more components.
@@ -590,7 +588,7 @@ class System:
         ----------
         time_series : TimeSeriesData
             Time series data to store.
-        components : ComponentWithQuantities
+        components : Component
             Add the time series to all of these components.
         user_attributes : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
@@ -619,17 +617,17 @@ class System:
 
     def copy_time_series(
         self,
-        dst: ComponentWithQuantities,
-        src: ComponentWithQuantities,
+        dst: Component,
+        src: Component,
         name_mapping: dict[str, str] | None = None,
     ) -> None:
         """Copy all time series from src to dst.
 
         Parameters
         ----------
-        dst : ComponentWithQuantities
+        dst : Component
             Destination component
-        src : ComponentWithQuantities
+        src : Component
             Source component
         name_mapping : dict[str, str]
             Optionally map src names to different dst names.
@@ -651,7 +649,7 @@ class System:
 
     def get_time_series(
         self,
-        component: ComponentWithQuantities,
+        component: Component,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
@@ -662,18 +660,18 @@ class System:
 
         Parameters
         ----------
-        component : ComponentWithQuantities
-            Return time series attached to this component.
+        component : Component
+            Component to which the time series must be attached.
         variable_name : str | None
-            Optional, return time series with this name.
+            Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
-            Optional, return time series with this type.
+            Optional, search for time series with this type.
         start_time : datetime | None
-            Return a slice of the time series starting at this time. Defaults to the first value.
+            If not None, take a slice of the time series starting at this time.
         length : int | None
-            Return a slice of the time series with this length. Defaults to the full length.
+            If not None, take a slice of the time series with this length.
         user_attributes : str
-            Return time series with these attributes.
+            Optional, search for time series with these attributes.
 
         Raises
         ------
@@ -707,9 +705,36 @@ class System:
             **user_attributes,
         )
 
+    def has_time_series(
+        self,
+        component: Component,
+        variable_name: Optional[str] = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **user_attributes: str,
+    ) -> bool:
+        """Return True if the component has time series matching the inputs.
+
+        Parameters
+        ----------
+        component : Component
+            Component to check for matching time series.
+        variable_name : str | None
+            Optional, search for time series with this name.
+        time_series_type : Type[TimeSeriesData]
+            Optional, search for time series with this type.
+        user_attributes : str
+            Optional, search for time series with these attributes.
+        """
+        return self.time_series.has_time_series(
+            component,
+            variable_name=variable_name,
+            time_series_type=time_series_type,
+            **user_attributes,
+        )
+
     def list_time_series(
         self,
-        component: ComponentWithQuantities,
+        component: Component,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
@@ -720,18 +745,18 @@ class System:
 
         Parameters
         ----------
-        component : ComponentWithQuantities
-            Return time series attached to this component.
+        component : Component
+            Component to which the time series must be attached.
         variable_name : str | None
-            Optional, return time series with this name.
+            Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
-            Optional, return time series with this type.
+            Optional, search for time series with this type.
         start_time : datetime | None
-            Return a slice of the time series starting at this time. Defaults to the first value.
+            If not None, take a slice of the time series starting at this time.
         length : int | None
-            Return a slice of the time series with this length. Defaults to the full length.
+            If not None, take a slice of the time series with this length.
         user_attributes : str
-            Return time series with these attributes.
+            Optional, search for time series with these attributes.
 
         Examples
         --------
@@ -748,9 +773,42 @@ class System:
             **user_attributes,
         )
 
+    def list_time_series_metadata(
+        self,
+        component: Component,
+        variable_name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **user_attributes: Any,
+    ) -> list[TimeSeriesMetadata]:
+        """Return all time series metadata that match the inputs.
+
+        Parameters
+        ----------
+        component : Component
+            Component to which the time series must be attached.
+        variable_name : str | None
+            Optional, search for time series with this name.
+        time_series_type : Type[TimeSeriesData]
+            Optional, search for time series with this type.
+        user_attributes : str
+            Optional, search for time series with these attributes.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> for metadata in system.list_time_series_metadata(gen1):
+            print(metadata)
+        """
+        return self.time_series.list_time_series_metadata(
+            component,
+            variable_name=variable_name,
+            time_series_type=time_series_type,
+            **user_attributes,
+        )
+
     def remove_time_series(
         self,
-        *components: ComponentWithQuantities,
+        *components: Component,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes: Any,
@@ -759,14 +817,15 @@ class System:
 
         Parameters
         ----------
-        components : ComponentWithQuantities
+        components : Component
             Affected components
         variable_name : str | None
-            Optional, defaults to any name.
-        time_series_type : Type[TimeSeriesData] | None
-            Optional, defaults to any type.
+            Optional, search for time series with this name.
+        time_series_type : Type[TimeSeriesData]
+            Optional, search for time series with this type.
         user_attributes : str
-            Remove only time series with these attributes.
+            Optional, search for time series with these attributes.
+
         Raises
         ------
         ISNotStored
@@ -812,7 +871,7 @@ class System:
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
     @property
-    def components(self) -> ComponentManager:
+    def _components(self) -> ComponentManager:
         """Return the component manager."""
         return self._component_mgr
 
@@ -937,12 +996,7 @@ class System:
             )
             raise ISConflictingSystem(msg)
         actual_component = component_type(**values)
-        self.components.add(actual_component, deserialization_in_progress=True)
-        if actual_component.has_time_series():
-            # This allows the time series manager to rebuild the reference counts of time
-            # series and then manage deletions.
-            self.time_series.add_reference_counts(actual_component)
-
+        self._components.add(actual_component, deserialization_in_progress=True)
         return actual_component
 
     def _deserialize_fields(
@@ -989,7 +1043,7 @@ class System:
     ) -> Any:
         component_type = cached_types.get_type(metadata)
         if cached_types.allowed_to_deserialize(component_type):
-            return self.components.get_by_uuid(metadata.uuid)
+            return self._components.get_by_uuid(metadata.uuid)
         return None
 
     def _deserialize_composed_list(
@@ -1001,7 +1055,7 @@ class System:
             assert isinstance(metadata.fields, SerializedComponentReference)
             component_type = cached_types.get_type(metadata.fields)
             if cached_types.allowed_to_deserialize(component_type):
-                deserialized_components.append(self.components.get_by_uuid(metadata.fields.uuid))
+                deserialized_components.append(self._components.get_by_uuid(metadata.fields.uuid))
             else:
                 return None
         return deserialized_components
@@ -1013,7 +1067,7 @@ class System:
     def show_components(self, component_type):
         # Filtered view of certain concrete types (not really concrete types)
         # We can implement custom printing if we want
-        # Dan suggest to remove UUID, system.UUID, time_series_metadata from component.
+        # Dan suggest to remove UUID, system.UUID from component.
         # Nested components gets special handling.
         # What we do with components w/o names? Use .label for nested components.
         raise NotImplementedError
@@ -1030,25 +1084,17 @@ class SystemInfo:
         self.system = system
 
     def extract_system_counts(self) -> tuple[int, int, dict, dict]:
-        component_count: int = 0
-        time_series_count: int = 0
-        component_type_count: dict = defaultdict(int)
-        time_series_type_count: dict = defaultdict(int)
-        for component in self.system.components.iter_all():
-            component_type_count[component.__class__.__name__] += 1
-            if getattr(component, "time_series_metadata", False):
-                for time_series_metadata in component.time_series_metadata:
-                    time_series_type_count[
-                        (
-                            component.__class__.__name__,
-                            time_series_metadata.type,
-                            time_series_metadata.initial_time,
-                            time_series_metadata.resolution,
-                        )
-                    ] += 1
-                    time_series_count += 1
-            component_count += 1
-        return component_count, time_series_count, component_type_count, time_series_type_count
+        component_count = self.system._components.get_num_components()
+        component_type_count = {
+            k.__name__: v for k, v in self.system._components.get_num_components_by_type().items()
+        }
+        ts_counts = self.system.time_series.metadata_store.get_time_series_counts()
+        return (
+            component_count,
+            ts_counts.time_series_count,
+            component_type_count,
+            ts_counts.time_series_type_count,
+        )
 
     def render(self) -> None:
         """Render Summary information from the system."""

@@ -45,13 +45,13 @@ add an annotation as shown below. Otherwise, Pydantic will raise an exception.
 
 ```python
 from pydantic import WithJsonSchema
-from infrasys.component_models import ComponentWithQuantities
+from infrasys import Component
 
-class ComponentWithPintQuantity(ComponentWithQuantities):
+class ComponentWithPintQuantity(Component):
 
     distance: Annotated[Distance, WithJsonSchema({"type": "string"})]
 
-ComponentWithQuantities.model_json_schema()
+Component.model_json_schema()
 ```
 
 **Notes**:

@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any, Optional
+from uuid import UUID
 
 import pyarrow as pa
 from loguru import logger
@@ -82,10 +83,10 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
-    def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
-        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
+    def remove_time_series(self, uuid: UUID) -> None:
+        fpath = self._ts_directory.joinpath(f"{uuid}{EXTENSION}")
         if not fpath.exists():
-            msg = f"No time series with {metadata.time_series_uuid} is stored"
+            msg = f"No time series with {uuid} is stored"
             raise ISNotStored(msg)
         fpath.unlink()
 

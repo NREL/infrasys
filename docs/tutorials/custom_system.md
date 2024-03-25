@@ -37,10 +37,10 @@ can handle format changes that might occur in the future.
 
 ```python
 from uuid import UUID
-from infrasys.component_models import  ComponentWithQuantities
+from infrasys.component import  Component
 from infrasys.location import Location
 
-class Bus(ComponentWithQuantities):
+class Bus(Component):
     """Represents a bus."""
 
     voltage: float
@@ -50,7 +50,7 @@ class Bus(ComponentWithQuantities):
         if self.coordinates is not None and not self.coordinates.is_attached(
             system_uuid=system_uuid
         ):
-            msg = f"{self.summary} has coordinates that are not attached to the system"
+            msg = f"{self.label} has coordinates that are not attached to the system"
             raise ISOperationNotAllowed(msg)
 
     @classmethod
@@ -61,7 +61,7 @@ class Bus(ComponentWithQuantities):
             coordinates=Location(x=0.0, y=0.0),
         )
 
-class Generator(ComponentWithQuantities):
+class Generator(Component):
     """Represents a generator."""
 
     available: bool

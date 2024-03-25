@@ -7,13 +7,12 @@ This example assumes that a system with two generators and time series data has 
 to a file.
 
 ```python
-from infrasys.component_models import Component
-from infrasys import System
+from infrasys import Component, System
 
 system = System.from_json("system.json")
 for component in system.get_components(Component):
-    for metadata in component.list_time_series_metadata():
-        print(f"{component.summary}: {metadata.summary} {metadata.user_attributes}")
+    for metadata in system.list_time_series_metadata(component):
+        print(f"{component.label}: {metadata.label} {metadata.user_attributes}")
 
 Generator.gen1: SingleTimeSeries.active_power {'scenario': 'high', 'model_year': '2030'}
 Generator.gen1: SingleTimeSeries.active_power {'scenario': 'high', 'model_year': '2035'}

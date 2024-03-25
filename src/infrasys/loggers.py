@@ -37,8 +37,7 @@ def setup_logging(
 
 
 if __name__ == "__main__":
-    from infrasys.component_models import Component
-    from infrasys.system import System
+    from infrasys import Component, System
 
     setup_logging(level="INFO")
     system = System()

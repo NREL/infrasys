@@ -4,14 +4,10 @@ from typing import Any
 from uuid import UUID
 
 from infrasys.exceptions import ISOperationNotAllowed
-from infrasys.component_models import (
-    ComponentWithQuantities,
-)
-from infrasys.location import Location
-from infrasys.system import System
+from infrasys import Component, Location, System
 
 
-class SimpleBus(ComponentWithQuantities):
+class SimpleBus(Component):
     """Represents a bus."""
 
     voltage: float
@@ -34,7 +30,7 @@ class SimpleBus(ComponentWithQuantities):
         )
 
 
-class GeneratorBase(ComponentWithQuantities):
+class GeneratorBase(Component):
     """Base class for generators"""
 
     available: bool
@@ -75,7 +71,7 @@ class RenewableGenerator(GeneratorBase):
         )
 
 
-class SimpleSubsystem(ComponentWithQuantities):
+class SimpleSubsystem(Component):
     """Represents a subsystem."""
 
     generators: list[SimpleGenerator]
@@ -108,5 +104,5 @@ if __name__ == "__main__":
     bus = SimpleBus.example()
     gen = SimpleGenerator.example()
     system.add_components(bus, gen)
-    bus2 = system.components.get(SimpleBus, "simple-bus")
+    bus2 = system.get_component(SimpleBus, "simple-bus")
     gen2 = SimpleGenerator(name="gen2", active_power=3.0, rating=1.0, bus=bus2, available=True)

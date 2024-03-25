@@ -1,11 +1,12 @@
 """Manages components"""
 
+from collections import defaultdict
 import itertools
 from typing import Any, Callable, Iterable, Type
 from uuid import UUID
 from loguru import logger
 
-from infrasys.component_models import Component, raise_if_attached
+from infrasys.component import Component, raise_if_attached
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infrasys.models import make_label
 
@@ -71,6 +72,18 @@ class ComponentManager:
 
         assert components
         return components[0]
+
+    def get_num_components(self) -> int:
+        """Return the number of stored components."""
+        return len(self._components_by_uuid)
+
+    def get_num_components_by_type(self) -> dict[Type, int]:
+        """Return the number of stored components by type."""
+        counts: dict[Type, int] = defaultdict(int)
+        for component_type, components_by_type in self._components.items():
+            for components_by_name in components_by_type.values():
+                counts[component_type] += len(components_by_name)
+        return counts
 
     def get_types(self) -> Iterable[Type[Component]]:
         """Return an iterable of all stored types."""
@@ -158,13 +171,6 @@ class ComponentManager:
         Users should not call this directly. It should be called through the system
         so that time series is handled.
         """
-        if component.has_time_series():
-            msg = (
-                "remove cannot be called when there is time series data. Call "
-                "System.remove_component instead"
-            )
-            raise ISOperationNotAllowed(msg)
-
         component_type = type(component)
         # The system method should have already performed the check, but for completeness in case
         # someone calls it directly, check here.
@@ -201,12 +207,10 @@ class ComponentManager:
         values = {}
         for field in type(component).model_fields:
             cur_val = getattr(component, field)
-            if field == "name" and name is not None:
+            if field == "name" and name:
                 # Name is special-cased because it is a frozen field.
                 val = name
-            elif field in ("system_uuid", "time_series_metadata", "uuid"):
-                # The copied component cannot have time series. The UUIDs will get set
-                # automatically.
+            elif field in ("system_uuid", "uuid"):
                 continue
             else:
                 val = cur_val

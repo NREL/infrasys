@@ -1,17 +1,16 @@
 """Manages time series arrays"""
 
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Type
-from uuid import UUID
 
 from loguru import logger
 
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
-from infrasys.component_models import ComponentWithQuantities
-from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed
+from infrasys import Component
+from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
+from infrasys.time_series_metadata_store import TimeSeriesMetadataStore
 from infrasys.time_series_models import (
     SingleTimeSeries,
     TimeSeriesData,
@@ -41,14 +40,14 @@ class TimeSeriesManager:
             if _process_time_series_kwarg("time_series_in_memory", **kwargs)
             else ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
         )
+        self._metadata_store = TimeSeriesMetadataStore()
 
-        # This tracks the number of references to each time series array across components.
-        # When an array is removed and no references remain, it can be deleted.
-        # This is only tracked in memory and has to be rebuilt during deserialization.
-        self._ref_counts: dict[UUID, int] = defaultdict(lambda: 0)
-
-        # TODO: enforce one resolution
         # TODO: create parsing mechanism? CSV, CSV + JSON
+
+    @property
+    def metadata_store(self) -> TimeSeriesMetadataStore:
+        """Return the time series metadata store."""
+        return self._metadata_store
 
     @property
     def storage(self) -> TimeSeriesStorageBase:
@@ -58,7 +57,7 @@ class TimeSeriesManager:
     def add(
         self,
         time_series: TimeSeriesData,
-        *components: ComponentWithQuantities,
+        *components: Component,
         **user_attributes: Any,
     ) -> None:
         """Store a time series array for one or more components.
@@ -67,7 +66,7 @@ class TimeSeriesManager:
         ----------
         time_series : TimeSeriesData
             Time series data to store.
-        components : ComponentWithQuantities
+        components : Component
             Add the time series to all of these components.
         user_attributes : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
@@ -81,40 +80,21 @@ class TimeSeriesManager:
             Raised if the manager was created in read-only mode.
         """
         self._handle_read_only()
+        if not components:
+            raise ISOperationNotAllowed("add_time_series requires at least one component")
+
         ts_type = type(time_series)
         metadata_type = ts_type.get_time_series_metadata_type()
         metadata = metadata_type.from_data(time_series, **user_attributes)
-        variable_name = time_series.variable_name
 
-        for component in components:
-            if component.has_time_series(
-                variable_name=variable_name,
-                time_series_type=ts_type,
-                **metadata.user_attributes,
-            ):
-                msg = (
-                    f"{component.label} already has a time series with "
-                    f"{ts_type} {variable_name} {user_attributes=}"
-                )
-                raise ISAlreadyAttached(msg)
-
-        if time_series.uuid not in self._ref_counts:
+        if not self._metadata_store.has_time_series(time_series.uuid):
             self._storage.add_time_series(metadata, time_series)
 
-        for component in components:
-            self._ref_counts[time_series.uuid] += 1
-            component.add_time_series_metadata(metadata)
-
-    def add_reference_counts(self, component: ComponentWithQuantities) -> None:
-        """Must be called for each component after deserialization in order to rebuild the
-        reference counts for each time array.
-        """
-        for metadata in component.list_time_series_metadata():
-            self._ref_counts[metadata.time_series_uuid] += 1
+        self._metadata_store.add(metadata, *components)
 
     def get(
         self,
-        component: ComponentWithQuantities,
+        component: Component,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
@@ -135,16 +115,32 @@ class TimeSeriesManager:
         --------
         list_time_series
         """
-        metadata = component.get_time_series_metadata(
-            variable_name,
-            time_series_type=time_series_type,
+        metadata = self._metadata_store.get_metadata(
+            component,
+            variable_name=variable_name,
+            time_series_type=time_series_type.__name__,
             **user_attributes,
         )
         return self._get_by_metadata(metadata, start_time=start_time, length=length)
 
+    def has_time_series(
+        self,
+        component: Component,
+        variable_name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **user_attributes,
+    ) -> bool:
+        """Return True if the component has time series matching the inputs."""
+        return self._metadata_store.has_time_series_metadata(
+            component,
+            variable_name=variable_name,
+            time_series_type=time_series_type.__name__,
+            **user_attributes,
+        )
+
     def list_time_series(
         self,
-        component: ComponentWithQuantities,
+        component: Component,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
@@ -152,16 +148,32 @@ class TimeSeriesManager:
         **user_attributes: Any,
     ) -> list[TimeSeriesData]:
         """Return all time series that match the inputs."""
-        metadata = component.list_time_series_metadata(
-            variable_name,
+        metadata = self.list_time_series_metadata(
+            component,
+            variable_name=variable_name,
             time_series_type=time_series_type,
             **user_attributes,
         )
         return [self._get_by_metadata(x, start_time=start_time, length=length) for x in metadata]
 
+    def list_time_series_metadata(
+        self,
+        component: Component,
+        variable_name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **user_attributes: Any,
+    ) -> list[TimeSeriesMetadata]:
+        """Return all time series metadata that match the inputs."""
+        return self._metadata_store.list_metadata(
+            component,
+            variable_name=variable_name,
+            time_series_type=time_series_type.__name__,
+            **user_attributes,
+        )
+
     def remove(
         self,
-        *components: ComponentWithQuantities,
+        *components: Component,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes: Any,
@@ -176,57 +188,30 @@ class TimeSeriesManager:
             Raised if the manager was created in read-only mode.
         """
         self._handle_read_only()
-        uuids: dict[UUID, int] = defaultdict(lambda: 0)
-        all_metadata = []
-        for component in components:
-            for metadata in component.list_time_series_metadata(
-                variable_name, time_series_type=time_series_type, **user_attributes
-            ):
-                uuids[metadata.time_series_uuid] += 1
-                all_metadata.append(metadata)
-
-        for uuid, count in uuids.items():
-            if uuid not in self._ref_counts:
-                msg = f"Bug: {uuid=} is not stored in self._ref_counts"
-                raise Exception(msg)
-            if count > self._ref_counts[uuid]:
-                msg = (
-                    f"Bug: Removing time series {variable_name=} {time_series_type=} {uuid=}"
-                    "will decrease the reference counts below 0."
-                )
-                raise Exception(msg)
-
-        count_removed = 0
-        for component in components:
-            removed = component.remove_time_series_metadata(
-                variable_name, time_series_type=time_series_type, **user_attributes
-            )
-            count_removed += len(removed)
-
-        if count_removed != len(all_metadata):
-            msg = f"Bug: {count_removed=} {len(all_metadata)=}"
-            raise Exception(msg)
-
-        for metadata in all_metadata:
-            self._ref_counts[metadata.time_series_uuid] -= 1
-            if self._ref_counts[metadata.time_series_uuid] <= 0:
-                self._storage.remove_time_series(metadata)
-                self._ref_counts.pop(metadata.time_series_uuid)
-                logger.info("Removed time series {}.{}", time_series_type, variable_name)
+        time_series_uuids = self._metadata_store.remove(
+            *components,
+            variable_name=variable_name,
+            time_series_type=time_series_type.__name__,
+            **user_attributes,
+        )
+        missing_uuids = self._metadata_store.list_missing_time_series(time_series_uuids)
+        for uuid in missing_uuids:
+            self._storage.remove_time_series(uuid)
+            logger.info("Removed time series {}.{}", time_series_type, variable_name)
 
     def copy(
         self,
-        dst: ComponentWithQuantities,
-        src: ComponentWithQuantities,
+        dst: Component,
+        src: Component,
         name_mapping: dict[str, str] | None = None,
     ) -> None:
         """Copy all time series from src to dst.
 
         Parameters
         ----------
-        dst : ComponentWithQuantities
+        dst : Component
             Destination component
-        src : ComponentWithQuantities
+        src : Component
             Source component
         name_mapping : dict[str, str]
             Optionally map src names to different dst names.
@@ -254,8 +239,9 @@ class TimeSeriesManager:
         )
 
     def serialize(self, dst: Path | str, src: Optional[Path | str] = None) -> None:
-        """Serialize the time series data to base_dir."""
+        """Serialize the time series data to dst."""
         self._storage.serialize(dst, src)
+        self._metadata_store.backup(dst)
 
     @classmethod
     def deserialize(
@@ -272,6 +258,7 @@ class TimeSeriesManager:
             raise ISOperationNotAllowed(msg)
 
         time_series_dir = Path(parent_dir) / data["directory"]
+
         if _process_time_series_kwarg("time_series_read_only", **kwargs):
             storage = ArrowTimeSeriesStorage.create_with_permanent_directory(time_series_dir)
         else:
@@ -279,6 +266,7 @@ class TimeSeriesManager:
             storage.serialize(src=time_series_dir, dst=storage.get_time_series_directory())
 
         mgr = cls(storage=storage, **kwargs)
+        mgr.metadata_store.restore(time_series_dir)
         return mgr
 
     def _handle_read_only(self) -> None:

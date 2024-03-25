@@ -8,12 +8,10 @@ import pytest
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
 
-from infrasys.location import Location
-from infrasys.component_models import ComponentWithQuantities
+from infrasys import Component, Location, SingleTimeSeries
 from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
-from infrasys.time_series_models import SingleTimeSeries
 from .models.simple_system import (
     SimpleSystem,
     SimpleBus,
@@ -22,7 +20,7 @@ from .models.simple_system import (
 )
 
 
-class ComponentWithPintQuantity(ComponentWithQuantities):
+class ComponentWithPintQuantity(Component):
     """Test component with a container of quantities."""
 
     distance: Annotated[Distance, WithJsonSchema({"type": "string"})]
@@ -49,7 +47,7 @@ def test_serialization(tmp_path):
             available=True,
         )
         subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen1, gen2])
-        system.components.add(geo, bus, gen1, gen2, subsystem)
+        system.add_components(geo, bus, gen1, gen2, subsystem)
 
     components = list(system.iter_all_components())
     num_components = len(components)
@@ -167,7 +165,7 @@ def test_system_with_time_series_normalization(tmp_path, in_memory):
         name="test-system", auto_add_composed_components=True, time_series_in_memory=in_memory
     )
     gen = SimpleGenerator.example()
-    system.components.add(gen)
+    system.add_components(gen)
     variable_name = "active_power"
     length = 8784
     data = list(range(length))

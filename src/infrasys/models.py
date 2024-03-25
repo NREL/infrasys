@@ -29,9 +29,9 @@ class InfraSysBaseModel(BaseModel):
 
 
 class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
-    """Base class for all Infrastructure Systems types with names and UUIDs"""
+    """Base class for all Infrastructure Systems types with UUIDs"""
 
-    uuid: UUID = Field(default_factory=uuid4, repr=False, exclude=True)
+    uuid: UUID = Field(default_factory=uuid4, repr=False)
 
     @field_serializer("uuid")
     def _serialize_uuid(self, _) -> str:
@@ -58,7 +58,7 @@ class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
     def label(self) -> str:
         """Provides a description of an instance."""
         class_name = self.__class__.__name__
-        name = getattr(self, "name", None) or str(self.uuid)
+        name = getattr(self, "name", "") or str(self.uuid)
         return make_label(class_name, name)
 
 
