@@ -8,7 +8,7 @@ from loguru import logger
 
 from infrasys.component import Component, raise_if_attached
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
-from infrasys.models import make_label
+from infrasys.models import make_label, get_class_and_name_from_label
 
 
 class ComponentManager:
@@ -84,6 +84,32 @@ class ComponentManager:
             for components_by_name in components_by_type.values():
                 counts[component_type] += len(components_by_name)
         return counts
+
+    def get_by_label(self, label: str) -> Any:
+        """Return the component with the passed label.
+
+        Raises
+        ------
+        ISOperationNotAllowed
+            Raised if there is more than one matching component.
+        """
+        class_name, name_or_uuid = get_class_and_name_from_label(label)
+        if isinstance(name_or_uuid, UUID):
+            return self.get_by_uuid(name_or_uuid)
+
+        for component_type, components_by_name in self._components.items():
+            if component_type.__name__ == class_name:
+                components = components_by_name.get(name_or_uuid)
+                if components is None:
+                    msg = f"No component with {label=} is stored."
+                    raise ISNotStored(msg)
+                if len(components) > 1:
+                    msg = f"There is more than one component with {label=}."
+                    raise ISOperationNotAllowed(msg)
+                return components[0]
+
+        msg = f"No component with {label=} is stored."
+        raise ISNotStored(msg)
 
     def get_types(self) -> Iterable[Type[Component]]:
         """Return an iterable of all stored types."""

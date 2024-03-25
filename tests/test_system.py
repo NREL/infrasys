@@ -87,6 +87,8 @@ def test_get_components(simple_system: SimpleSystem):
 
     assert len(list(system.list_components_by_name(RenewableGenerator, "renewable-gen"))) == 5
 
+    gen = all_components[0]
+    assert system.get_component_by_uuid(gen.uuid) is gen
     with pytest.raises(ISNotStored):
         system.get_component_by_uuid(uuid4())
 
@@ -98,6 +100,25 @@ def test_get_components(simple_system: SimpleSystem):
         "SimpleGenerator",
         "SimpleSubsystem",
     ]
+
+
+def test_get_component_by_label():
+    system = SimpleSystem(auto_add_composed_components=True)
+    gen = RenewableGenerator.example()
+    system.add_component(gen)
+    assert system.get_component_by_label(gen.label) is gen
+    with pytest.raises(ISNotStored):
+        system.get_component_by_label("SimpleGenerator.invalid")
+    with pytest.raises(ISNotStored):
+        system.get_component_by_label("invalid.invalid")
+    coordinates = gen.bus.coordinates
+    assert coordinates is not None
+    assert system.get_component_by_label(coordinates.label) is coordinates
+
+    gen = RenewableGenerator.example()
+    system.add_component(gen)
+    with pytest.raises(ISOperationNotAllowed):
+        system.get_component_by_label(gen.label)
 
 
 def test_get_components_multiple_types():
