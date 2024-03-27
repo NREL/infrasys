@@ -65,3 +65,17 @@ class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
 def make_label(class_name: str, name: str) -> str:
     """Make a string label of an instance."""
     return f"{class_name}.{name}"
+
+
+def get_class_and_name_from_label(label: str) -> tuple[str, str | UUID]:
+    """Return the class and name from a label.
+    If the name is a stringified UUID, it will be converted to a UUID.
+    """
+    class_name, name = label.split(".")
+    name_or_uuid: str | UUID = name
+    try:
+        name_or_uuid = UUID(name)
+    except ValueError:
+        pass
+
+    return class_name, name_or_uuid

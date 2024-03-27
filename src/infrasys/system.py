@@ -394,6 +394,30 @@ class System:
         """
         return self._component_mgr.get(component_type, name)
 
+    def get_component_by_label(self, label: str) -> Any:
+        """Return the component with the label.
+
+        Note that this method is slower than :meth:`get_component` because the
+        component type cannot be looked up directly. Code that is looping over components
+        repeatedly should not use this method.
+
+        Parameters
+        ----------
+        label : str
+
+        Raises
+        ------
+        ISNotStored
+            Raised if the UUID is not stored.
+        ISOperationNotAllowed
+            Raised if there is more than one matching component.
+
+        Examples
+        --------
+        >>> component = system.get_component_by_label("Bus.bus1")
+        """
+        return self._component_mgr.get_by_label(label)
+
     def get_component_by_uuid(self, uuid: UUID) -> Any:
         """Return the component with the input UUID.
 
@@ -440,7 +464,7 @@ class System:
 
         To request multiple component types:
         >>> for component in system.get_components(SimpleGenerator, SimpleBus)
-            print(component.label)
+        print(component.label)
         """
         return self._component_mgr.iter(*component_type, filter_func=filter_func)
 
@@ -450,7 +474,7 @@ class System:
         Examples
         --------
         >>> for component_type in system.get_component_types():
-            print(component_type)
+        print(component_type)
         """
         return self._component_mgr.get_types()
 
