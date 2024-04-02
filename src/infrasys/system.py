@@ -1152,7 +1152,7 @@ class SystemInfo:
             title_justify="left",
             title_style="bold",
         )
-        component_table.add_column("Type", width=20)
+        component_table.add_column("Type", min_width=20)
         component_table.add_column("Count", justify="right")
 
         for component_type, component_count in sorted(component_type_count.items()):
@@ -1170,7 +1170,7 @@ class SystemInfo:
             title_justify="left",
             title_style="bold",
         )
-        time_series_table.add_column("Component Type", width=20)
+        time_series_table.add_column("Component Type", min_width=20)
         time_series_table.add_column("Time Series Type", justify="right")
         time_series_table.add_column("Initial time", justify="right")
         time_series_table.add_column("Resolution", justify="right")
