@@ -1,4 +1,8 @@
 # infrasys
+
+[![Main - CI](https://github.com/NREL/infrasys/workflows/Main%20-%20CI/badge.svg)](https://github.com/NREL/infrasys/actions/workflows/main_tests.yml)
+[![codecov](https://codecov.io/gh/NREL/infrasys/branch/main/graph/badge.svg)](https://codecov.io/gh/NREL/infrasys)
+
 This package implements a data store for components and time series in support of Python-based
 modeling packages. While it is designed to support teams modeling transmission and distribution
 systems for electrical grids, it can be used by any package that needs to store components
