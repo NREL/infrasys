@@ -6,7 +6,7 @@ from typing import Any, Callable, Iterable, Type
 from uuid import UUID
 from loguru import logger
 
-from infrasys.component import Component, raise_if_attached
+from infrasys.component import Component
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infrasys.models import make_label, get_class_and_name_from_label
 
@@ -211,7 +211,6 @@ class ComponentManager:
         for i, comp in enumerate(container):
             if comp.uuid == component.uuid:
                 container.pop(i)
-                component.system_uuid = None
                 if not self._components[component_type][component.name]:
                     self._components[component_type].pop(component.name)
                     self._components_by_uuid.pop(component.uuid)
@@ -229,14 +228,14 @@ class ComponentManager:
         name: str | None = None,
         attach=False,
     ) -> Component:
-        """Create a copy of the component. Time series data is excluded."""
+        """Create a shallow copy of the component."""
         values = {}
         for field in type(component).model_fields:
             cur_val = getattr(component, field)
             if field == "name" and name:
                 # Name is special-cased because it is a frozen field.
                 val = name
-            elif field in ("system_uuid", "uuid"):
+            elif field in ("uuid",):
                 continue
             else:
                 val = cur_val
@@ -249,6 +248,11 @@ class ComponentManager:
             self.add(new_component)
 
         return new_component
+
+    def deepcopy(self, component: Component) -> Component:
+        """Create a deep copy of the component."""
+        values = component.model_dump()
+        return type(component)(**values)
 
     def change_uuid(self, component: Component) -> None:
         """Change the component UUID."""
@@ -267,12 +271,12 @@ class ComponentManager:
         return
 
     def _add(self, component: Component, deserialization_in_progress: bool) -> None:
-        raise_if_attached(component)
+        self.raise_if_attached(component)
         if not deserialization_in_progress:
             # TODO: Do we want any checks during deserialization? User could change the JSON.
             # We could prevent the user from changing the JSON with a checksum.
             self._check_component_addition(component)
-            component.check_component_addition(self._uuid)
+            component.check_component_addition()
         if component.uuid in self._components_by_uuid:
             msg = f"{component.label} with UUID={component.uuid} is already stored"
             raise ISAlreadyAttached(msg)
@@ -287,7 +291,6 @@ class ComponentManager:
 
         self._components[cls][name].append(component)
         self._components_by_uuid[component.uuid] = component
-        component.system_uuid = self._uuid
         logger.debug("Added {} to the system", component.label)
 
     def _check_component_addition(self, component: Component) -> None:
@@ -308,7 +311,7 @@ class ComponentManager:
     def _handle_composed_component(self, component: Component) -> None:
         """Do what's needed for a composed component depending on system settings:
         nothing, add, or raise an exception."""
-        if component.system_uuid is not None:
+        if component.uuid in self._components_by_uuid:
             return
 
         if self._auto_add_composed_components:
@@ -320,3 +323,21 @@ class ComponentManager:
                 f"its composed component {component.label} is not already attached."
             )
             raise ISOperationNotAllowed(msg)
+
+    def raise_if_attached(self, component: Component):
+        """Raise an exception if this component is attached to a system."""
+        if component.uuid in self._components_by_uuid:
+            msg = f"{component.label} is already attached to the system"
+            raise ISAlreadyAttached(msg)
+
+    def raise_if_not_attached(self, component: Component):
+        """Raise an exception if this component is not attached to a system.
+
+        Parameters
+        ----------
+        system_uuid : UUID
+            The component must be attached to the system with this UUID.
+        """
+        if component.uuid not in self._components_by_uuid:
+            msg = f"{component.label} is not attached to the system"
+            raise ISNotStored(msg)
