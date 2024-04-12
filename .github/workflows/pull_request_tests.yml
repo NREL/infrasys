@@ -4,7 +4,7 @@ on: pull_request
 
 jobs:
   test:
-    runs-on: cadet-runners
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.11"]
@@ -23,7 +23,7 @@ jobs:
       run: |
         python -m pytest -v --disable-warnings tests
   mypy:
-    runs-on: cadet-runners
+    runs-on: ubuntu-latest
     name: "mypy"
     steps:
       - uses: davidslusser/actions_python_mypy@v1.0.0
@@ -31,7 +31,7 @@ jobs:
           src: "src"
           options: "--ignore-missing-imports"
   ruff:
-    runs-on: cadet-runners
+    runs-on: ubuntu-latest
     name: "ruff"
     steps:
       - uses: davidslusser/actions_python_ruff@v1.0.0

@@ -52,9 +52,9 @@ dev = [
 ]
 
 [project.urls]
-Documentation = "https://github.nrel.gov/cadet/infrasys#readme"
-Issues = "https://github.nrel.gov/cadet/infrasys/issues"
-Source = "https://github.nrel.gov/cadet/infrasys"
+Documentation = "https://github.com/NREL/infrasys#readme"
+Issues = "https://github.com/NREL/infrasys/issues"
+Source = "https://github.com/NREL/infrasys"
 
 [tool.pytest.ini_options]
 minversion = "6.0"

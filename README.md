@@ -23,7 +23,7 @@ nested objects.
 
 ## Installation
 ```
-$ pip install git+ssh://git@github.nrel.gov/cadet/infrastructure_systems.git@main
+$ pip install git+ssh://git@github.com/NREL/infrastructure_systems.git@main
 ```
 
 ## Developer installation
