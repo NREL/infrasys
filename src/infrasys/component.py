@@ -1,17 +1,12 @@
 """Defines base models for components."""
 
-from typing import Any, Optional
-from uuid import UUID
+from typing import Any
 
-from pydantic import Field, field_serializer
+from pydantic import Field
 from rich import print as _pprint
 from typing_extensions import Annotated
 
 from infrasys.base_quantity import BaseQuantity
-from infrasys.exceptions import (
-    ISNotStored,
-    ISAlreadyAttached,
-)
 from infrasys.models import (
     InfraSysBaseModelWithIdentifers,
 )
@@ -28,26 +23,9 @@ class Component(InfraSysBaseModelWithIdentifers):
     """Base class for all models representing entities that get attached to a System."""
 
     name: Annotated[str, Field(frozen=True)]
-    system_uuid: Annotated[Optional[UUID], Field(repr=False, exclude=True)] = None
 
-    @field_serializer("system_uuid")
-    def _serialize_system_uuid(self, _) -> str:
-        return str(self.system_uuid)
-
-    def check_component_addition(self, system_uuid: UUID) -> None:
+    def check_component_addition(self) -> None:
         """Perform checks on the component before adding it to a system."""
-
-    def is_attached(self, system_uuid: Optional[UUID] = None) -> bool:
-        """Return True if the component is attached to a system.
-
-        Parameters
-        ----------
-        system_uuid : UUID
-            Only return True if the component is attached to the system with this UUID.
-        """
-        if self.system_uuid is None:
-            return False
-        return self.system_uuid == system_uuid
 
     def model_dump_custom(self, *args, **kwargs) -> dict[str, Any]:
         """Custom serialization for this package"""
@@ -80,26 +58,6 @@ class Component(InfraSysBaseModelWithIdentifers):
 
     def pprint(self):
         return _pprint(self)
-
-
-def raise_if_attached(component: Component):
-    """Raise an exception if this component is attached to a system."""
-    if component.system_uuid is not None:
-        msg = f"{component.label} is attached to system {component.system_uuid}"
-        raise ISAlreadyAttached(msg)
-
-
-def raise_if_not_attached(component: Component, system_uuid: UUID):
-    """Raise an exception if this component is not attached to a system.
-
-    Parameters
-    ----------
-    system_uuid : UUID
-        The component must be attached to the system with this UUID.
-    """
-    if component.system_uuid is None or component.system_uuid != system_uuid:
-        msg = f"{component.label} is not attached to the system"
-        raise ISNotStored(msg)
 
 
 def serialize_component_reference(component: Component) -> dict[str, Any]:

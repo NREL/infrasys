@@ -1,9 +1,7 @@
 """Defines models that can be used for testing the package."""
 
 from typing import Any
-from uuid import UUID
 
-from infrasys.exceptions import ISOperationNotAllowed
 from infrasys import Component, Location, System
 
 
@@ -12,14 +10,6 @@ class SimpleBus(Component):
 
     voltage: float
     coordinates: Location | None = None
-
-    def check_component_addition(self, system_uuid: UUID) -> None:
-        if self.coordinates is not None and not self.coordinates.is_attached(
-            system_uuid=system_uuid
-        ):
-            # Other packages might want to auto-add in the System class.
-            msg = f"{self.label} has coordinates that are not attached to the system"
-            raise ISOperationNotAllowed(msg)
 
     @classmethod
     def example(cls) -> "SimpleBus":

@@ -428,15 +428,25 @@ def test_copy_component(simple_system_with_time_series: SimpleSystem):
     gen2 = system.copy_component(gen1)
     assert gen2.uuid != gen1.uuid
     assert gen2.name == gen1.name
-    assert gen2.system_uuid is None
+    assert gen2.bus is gen1.bus
 
     gen3 = system.copy_component(gen1, name="gen3")
     assert gen3.name == "gen3"
-    assert gen2.system_uuid is None
 
     gen4 = system.copy_component(gen1, name="gen4", attach=True)
     assert gen4.name == "gen4"
-    assert gen4.system_uuid == gen1.system_uuid
+
+
+def test_deepcopy_component(simple_system_with_time_series: SimpleSystem):
+    system = simple_system_with_time_series
+    gen1 = system.get_component(SimpleGenerator, "test-gen")
+    subsystem = SimpleSubsystem(name="subsystem1", generators=[gen1])
+    system.add_component(subsystem)
+    gen2 = system.deepcopy_component(gen1)
+    assert gen2.name == gen1.name
+    assert gen2.uuid == gen1.uuid
+    assert gen2.bus.uuid == gen1.bus.uuid
+    assert gen2.bus is not gen1.bus
 
 
 @pytest.mark.parametrize("in_memory", [True, False])
@@ -463,7 +473,6 @@ def test_remove_component(in_memory):
 
     system.remove_component_by_uuid(gen2.uuid)
     assert not system.has_time_series(gen2)
-    assert gen2.system_uuid is None
 
     with pytest.raises(ISNotStored):
         system.remove_component(gen2)
@@ -501,7 +510,6 @@ def test_system_to_dict():
     assert len(component_dict) == 3  # 3 generators
     assert component_dict[0]["bus"] == gen1.bus.label
 
-    exclude = {"system_uuid"}
     variable_name = "active_power"
     length = 8784
     data = range(length)
@@ -509,9 +517,8 @@ def test_system_to_dict():
     resolution = timedelta(hours=1)
     ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     system.add_time_series(ts, gen1)
-    component_dicts = list(system.to_records(SimpleGenerator, exclude=exclude))
+    component_dicts = list(system.to_records(SimpleGenerator))
     assert len(component_dicts) == 3  # 3 generators
-    assert "system_uuid" not in component_dicts[0]
 
 
 def test_time_series_metadata_sql():

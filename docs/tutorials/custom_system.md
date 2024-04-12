@@ -46,13 +46,6 @@ class Bus(Component):
     voltage: float
     coordinates: Location | None = None
 
-    def check_component_addition(self, system_uuid: UUID):
-        if self.coordinates is not None and not self.coordinates.is_attached(
-            system_uuid=system_uuid
-        ):
-            msg = f"{self.label} has coordinates that are not attached to the system"
-            raise ISOperationNotAllowed(msg)
-
     @classmethod
     def example(cls) -> "Bus":
         return Bus(

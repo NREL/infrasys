@@ -15,12 +15,10 @@ from rich.table import Table
 from infrasys.exceptions import (
     ISFileExists,
     ISConflictingArguments,
-    ISConflictingSystem,
 )
 from infrasys.models import make_label
 from infrasys.component import (
     Component,
-    raise_if_not_attached,
 )
 from infrasys.component_manager import ComponentManager
 from infrasys.serialization import (
@@ -349,8 +347,14 @@ class System:
         name: str | None = None,
         attach: bool = False,
     ) -> Any:
-        """Create a copy of the component. Time series data is excluded. The new component will
-        have a different UUID from the original.
+        """Create a copy of the component. Time series data is excluded.
+
+        - The new component will have a different UUID than the original.
+        - The copied component will have shared references to any composed components.
+
+        The intention of this method is to provide a way to create variants of a component that
+        will be added to the same system. Please refer to :`deepcopy_component`: to create
+        copies that are suitable for addition to a different system.
 
         Parameters
         ----------
@@ -366,8 +370,37 @@ class System:
         >>> gen1 = system.get_component(Generator, "gen1")
         >>> gen2 = system.copy_component(gen, name="gen2")
         >>> gen3 = system.copy_component(gen, name="gen3", attach=True)
+
+        See Also
+        --------
+        deepcopy_component
         """
         return self._component_mgr.copy(component, name=name, attach=attach)
+
+    def deepcopy_component(self, component: Component) -> Any:
+        """Create a deep copy of the component and all composed components. All attributes,
+        including names and UUIDs, will be identical to the original. Unlike
+        :meth:`copy_component`, there will be no shared references to composed components.
+
+        The intention of this method is to provide a way to create variants of a component that
+        will be added to a different system. Please refer to :`copy_component`: to create
+        copies that are suitable for addition to the same system.
+
+        Parameters
+        ----------
+        component : Component
+            Source component
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> gen2 = system.deepcopy_component(gen)
+
+        See Also
+        --------
+        copy_component
+        """
+        return self._component_mgr.deepcopy(component)
 
     def get_component(self, component_type: Type[Component], name: str) -> Any:
         """Return the component with the passed type and name.
@@ -523,7 +556,7 @@ class System:
         >>> gen = system.get_component(Generator, "gen1")
         >>> system.remove_component(gen)
         """
-        raise_if_not_attached(component, self.uuid)
+        self._component_mgr.raise_if_not_attached(component)
         if self.has_time_series(component):
             for metadata in self._time_series_mgr.list_time_series_metadata(component):
                 self.remove_time_series(
@@ -1012,13 +1045,6 @@ class System:
 
         metadata = SerializedTypeMetadata(**component[TYPE_METADATA])
         component_type = cached_types.get_type(metadata.fields)
-        system_uuid = values.pop("system_uuid")
-        if str(self.uuid) != system_uuid:
-            msg = (
-                "component has a system_uuid that conflicts with the system: "
-                f"{values} component's system_uuid={system_uuid} system={self.uuid}"
-            )
-            raise ISConflictingSystem(msg)
         actual_component = component_type(**values)
         self._components.add(actual_component, deserialization_in_progress=True)
         return actual_component
