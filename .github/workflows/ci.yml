@@ -1,18 +1,17 @@
-name: Main - CI
+name: CI
 
 on:
-  schedule:
-  - cron: "0 0 * * 1-5"
   push:
     branches:
       - main
+  pull_request:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-latest, windows-latest]
     strategy:
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
@@ -24,9 +23,16 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install ".[dev]"
-    - name: Run pytest
+    - name: Run pytest with coverage
       run: |
-        python -m pytest -v --disable-warnings tests
+        pytest -v --cov --cov-report=xml
+    - name: codecov
+      uses: codecov/codecov-action@v4.2.0
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        name: infrasys-tests
+        fail_ci_if_error: false
+        verbose: true
   mypy:
     runs-on: ubuntu-latest
     name: "mypy"

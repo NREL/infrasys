@@ -1,9 +1,0 @@
-comment:
-  layout: "condensed_header, diff, flags, components"
-  
-component_management:
-  individual_components:
-    - component_id: src  # this is an identifier that should not be changed
-      name: infrasys  # this is a display name, and can be changed freely
-      paths:
-        - src
