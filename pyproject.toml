@@ -56,12 +56,12 @@ Documentation = "https://github.com/NREL/infrasys#readme"
 Issues = "https://github.com/NREL/infrasys/issues"
 Source = "https://github.com/NREL/infrasys"
 
-[tool.pytest.ini_options]
-minversion = "6.0"
-addopts = "-ra"
-testpaths = [
-    "tests",
-]
+# [tool.pytest.ini_options]
+# minversion = "6.0"
+# addopts = "-ra"
+# testpaths = [
+#     "tests",
+# ]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -109,7 +109,7 @@ docstring-code-line-length = "dynamic"
 "__init__.py" = ["E402"]
 "**/{tests,docs,tools}/*" = ["E402"]
 
-[tool.coverage.run]
-include = [
-    "src/infrasys/**/*.py",
-]
+# [tool.coverage.run]
+# include = [
+#     "src/infrasys/**/*.py",
+# ]
