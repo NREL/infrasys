@@ -2,6 +2,9 @@ name: Pytest
 
 on: pull_request
 
+env:
+  COVERAGE_DEBUG: trace 
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,7 +24,18 @@ jobs:
         python -m pip install ".[dev]"
     - name: Run pytest
       run: |
-        python -m pytest -v --disable-warnings tests
+        python -m pytest -v --disable-warnings --cov=./ --cov-report=xml:coverage.xml
+        cat coverage.xml
+    - name: codecov
+      uses: codecov/codecov-action@v4.0.1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        file: ./coverage.xml
+        flags: unittests
+        env_vars: OS,PYTHON
+        name: codecov-umbrella
+        fail_ci_if_error: false
+        verbose: true
   mypy:
     runs-on: ubuntu-latest
     name: "mypy"
