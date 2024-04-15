@@ -57,6 +57,7 @@ Issues = "https://github.com/NREL/infrasys/issues"
 Source = "https://github.com/NREL/infrasys"
 
 [tool.pytest.ini_options]
+pythonpath = "src"
 minversion = "6.0"
 addopts = "-ra"
 testpaths = [

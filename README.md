@@ -1,6 +1,6 @@
 # infrasys
 
-[![Main - CI](https://github.com/NREL/infrasys/workflows/Main%20-%20CI/badge.svg)](https://github.com/NREL/infrasys/actions/workflows/main_tests.yml)
+[![CI](https://github.com/NREL/infrasys/workflows/CI/badge.svg)](https://github.com/NREL/infrasys/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/NREL/infrasys/branch/main/graph/badge.svg)](https://codecov.io/gh/NREL/infrasys)
 
 This package implements a data store for components and time series in support of Python-based
@@ -39,3 +39,10 @@ Please install `pre-commit` so that your code is checked before making commits.
 ```
 $ pre-commit install
 ```
+
+## License
+infrasys is released under a BSD 3-Clause
+[License](https://github.com/NREL/infrasys/blob/main/LICENSE.txt).
+
+infrasys was developed under software record SWR-24-42 at the National Renewable Energy Laboratory
+([NREL](https://www.nrel.gov)).
