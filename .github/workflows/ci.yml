@@ -7,11 +7,12 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  pytest:
+    runs-on:  {{ matrix.os }}
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
+        os: [ubuntu-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@v4
