@@ -20,14 +20,13 @@ jobs:
         python -m pip install '.[dev]'
     - name: Generate coverage report
       run: |
-        python -m  pytest --disable-warnings --cov=infrasys
+        pytest --disable-warnings --cov
     - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v4.0.1
+      uses: codecov/codecov-action@v4.2.0
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         slug: NREL/infrasys
-        flags: smart-tests
-        env_vars: OS,PYTHON
-        name: codecov-umbrella
+        # flags: smart-tests
+        # name: codecov-umbrella
         fail_ci_if_error: false
         verbose: true
