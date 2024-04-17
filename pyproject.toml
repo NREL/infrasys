@@ -27,11 +27,11 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "numpy==1.26.4",
-    "pyarrow==15.0.2",
-    "pint==0.23",
-    "loguru==0.7.2",
-    "rich==13.7.1",
+    "numpy~=1.26.4",
+    "pyarrow~=15.0.2",
+    "pint~=0.23",
+    "loguru~=0.7.2",
+    "rich~=13.7.1",
     "pydantic >= 2.4, <= 3",
 ]
 [project.optional-dependencies]
