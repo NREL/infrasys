@@ -4,27 +4,27 @@ build-backend = "hatchling.build"
 
 [project]
 name = "infrasys"
-version = "0.0.2"
+version = "0.0.3"
 description = ''
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
 license = "BSD-3-Clause"
 keywords = []
 authors = [
-  { name = "Aadil Latif", email = "aadil.latif@nrel.gov" },
-  { name = "Daniel Thom", email = "daniel.thom@nrel.gov" },
-  { name = "Kapil Duwadi", email = "kapil.duwadi@nrel.gov" },
-  { name = "Pedro Andres Sanchez Perez", email = "pedroandres.sanchezperez@nrel.gov" },
-  { name = "Tarek Elgindy", email = "tarek.elgindy@nrel.gov" },
+    { name = "Aadil Latif", email = "aadil.latif@nrel.gov" },
+    { name = "Daniel Thom", email = "daniel.thom@nrel.gov" },
+    { name = "Kapil Duwadi", email = "kapil.duwadi@nrel.gov" },
+    { name = "Pedro Andres Sanchez Perez", email = "pedroandres.sanchezperez@nrel.gov" },
+    { name = "Tarek Elgindy", email = "tarek.elgindy@nrel.gov" },
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
     "numpy~=1.26.4",
@@ -60,9 +60,7 @@ Source = "https://github.com/NREL/infrasys"
 pythonpath = "src"
 minversion = "6.0"
 addopts = "-ra"
-testpaths = [
-    "tests",
-]
+testpaths = ["tests"]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -85,12 +83,12 @@ target-version = "py311"
 [tool.ruff.lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
 select = [
-    "C901",  # McCabe complexity
-    "E4",  # Subset of pycodestyle (E)
+    "C901", # McCabe complexity
+    "E4",   # Subset of pycodestyle (E)
     "E7",
     "E9",
-    "F",  # Pyflakes
-    "W",  # pycodestyle warnings
+    "F",    # Pyflakes
+    "W",    # pycodestyle warnings
 ]
 ignore = []
 
