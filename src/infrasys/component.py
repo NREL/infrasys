@@ -29,7 +29,11 @@ class Component(InfraSysBaseModelWithIdentifers):
 
     def model_dump_custom(self, *args, **kwargs) -> dict[str, Any]:
         """Custom serialization for this package"""
-        refs = {x: self._model_dump_field(x) for x in self.model_fields}
+        refs = {}
+        for x in self.model_fields:
+            val = self._model_dump_field(x)
+            if val is not None:
+                refs[x] = val
         exclude = kwargs.get("exclude", [])
         exclude += list(set(exclude).union(refs))
         kwargs["exclude"] = exclude
@@ -52,6 +56,8 @@ class Component(InfraSysBaseModelWithIdentifers):
                 ),
             ).model_dump()
             val = data
+        else:
+            val = None
         # TODO: other composite types may need handling.
         # Parent packages can always implement a field_serializer themselves.
         return val

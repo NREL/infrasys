@@ -32,7 +32,6 @@ from infrasys.serialization import (
 )
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData, TimeSeriesMetadata
-from infrasys.utils.json import ExtendedJSONEncoder
 
 
 class System:
@@ -157,7 +156,7 @@ class System:
                 raise ISConflictingArguments("data contains the key 'system'")
             data["system"] = system_data
         with open(filename, "w", encoding="utf-8") as f_out:
-            json.dump(data, f_out, indent=indent, cls=ExtendedJSONEncoder)
+            json.dump(data, f_out, indent=indent)
             logger.info("Wrote system data to {}", filename)
 
         self._time_series_mgr.serialize(self._make_time_series_directory(filename))
