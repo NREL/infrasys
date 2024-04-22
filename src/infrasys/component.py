@@ -56,6 +56,8 @@ class Component(InfraSysBaseModelWithIdentifers):
                 ),
             ).model_dump()
             val = data
+        else:
+            val = None
         # TODO: other composite types may need handling.
         # Parent packages can always implement a field_serializer themselves.
         return val
