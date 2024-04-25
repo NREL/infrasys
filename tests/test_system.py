@@ -172,6 +172,10 @@ def test_time_series():
     data = range(length)
     variable_name = "active_power"
     ts = SingleTimeSeries.from_time_array(data, variable_name, time_array)
+    with pytest.raises(ValueError, match="The first argument must"):
+        # Test a common mistake.
+        system.add_time_series(gen1, ts)
+
     system.add_time_series(ts, gen1, gen2)
     assert system.has_time_series(gen1, variable_name=variable_name)
     assert system.has_time_series(gen2, variable_name=variable_name)

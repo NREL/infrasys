@@ -84,6 +84,9 @@ class TimeSeriesManager:
             raise ISOperationNotAllowed("add_time_series requires at least one component")
 
         ts_type = type(time_series)
+        if not issubclass(ts_type, TimeSeriesData):
+            msg = f"The first argument must be an instance of TimeSeriesData: {ts_type}"
+            raise ValueError(msg)
         metadata_type = ts_type.get_time_series_metadata_type()
         metadata = metadata_type.from_data(time_series, **user_attributes)
 
