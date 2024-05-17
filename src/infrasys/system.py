@@ -1064,7 +1064,8 @@ class System:
                     values[field] = composed_value
                 elif isinstance(metadata.fields, SerializedQuantityType):
                     quantity_type = cached_types.get_type(metadata.fields)
-                    values[field] = quantity_type.from_dict(value)
+                    # values[field] = quantity_type.from_dict(value)
+                    values[field] = quantity_type(value=value["value"], units=value["units"])
                 else:
                     msg = f"Bug: unhandled type: {field=} {value=}"
                     raise NotImplementedError(msg)
