@@ -31,7 +31,12 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
         cls, source_type: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         return core_schema.with_info_after_validator_function(
-            cls.validate, handler(pint.Quantity), field_name=handler.field_name
+            cls.validate,
+            handler(pint.Quantity),
+            field_name=handler.field_name,
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                cls.serialize, info_arg=False, return_schema=core_schema.str_schema()
+            ),
         )
 
     # Required for pydantic validation
@@ -51,6 +56,10 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
             else:
                 raise ValueError(f"Invalid type for BaseQuantity: {type(value)}")
         return value
+
+    @staticmethod
+    def serialize(value):
+        return str(value)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert a quantity to a dictionary for serialization."""
