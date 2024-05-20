@@ -2,14 +2,14 @@ import json
 import random
 from datetime import datetime, timedelta
 
-from infrasys.base_quantity import BaseQuantity
 import numpy as np
 import pyarrow as pa
 import pytest
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
 
-from infrasys import Component, Location, SingleTimeSeries
+from infrasys import Location, SingleTimeSeries
+from infrasys.component import Component
 from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
@@ -24,7 +24,7 @@ from .models.simple_system import (
 class ComponentWithPintQuantity(Component):
     """Test component with a container of quantities."""
 
-    distance: Annotated[BaseQuantity, WithJsonSchema({"type": "string"})]
+    distance: Annotated[Distance, WithJsonSchema({"type": "string"})]
 
 
 def test_serialization(tmp_path):

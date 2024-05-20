@@ -9,6 +9,7 @@ from uuid import UUID
 
 import numpy as np
 import pyarrow as pa
+import pint
 from pydantic import (
     Field,
     WithJsonSchema,
@@ -62,7 +63,7 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
 class SingleTimeSeries(TimeSeriesData):
     """Defines a time array with a single dimension of floats."""
 
-    data: pa.Array | BaseQuantity
+    data: pa.Array | pint.Quantity
     resolution: timedelta
     initial_time: datetime
 
