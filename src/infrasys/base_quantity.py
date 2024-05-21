@@ -19,7 +19,7 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
 
     __base_unit__ = None
 
-    def __init_subclass__(cls, **kwargs) -> None:
+    def __init_subclass__(cls, **kwargs):
         if not cls.__base_unit__:
             raise TypeError("__base_unit__ should be defined")
         super().__init_subclass__(**kwargs)
@@ -44,23 +44,23 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
 
     # Required for pydantic validation
     @classmethod
-    def validate(cls, value, *_):
+    def validate(cls, value, *_) -> "BaseQuantity":
         if isinstance(value, BaseQuantity):
             if cls.__base_unit__:
                 assert value.check(
                     cls.__base_unit__
                 ), f"Unit must be compatible with {cls.__base_unit__}"
-                return value
+                return cls(value)
         if isinstance(value, pint.Quantity):
             if cls.__base_unit__:
                 assert value.check(
                     cls.__base_unit__
                 ), f"Unit must be compatible with {cls.__base_unit__}"
-                return value
+                return cls(value.magnitude, value.units)
             else:
                 raise ValueError(f"Invalid type for BaseQuantity: {type(value)}")
         if isinstance(value, cls):
-            return value
+            return cls(value)
         return value
 
     @staticmethod
