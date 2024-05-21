@@ -1,6 +1,9 @@
 """This module contains base class for handling pint quantity."""
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from __main__ import BaseQuantity
 
 import numpy as np
 import pint
@@ -41,20 +44,23 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
 
     # Required for pydantic validation
     @classmethod
-    def validate(cls, value, *_) -> "BaseQuantity":
+    def validate(cls, value, *_):
         if isinstance(value, BaseQuantity):
-            assert (
-                value.units == cls.__base_unit__
-            ), f"Unit must be compatible with {cls.__base_unit__}"
-            return value
+            if cls.__base_unit__:
+                assert value.check(
+                    cls.__base_unit__
+                ), f"Unit must be compatible with {cls.__base_unit__}"
+                return value
         if isinstance(value, pint.Quantity):
             if cls.__base_unit__:
-                assert (
-                    value.units == cls.__base_unit__
+                assert value.check(
+                    cls.__base_unit__
                 ), f"Unit must be compatible with {cls.__base_unit__}"
-                return cls(value.magnitude, value.units)
+                return value
             else:
                 raise ValueError(f"Invalid type for BaseQuantity: {type(value)}")
+        if isinstance(value, cls):
+            return value
         return value
 
     @staticmethod

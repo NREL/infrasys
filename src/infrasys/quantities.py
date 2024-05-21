@@ -5,6 +5,7 @@ base unit as the second argument of `ureg.check`.
 """
 
 from infrasys.base_quantity import BaseQuantity
+from infrasys.component import Component
 
 # ruff:noqa
 # fmt: off
@@ -24,3 +25,9 @@ class Energy(BaseQuantity): __base_unit__ = "watthour"
 class Time(BaseQuantity): __base_unit__ = "minute"
 
 class Resistance(BaseQuantity): __base_unit__ = "ohm"
+
+
+class Test(Component):
+    voltage: Voltage
+
+Test(name="test", voltage=Voltage(100, "kV"))
