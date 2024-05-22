@@ -1,22 +1,33 @@
-"""This module defines basic unit quantities."""
+"""This module defines basic unit quantities.
+
+To create new Quantities for a given base unit, we just need to specify the
+base unit as the second argument of `ureg.check`.
+"""
 
 from infrasys.base_quantity import BaseQuantity
+from infrasys.component import Component
 
 # ruff:noqa
 # fmt: off
 
-class Distance(BaseQuantity): __compatible_unit__ = "meter"
+class Distance(BaseQuantity): __base_unit__ = "meter"
 
-class Voltage(BaseQuantity): __compatible_unit__ = "volt"
+class Voltage(BaseQuantity): __base_unit__ = "volt"
 
-class Current(BaseQuantity): __compatible_unit__ = "ampere"
+class Current(BaseQuantity): __base_unit__ = "ampere"
 
-class Angle(BaseQuantity): __compatible_unit__ = "degree"
+class Angle(BaseQuantity): __base_unit__ = "degree"
 
-class ActivePower(BaseQuantity): __compatible_unit__ = "watt"
+class ActivePower(BaseQuantity): __base_unit__ = "watt"
 
-class Energy(BaseQuantity): __compatible_unit__ = "watthour"
+class Energy(BaseQuantity): __base_unit__ = "watthour"
 
-class Time(BaseQuantity): __compatible_unit__ = "minute"
+class Time(BaseQuantity): __base_unit__ = "minute"
 
-class Resistance(BaseQuantity): __compatible_unit__ = "ohm"
+class Resistance(BaseQuantity): __base_unit__ = "ohm"
+
+
+class Test(Component):
+    voltage: Voltage
+
+Test(name="test", voltage=Voltage(100, "kV"))

@@ -8,7 +8,8 @@ import pytest
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
 
-from infrasys import Component, Location, SingleTimeSeries
+from infrasys import Location, SingleTimeSeries
+from infrasys.component import Component
 from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
