@@ -1,8 +1,15 @@
+from pydantic import ValidationError
+import pydantic_core
 from infrasys.base_quantity import ureg, BaseQuantity
-from infrasys.quantities import ActivePower, Time
+from infrasys.component import Component
+from infrasys.quantities import ActivePower, Time, Voltage
 from pint.errors import DimensionalityError
 import pytest
 import numpy as np
+
+
+class BaseQuantityComponent(Component):
+    voltage: Voltage
 
 
 def test_base_quantity():
@@ -46,3 +53,47 @@ def test_unit_deserialization():
     assert isinstance(active_power, BaseQuantity)
     assert active_power.magnitude == 100
     assert str(active_power.units) == "kilowatt"
+
+
+def test_base_unit_validation():
+    # Check that new classes must define __base_unit__
+    with pytest.raises(TypeError):
+
+        class _(BaseQuantity):
+            ...
+
+    test_magnitude = 100
+    test_unit = "volt"
+
+    test_quantity = Voltage(test_magnitude, test_unit)
+
+    test_component = BaseQuantityComponent(name="testing", voltage=test_quantity)
+
+    assert test_component.voltage == test_quantity
+    assert test_component.voltage.magnitude == test_magnitude
+    assert test_component.voltage.units == test_unit
+
+    with pytest.raises(ValidationError):
+        BaseQuantityComponent(name="test", voltage=Voltage(test_magnitude, "meter"))
+
+    with pytest.raises(pydantic_core.ValidationError):
+        BaseQuantityComponent(name="test", voltage=[0, 1])
+
+
+@pytest.mark.parametrize("input_unit", [Voltage(10, "kV"), 10 * ureg.volt, 10, 10.0])
+def test_different_validate(input_unit):
+    test_component = BaseQuantityComponent(name="test", voltage=input_unit)
+    assert isinstance(test_component.voltage, BaseQuantity)
+    assert test_component.voltage.magnitude == 10
+    assert test_component.voltage.check(Voltage.__base_unit__)
+
+
+def test_custom_serialization():
+    component = BaseQuantityComponent(name="test", voltage=10.0)
+
+    model_dump = component.model_dump(mode="json")
+
+    assert model_dump["voltage"] == str(Voltage(10.0, "volt"))
+
+    model_dump = component.model_dump(mode="json", context={"magnitude_only": True})
+    assert model_dump["voltage"] == str(10.0)
