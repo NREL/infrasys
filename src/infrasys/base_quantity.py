@@ -1,6 +1,6 @@
 """This module contains base class for handling pint quantity."""
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Type
 
 if TYPE_CHECKING:
     from __main__ import BaseQuantity
@@ -17,6 +17,10 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
     """Interface for base quantity."""
 
     __base_unit__ = None
+    _REGISTRY = ureg
+
+    def __new__(cls: Type["BaseQuantity"], value, units=None):
+        return super().__new__(cls, value, units)  # type: ignore
 
     def __init_subclass__(cls, **kwargs):
         if not cls.__base_unit__:
@@ -26,7 +30,7 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
     # Required for pydantic validation
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls, _: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         return core_schema.with_info_after_validator_function(
             cls._validate,
