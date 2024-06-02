@@ -30,26 +30,24 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
     # Required for pydantic validation
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, _: Any, handler: GetCoreSchemaHandler
+        cls, _: Type["BaseQuantity"], handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         return core_schema.with_info_after_validator_function(
             cls._validate,
-            core_schema.union_schema(
-                [
-                    handler(pint.Quantity),
-                    core_schema.float_schema(),
-                ]
-            ),
+            core_schema.any_schema(),
             field_name=handler.field_name,
             serialization=core_schema.plain_serializer_function_ser_schema(
-                cls._serialize, info_arg=True, return_schema=core_schema.str_schema()
+                cls._serialize,
+                info_arg=True,
+                return_schema=core_schema.any_schema(),
             ),
         )
 
     # Required for pydantic validation
     @classmethod
     def _validate(cls, field_value: Any, _: core_schema.ValidationInfo) -> "BaseQuantity":
-        if isinstance(field_value, BaseQuantity):
+        # Type check is more robubst to check that is not an instance of a bare "BaseQuantity"
+        if type(field_value) is cls:
             if cls.__base_unit__:
                 assert field_value.check(
                     cls.__base_unit__
@@ -61,22 +59,19 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
                     cls.__base_unit__
                 ), f"Unit must be compatible with {cls.__base_unit__}"
                 return cls(field_value.magnitude, field_value.units)
-            else:
-                raise ValueError(f"Invalid type for BaseQuantity: {type(field_value)}")
-        if isinstance(field_value, cls):
-            return field_value
-        if isinstance(field_value, float) or isinstance(field_value, int):
-            return cls(field_value, cls.__base_unit__)
-        raise TypeError("Type not supported")
+        return cls(field_value, cls.__base_unit__)
 
     @classmethod
-    def _serialize(cls, input_value, info: SerializationInfo):
-        if context := info.context:
+    def _serialize(cls, input_value, info: SerializationInfo) -> float | str:
+        return_value = input_value
+        if context := info.context:  # type: ignore
             # We can add more logic that will change the serialization here.
             magnitude_only = context.get("magnitude_only")
             if magnitude_only:
-                return str(input_value.magnitude)
-        return str(input_value)
+                return_value = return_value.magnitude
+        if info.mode == "json":
+            return_value = str(return_value)
+        return return_value
 
     def to_dict(self) -> dict[str, Any]:
         """Convert a quantity to a dictionary for serialization."""

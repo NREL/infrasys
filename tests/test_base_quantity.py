@@ -1,5 +1,4 @@
 from pydantic import ValidationError
-import pydantic_core
 from infrasys.base_quantity import ureg, BaseQuantity
 from infrasys.component import Component
 from infrasys.quantities import ActivePower, Time, Voltage
@@ -76,8 +75,10 @@ def test_base_unit_validation():
     with pytest.raises(ValidationError):
         BaseQuantityComponent(name="test", voltage=Voltage(test_magnitude, "meter"))
 
-    with pytest.raises(pydantic_core.ValidationError):
-        BaseQuantityComponent(name="test", voltage=[0, 1])
+    test_component = BaseQuantityComponent(name="test", voltage=[0, 1])
+    assert type(test_component.voltage) is Voltage
+    assert test_component.voltage.magnitude.tolist() == [0, 1]
+    assert test_component.voltage.units == test_unit
 
 
 @pytest.mark.parametrize("input_unit", [Voltage(10, "kV"), 10 * ureg.volt, 10, 10.0])
@@ -95,5 +96,8 @@ def test_custom_serialization():
 
     assert model_dump["voltage"] == str(Voltage(10.0, "volt"))
 
+    model_dump = component.model_dump(context={"magnitude_only": True})
+    assert model_dump["voltage"] == 10.0
+
     model_dump = component.model_dump(mode="json", context={"magnitude_only": True})
-    assert model_dump["voltage"] == str(10.0)
+    assert model_dump["voltage"] == "10.0"
