@@ -1,5 +1,6 @@
 import json
 import random
+import os
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -188,3 +189,29 @@ def test_system_with_time_series_normalization(tmp_path, in_memory):
 def test_json_schema():
     schema = ComponentWithPintQuantity.model_json_schema()
     assert isinstance(json.loads(json.dumps(schema)), dict)
+
+
+def test_system_save(tmp_path, simple_system_with_time_series):
+    simple_system = simple_system_with_time_series
+    custom_folder = "my_system"
+    fpath = tmp_path / custom_folder
+    fname = "test_system"
+    simple_system.save(fpath, filename=fname)
+    assert os.path.exists(fpath), f"Folder {fpath} was not created successfully"
+    assert os.path.exists(fpath / fname), f"Serialized system {fname} was not created successfully"
+
+    fname = "test_system"
+    with pytest.raises(FileExistsError):
+        simple_system.save(fpath, filename=fname)
+
+    fname = "test_system"
+    simple_system.save(fpath, filename=fname, overwrite=True)
+    assert os.path.exists(fpath), f"Folder {fpath} was not created successfully"
+    assert os.path.exists(fpath / fname), f"Serialized system {fname} was not created successfully"
+
+    custom_folder = "my_system_zip"
+    fpath = tmp_path / custom_folder
+    simple_system.save(fpath, filename=fname, zip=True)
+    assert not os.path.exists(fpath), f"Original folder {fpath} was not deleted sucessfully."
+    zip_fpath = f"{fpath}.zip"
+    assert os.path.exists(zip_fpath), f"Zip file {zip_fpath} does not exists"

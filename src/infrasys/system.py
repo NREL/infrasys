@@ -1,6 +1,7 @@
 """Defines a System"""
 
 import json
+import shutil
 from operator import itemgetter
 from collections import defaultdict
 from datetime import datetime
@@ -283,6 +284,74 @@ class System:
         system._deserialize_components(system_data["components"])
         logger.info("Deserialized system {}", system.label)
         return system
+
+    def save(
+        self,
+        fpath: Path | str,
+        filename: str = "system.json",
+        zip: bool = False,
+        overwrite: bool = False,
+    ) -> None:
+        """Save the contents of a system and the Time series in a single directory.
+
+        By default, this method creates the user specified folder using the
+        `to_json` method. If user sets `zip = True`, we create the folder of
+        the user (if it does not exists), zip it to the same location specified
+        and delete the folder.
+
+        Parameters
+        ----------
+        fpath : Path | str
+           Filepath to write the contents of the system.
+        zip : bool
+            Set to True if you want to archive to a zip file.
+        filename: str
+            Name of the sytem to serialize. Default value: "system.json".
+        overwrite: bool
+            Overwrites the system if it already exist on the fpath.
+
+        Raises
+        ------
+        FileExistsError
+            Raised if the folder provided exists and the overwrite flag was not provided.
+
+        Examples
+        --------
+        >>> fpath = Path("folder/subfolder/")
+        >>> system.save(fpath)
+        INFO: Wrote system data to folder/subfolder/system.json
+        INFO: Copied time series data to folder/subfolder/system_time_series
+
+        >>> system_fname = "my_system.json"
+        >>> fpath = Path("folder/subfolder/")
+        >>> system.save(fpath, filename=system_fname, zip=True)
+        INFO: Wrote system data to folder/subfolder/my_system.json
+        INFO: Copied time series data to folder/subfolder/my_system_time_series
+        INFO: System archived at folder/subfolder/my_system.zip
+
+        See Also
+        --------
+        to_json: System serialization
+        """
+        if isinstance(fpath, str):
+            fpath = Path(fpath)
+
+        if fpath.exists() and not overwrite:
+            raise FileExistsError(
+                f"{fpath} exists already. To overwrite the folder pass `overwrite=True`"
+            )
+
+        fpath.mkdir(parents=True, exist_ok=True)
+        self.to_json(fpath / filename, overwrite=overwrite)
+
+        if zip:
+            logger.debug("Archiving system and time series into a single zip file at {}", fpath)
+            _ = shutil.make_archive(str(fpath), "zip", fpath)
+            logger.debug("Removing {}", fpath)
+            shutil.rmtree(fpath)
+            logger.info("System archived at {}", fpath)
+
+        return
 
     def add_component(self, component: Component, **kwargs) -> None:
         """Add one component to the system.
