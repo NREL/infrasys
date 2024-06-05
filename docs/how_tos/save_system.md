@@ -2,9 +2,9 @@
 
 ## Exporting the entire contents of the system
 
-If the user wants to createa folder that containts all the information of the
+If the user wants to create a folder that contains all the information of the
 system `infrasys` provides a simple method `system.save("my_folder")` that
-creates a folder (if it does not exists) and save all the contents of the
+creates a folder (if it does not exist) and save all the contents of the
 system including the `system.to_json()` and the time series arrow files and
 sqlite.
 
