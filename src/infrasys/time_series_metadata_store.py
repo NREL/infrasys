@@ -72,12 +72,6 @@ class TimeSeriesMetadataStore:
         #    1c. time series for one component with all user attributes
         # 2. Optimize for checks at system.add_time_series. Use all fields and attribute hash.
         # 3. Optimize for returning all metadata for a time series UUID.
-        self._execute(cur, f"CREATE INDEX by_c ON {self.TABLE_NAME} (component_uuid)")
-        self._execute(
-            cur,
-            f"CREATE INDEX by_c_vn_tst ON {self.TABLE_NAME} "
-            f"(component_uuid, variable_name, time_series_type)",
-        )
         self._execute(
             cur,
             f"CREATE INDEX by_c_vn_tst_hash ON {self.TABLE_NAME} "
