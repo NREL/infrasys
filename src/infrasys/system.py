@@ -312,7 +312,7 @@ class System:
 
         Examples
         --------
-        >>> system.save("/home/$USER/systems/my_system")
+        >>> system.save("/path/of/your/choice/my_system")
         INFO: Wrote system data to systems/system.json
         INFO: Copied time series data to systems/my_system/system_time_series
 
@@ -327,10 +327,17 @@ class System:
         """
         if isinstance(fpath, str):
             fpath = Path(fpath)
+
+        if fpath.exists() and not overwrite:
+            raise FileExistsError(
+                f"{fpath} exists already. To overwrite the folder pass `overwrite=True`"
+            )
+
+        fpath.mkdir(parents=True, exist_ok=True)
         self.to_json(fpath / filename, overwrite=overwrite)
 
         if zip:
-            logger.info("Archiving system and time series into a single file")
+            logger.info("Archiving system and time series into a single zip file.")
             _ = shutil.make_archive(str(fpath), "zip", fpath)
             logger.debug("Removing {}", fpath)
             shutil.rmtree(fpath)
