@@ -68,7 +68,7 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
             # We can add more logic that will change the serialization here.
             magnitude_only = context.get("magnitude_only")
             if magnitude_only:
-                return_value = return_value.magnitude
+                return return_value.magnitude
         if info.mode == "json":
             return_value = str(return_value)
         return return_value

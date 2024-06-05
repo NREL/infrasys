@@ -100,4 +100,4 @@ def test_custom_serialization():
     assert model_dump["voltage"] == 10.0
 
     model_dump = component.model_dump(mode="json", context={"magnitude_only": True})
-    assert model_dump["voltage"] == "10.0"
+    assert model_dump["voltage"] == 10.0
