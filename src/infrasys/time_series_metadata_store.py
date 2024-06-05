@@ -136,6 +136,7 @@ class TimeSeriesMetadataStore:
         filename = path / self.DB_FILENAME
         with sqlite3.connect(filename) as con:
             self._con.backup(con)
+        con.close()
         logger.info("Backed up the time series metadata to {}", filename)
 
     def restore(self, directory: Path | str) -> None:
@@ -144,6 +145,7 @@ class TimeSeriesMetadataStore:
         filename = path / self.DB_FILENAME
         with sqlite3.connect(filename) as con:
             con.backup(self._con)
+        con.close()
         logger.info("Restored the time series metadata to memory")
 
     def get_time_series_counts(self) -> "TimeSeriesCounts":
