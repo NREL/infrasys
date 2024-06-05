@@ -310,16 +310,24 @@ class System:
         overwrite: bool
             Overwrites the system if it already exist on the fpath.
 
+        Raises
+        ------
+        FileExistsError
+            Raised if the folder provided exists and the overwrite flag was not provided.
+
         Examples
         --------
-        >>> system.save("/path/of/your/choice/my_system")
-        INFO: Wrote system data to systems/system.json
-        INFO: Copied time series data to systems/my_system/system_time_series
+        >>> fpath = Path("folder/subfolder/")
+        >>> system.save(fpath)
+        INFO: Wrote system data to folder/subfolder/system.json
+        INFO: Copied time series data to folder/subfolder/system_time_series
 
-        >>> system.save("/home/$USER/systems/my_system", zip=True)
-        INFO: Wrote system data to systems/system1.json
-        INFO: Copied time series data to systems/system1_time_series
-
+        >>> system_fname = "my_system.json"
+        >>> fpath = Path("folder/subfolder/")
+        >>> system.save(fpath, filename=system_fname, zip=True)
+        INFO: Wrote system data to folder/subfolder/my_system.json
+        INFO: Copied time series data to folder/subfolder/my_system_time_series
+        INFO: System archived at folder/subfolder/my_system.zip
 
         See Also
         --------
@@ -337,10 +345,11 @@ class System:
         self.to_json(fpath / filename, overwrite=overwrite)
 
         if zip:
-            logger.info("Archiving system and time series into a single zip file.")
+            logger.debug("Archiving system and time series into a single zip file at {}", fpath)
             _ = shutil.make_archive(str(fpath), "zip", fpath)
             logger.debug("Removing {}", fpath)
             shutil.rmtree(fpath)
+            logger.info("System archived at {}", fpath)
 
         return
 
