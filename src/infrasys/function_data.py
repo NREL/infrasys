@@ -1,12 +1,11 @@
 from typing_extensions import Annotated
 from pydantic import Field
 from typing import NamedTuple
-
 import numpy as np
 
 class XY_COORDS(NamedTuple):
-    x:float
-    y:float
+    x: float
+    y: float
 
 """
 Class to represent the underlying data of linear functions. Principally used for
@@ -41,6 +40,7 @@ class QuadraticFunctionData:
     constant_term: float
 
 def _validate_piecewise_x(x_coords: list):
+    
     if len(x_coords) < 2:
         raise ValueError("Must specify at least two x-coordinates")
     if not (x_coords == sorted(x_coords) or (np.isnan(x_coords[0]) and x_coords[1:] == sorted(x_coords[1:]))):
@@ -59,11 +59,10 @@ store quantities (x, y), such as (MW, \$/h).
 class PiecewiseLinearData:
     
     name: Annotated[str, Field(frozen=True)] = ""
-    #Okay this should not be a list, it should be a tuple of two lists, one for x, one for y
-    points:list[XY_COORDS]
+    points: list[XY_COORDS]
 
     def PiecewiseLinearData(points:list[NamedTuple]):
-        _validate_piecewise_x(points[0])
+        _validate_piecewise_x([p.x for p in points])
         return points
 
 """
@@ -78,25 +77,26 @@ quantities (x, dy/dx), such as (MW, \$/MWh).
 
 # Arguments
  - `x_coords:list[float]`: the x-coordinates of the endpoints of the segments
- - `y_coords::list[float]`: the y-coordinates of the segments: `y_coords[1]` is the y-value between
- `x_coords[1]` and `x_coords[2]`, etc. Must have one fewer elements than `x_coords`.
+ - `y_coords:list[float]`: the y-coordinates of the segments: `y_coords[1]` is the y-value between
+ `x_coords[0]` and `x_coords[1]`, etc. Must have one fewer elements than `x_coords`.
  - `c::Union{Nothing, Float64}`: optional, the value to use for the integral from 0 to `x_coords[1]` of this function
 """
 
 class PiecewiseStepData:
     
     name: Annotated[str, Field(frozen=True)] = ""
-    x_coords:list[float]
-    y_coords:list[float]
+    x_coords: list[float]
+    y_coords: list[float]
 
     def PiecewiseStepData(x_coords, y_coords):
         if len(y_coords) == len(x_coords):
             # To make the lengths match for HDF serialization, we prepend NaN to y_coords
             if np.isnan(y_coords[0]):
-                return PiecewiseStepData(x_coords, y_coords[1:])
+                return PiecewiseStepData.PiecewiseStepData(x_coords, y_coords[1:])
             # To leave x_coords[1] undefined, must explicitly pass in NaN
 
         _validate_piecewise_x(x_coords)
+        
         if len(y_coords) != len(x_coords) - 1:
             raise ValueError("Must specify one fewer y-coordinates than x-coordinates")
         
