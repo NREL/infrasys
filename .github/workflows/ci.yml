@@ -34,6 +34,7 @@ jobs:
         name: infrasys-tests
         fail_ci_if_error: false
         verbose: true
+        if: ${{ matrix.os =='ubuntu-latest' }}
   mypy:
     runs-on: ubuntu-latest
     name: "mypy"
