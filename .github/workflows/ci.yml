@@ -6,6 +6,10 @@ on:
       - main
   pull_request:
 
+env:
+  DEFAULT_PYTHON: "3.12"
+  DEFAULT_OS: ubuntu-latest
+
 jobs:
   pytest:
     runs-on: ${{ matrix.os }}
@@ -29,12 +33,12 @@ jobs:
         pytest -v --cov --cov-report=xml
     - name: codecov
       uses: codecov/codecov-action@v4.2.0
+      if: ${{ matrix.os == env.DEFAULT_OS && matrix.python-version == env.DEFAULT_PYTHON  }}
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         name: infrasys-tests
         fail_ci_if_error: false
         verbose: true
-        if: ${{ matrix.os =='ubuntu-latest' }}
   mypy:
     runs-on: ubuntu-latest
     name: "mypy"
