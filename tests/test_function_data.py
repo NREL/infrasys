@@ -1,4 +1,4 @@
-from infrasys.function_data import PiecewiseLinearData, XY_COORDS
+from infrasys.function_data import PiecewiseStepData, PiecewiseLinearData, XY_COORDS
 import pytest
 
 
@@ -16,6 +16,24 @@ def test_piecewise_linear():
         PiecewiseLinearData(points=test_coords)
 
 
-# def test_piecewise_step():
-#
-#    return
+def test_piecewise_step():
+    # Check minimum x values
+    test_x = [2]
+    test_y = [1]
+
+    with pytest.raises(ValueError):
+        PiecewiseStepData(x_coords=test_x, y_coords=test_y)
+
+    # Check ascending x values
+    test_x = [1, 4, 3]
+    test_y = [2, 4]
+
+    with pytest.raises(ValueError):
+        PiecewiseStepData(x_coords=test_x, y_coords=test_y)
+
+    # Check length of x and y lists
+    test_x = [1, 2, 3]
+    test_y = [2, 4, 3]
+
+    with pytest.raises(ValueError):
+        PiecewiseStepData(x_coords=test_x, y_coords=test_y)
