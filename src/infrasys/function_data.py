@@ -1,7 +1,7 @@
 from infrasys import Component
 from typing_extensions import Annotated
 from pydantic import Field
-from pydantic.functional_validators import AfterValidators
+from pydantic.functional_validators import AfterValidator
 from typing import NamedTuple
 import numpy as np
 
@@ -46,8 +46,11 @@ class QuadraticFunctionData(Component):
     ]
 
 
-def validate_piecewise_x(points: list[XY_COORDS]):
-    x_coords = [p.x for p in points]
+def validate_piecewise_x(points: list):
+    if isinstance(points[0], XY_COORDS):
+        x_coords = [p.x for p in points]
+    else:
+        x_coords = points
 
     if len(x_coords) < 2:
         raise ValueError("Must specify at least two x-coordinates")
@@ -71,12 +74,9 @@ class PiecewiseLinearData(Component):
     name: Annotated[str, Field(frozen=True)] = ""
     points: Annotated[
         list[XY_COORDS],
-        AfterValidators(validate_piecewise_x),
+        AfterValidator(validate_piecewise_x),
         Field(description="list of (x,y) points that define the function"),
     ]
-
-    # Decision to keep as named tuple -> Put into PR
-    # Change validate function to match the NamedTuple
 
 
 class PiecewiseStepData(Component):
@@ -92,7 +92,9 @@ class PiecewiseStepData(Component):
 
     name: Annotated[str, Field(frozen=True)] = ""
     x_coords: Annotated[
-        list[float], Field(description="the x-coordinates of the endpoints of the segments")
+        list[float],
+        AfterValidator(validate_piecewise_x),
+        Field(description="the x-coordinates of the endpoints of the segments"),
     ]
     y_coords: Annotated[
         list[float],
