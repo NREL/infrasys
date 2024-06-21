@@ -1,6 +1,6 @@
 from infrasys import Component
 from typing_extensions import Annotated
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic.functional_validators import AfterValidator
 from typing import NamedTuple
 import numpy as np
@@ -93,13 +93,21 @@ class PiecewiseStepData(Component):
     name: Annotated[str, Field(frozen=True)] = ""
     x_coords: Annotated[
         list[float],
-        AfterValidator(validate_piecewise_x),
         Field(description="the x-coordinates of the endpoints of the segments"),
     ]
     y_coords: Annotated[
         list[float],
         Field(
-            description="the y-coordinates of the segments: `y_coords[1]` is the y-value between `x_coords[0]` and `x_coords[1]`, etc. \
-                Must have one fewer elements than `x_coords`."
+            description="the y-coordinates of the segments: `y_coords[1]` is the y-value \
+                between `x_coords[0]` and `x_coords[1]`, etc. Must have one fewer elements than `x_coords`."
         ),
     ]
+
+    @model_validator(mode="after")
+    def validate_piecewise_xy(self):
+        validate_piecewise_x(self.x_coords)
+
+        if len(self.y_coords) != len(self.x_coords) - 1:
+            raise ValueError("Must specify one fewer y-coordinates than x-coordinates")
+
+        return self
