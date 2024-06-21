@@ -15,7 +15,6 @@ class LinearFunctionData(Component):
     """
     Class to represent the underlying data of linear functions. Principally used for
     the representation of cost functions `f(x) = proportional_term*x + constant_term`.
-
     """
 
     name: Annotated[str, Field(frozen=True)] = ""
@@ -86,9 +85,8 @@ class PiecewiseStepData(Component):
     y-coordinates: two x-coordinates and one y-coordinate defines a single segment, three
     x-coordinates and two y-coordinates define two segments, etc. This can be useful to
     represent the derivative of a [PiecewiseLinearData](@ref), where the y-coordinates of this
-    step function represent the slopes of that piecewise linear function, so there is also an
-    optional field `c` that can be used to store the initial y-value of that piecewise linear
-    function. Principally used for the representation of cost functions where the points store
+    step function represent the slopes of that piecewise linear function.
+    Principally used for the representation of cost functions where the points store
     quantities (x, dy/dx), such as (MW, \$/MWh).
     """
 
