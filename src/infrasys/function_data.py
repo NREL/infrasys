@@ -48,10 +48,9 @@ class QuadraticFunctionData(Component):
 
 def validate_piecewise_linear_x(points: List[XY_COORDS]) -> List[XY_COORDS]:
     """
-    Function used to validate given x data for piecewise function classes. The function
-    can receive either a list of named tuple or a list of float values to be compatible with
-    both PiecewiseLinearData and PiecewiseStepData. X data is checked to ensure there is at
-    least two values of x, which is the minimum required to generate a cost curve, and is
+    Function used to validate given x data for the PiecewiseLinearData class.
+    X data is checked to ensure there is at least two values of x,
+    which is the minimum required to generate a cost curve, and is
     given in ascending order (e.g. [1, 2, 3], not [1, 3, 2]).
     """
 
@@ -70,10 +69,9 @@ def validate_piecewise_linear_x(points: List[XY_COORDS]) -> List[XY_COORDS]:
 
 def validate_piecewise_step_x(x_coords: List[float]) -> List[float]:
     """
-    Function used to validate given x data for piecewise function classes. The function
-    can receive either a list of named tuple or a list of float values to be compatible with
-    both PiecewiseLinearData and PiecewiseStepData. X data is checked to ensure there is at
-    least two values of x, which is the minimum required to generate a cost curve, and is
+    Function used to validate given x data for the PiecewiseStepData class.
+    X data is checked to ensure there is at least two values of x,
+    which is the minimum required to generate a cost curve, and is
     given in ascending order (e.g. [1, 2, 3], not [1, 3, 2]).
     """
 
@@ -89,11 +87,11 @@ def validate_piecewise_step_x(x_coords: List[float]) -> List[float]:
 
 
 class PiecewiseLinearData(Component):
-    r"""
+    """
     Class to represent piecewise linear data as a series of points: two points define one
     segment, three points define two segments, etc. The curve starts at the first point given,
     not the origin. Principally used for the representation of cost functions where the points
-    store quantities (x, y), such as (MW, \$/h).
+    store quantities (x, y), such as (MW, USD/h).
     """
 
     name: Annotated[str, Field(frozen=True)] = ""
@@ -105,14 +103,14 @@ class PiecewiseLinearData(Component):
 
 
 class PiecewiseStepData(Component):
-    r"""
+    """
     Class to represent a step function as a series of endpoint x-coordinates and segment
     y-coordinates: two x-coordinates and one y-coordinate defines a single segment, three
     x-coordinates and two y-coordinates define two segments, etc. This can be useful to
     represent the derivative of a [PiecewiseLinearData](@ref), where the y-coordinates of this
     step function represent the slopes of that piecewise linear function.
     Principally used for the representation of cost functions where the points store
-    quantities (x, dy/dx), such as (MW, \$/MWh).
+    quantities (x, dy/dx), such as (MW, USD/MWh).
     """
 
     name: Annotated[str, Field(frozen=True)] = ""
