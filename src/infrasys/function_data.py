@@ -18,7 +18,6 @@ class LinearFunctionData(Component):
     """
 
     name: Annotated[str, Field(frozen=True)] = ""
-    # match above annotation
     proportional_term: Annotated[
         float, Field(description="the proportional term in the represented function")
     ]

@@ -2,6 +2,17 @@ from infrasys.function_data import PiecewiseStepData, PiecewiseLinearData, XY_CO
 import pytest
 
 
+def test_xy_coords():
+    test_xy = XY_COORDS(x=1.0, y=2.0)
+
+    # Checking associated types
+    assert isinstance(test_xy, XY_COORDS)
+
+    assert isinstance(test_xy.x, float)
+
+    assert isinstance(test_xy.y, float)
+
+
 def test_piecewise_linear():
     # Check validation for minimum x values
     test_coords = [XY_COORDS(1.0, 2.0)]
