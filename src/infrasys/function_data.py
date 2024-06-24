@@ -2,7 +2,7 @@ from infrasys import Component
 from typing_extensions import Annotated
 from pydantic import Field, model_validator
 from pydantic.functional_validators import AfterValidator
-from typing import NamedTuple
+from typing import NamedTuple, List
 import numpy as np
 
 
@@ -46,11 +46,16 @@ class QuadraticFunctionData(Component):
     ]
 
 
-def validate_piecewise_x(points: list):
-    if isinstance(points[0], XY_COORDS):
-        x_coords = [p.x for p in points]
-    else:
-        x_coords = points
+def validate_piecewise_linear_x(points: List[XY_COORDS]) -> List[XY_COORDS]:
+    """
+    Function used to validate given x data for piecewise function classes. The function
+    can receive either a list of named tuple or a list of float values to be compatible with
+    both PiecewiseLinearData and PiecewiseStepData. X data is checked to ensure there is at
+    least two values of x, which is the minimum required to generate a cost curve, and is
+    given in ascending order (e.g. [1, 2, 3], not [1, 3, 2]).
+    """
+
+    x_coords = [p.x for p in points]
 
     if len(x_coords) < 2:
         raise ValueError("Must specify at least two x-coordinates")
@@ -63,6 +68,26 @@ def validate_piecewise_x(points: list):
     return points
 
 
+def validate_piecewise_step_x(x_coords: List[float]) -> List[float]:
+    """
+    Function used to validate given x data for piecewise function classes. The function
+    can receive either a list of named tuple or a list of float values to be compatible with
+    both PiecewiseLinearData and PiecewiseStepData. X data is checked to ensure there is at
+    least two values of x, which is the minimum required to generate a cost curve, and is
+    given in ascending order (e.g. [1, 2, 3], not [1, 3, 2]).
+    """
+
+    if len(x_coords) < 2:
+        raise ValueError("Must specify at least two x-coordinates")
+    if not (
+        x_coords == sorted(x_coords)
+        or (np.isnan(x_coords[0]) and x_coords[1:] == sorted(x_coords[1:]))
+    ):
+        raise ValueError(f"Piecewise x-coordinates must be ascending, got {x_coords}")
+
+    return x_coords
+
+
 class PiecewiseLinearData(Component):
     r"""
     Class to represent piecewise linear data as a series of points: two points define one
@@ -73,8 +98,8 @@ class PiecewiseLinearData(Component):
 
     name: Annotated[str, Field(frozen=True)] = ""
     points: Annotated[
-        list[XY_COORDS],
-        AfterValidator(validate_piecewise_x),
+        List[XY_COORDS],
+        AfterValidator(validate_piecewise_linear_x),
         Field(description="list of (x,y) points that define the function"),
     ]
 
@@ -92,11 +117,11 @@ class PiecewiseStepData(Component):
 
     name: Annotated[str, Field(frozen=True)] = ""
     x_coords: Annotated[
-        list[float],
+        List[float],
         Field(description="the x-coordinates of the endpoints of the segments"),
     ]
     y_coords: Annotated[
-        list[float],
+        List[float],
         Field(
             description="the y-coordinates of the segments: `y_coords[1]` is the y-value \
                 between `x_coords[0]` and `x_coords[1]`, etc. Must have one fewer elements than `x_coords`."
@@ -105,7 +130,7 @@ class PiecewiseStepData(Component):
 
     @model_validator(mode="after")
     def validate_piecewise_xy(self):
-        validate_piecewise_x(self.x_coords)
+        validate_piecewise_step_x(self.x_coords)
 
         if len(self.y_coords) != len(self.x_coords) - 1:
             raise ValueError("Must specify one fewer y-coordinates than x-coordinates")
