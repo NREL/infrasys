@@ -66,7 +66,7 @@ def validate_piecewise_linear_x(points: List[XY_COORDS]) -> List[XY_COORDS]:
 
     Returns
     ----------
-    x_coords : List[XY_COORDS]
+    points : List[XY_COORDS]
         List of (x,y) data for cost function after successful validation.
     """
 
