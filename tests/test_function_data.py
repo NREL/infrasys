@@ -1,12 +1,12 @@
-from infrasys.function_data import PiecewiseStepData, PiecewiseLinearData, XY_COORDS
+from infrasys.function_data import PiecewiseStepData, PiecewiseLinearData, XYCoords
 import pytest
 
 
-def test_xy_coords():
-    test_xy = XY_COORDS(x=1.0, y=2.0)
+def test_xycoords():
+    test_xy = XYCoords(x=1.0, y=2.0)
 
     # Checking associated types
-    assert isinstance(test_xy, XY_COORDS)
+    assert isinstance(test_xy, XYCoords)
 
     assert isinstance(test_xy.x, float)
 
@@ -15,13 +15,13 @@ def test_xy_coords():
 
 def test_piecewise_linear():
     # Check validation for minimum x values
-    test_coords = [XY_COORDS(1.0, 2.0)]
+    test_coords = [XYCoords(1.0, 2.0)]
 
     with pytest.raises(ValueError):
         PiecewiseLinearData(points=test_coords)
 
     # Check validation for ascending x values
-    test_coords = [XY_COORDS(1.0, 2.0), XY_COORDS(4.0, 3.0), XY_COORDS(3.0, 4.0)]
+    test_coords = [XYCoords(1.0, 2.0), XYCoords(4.0, 3.0), XYCoords(3.0, 4.0)]
 
     with pytest.raises(ValueError):
         PiecewiseLinearData(points=test_coords)

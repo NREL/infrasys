@@ -8,7 +8,7 @@ from typing import NamedTuple, List
 import numpy as np
 
 
-class XY_COORDS(NamedTuple):
+class XYCoords(NamedTuple):
     """Named tuple used to define (x,y) coordinates."""
 
     x: float
@@ -51,7 +51,7 @@ class QuadraticFunctionData(Component):
     ]
 
 
-def validate_piecewise_linear_x(points: List[XY_COORDS]) -> List[XY_COORDS]:
+def validate_piecewise_linear_x(points: List[XYCoords]) -> List[XYCoords]:
     """Validates the x data for PiecewiseLinearData class
 
     Function used to validate given x data for the PiecewiseLinearData class.
@@ -61,12 +61,12 @@ def validate_piecewise_linear_x(points: List[XY_COORDS]) -> List[XY_COORDS]:
 
     Parameters
     ----------
-    points : List[XY_COORDS]
+    points : List[XYCoords]
         List of named tuples of (x,y) coordinates for cost function
 
     Returns
     ----------
-    points : List[XY_COORDS]
+    points : List[XYCoords]
         List of (x,y) data for cost function after successful validation.
     """
 
@@ -124,7 +124,7 @@ class PiecewiseLinearData(Component):
 
     name: Annotated[str, Field(frozen=True)] = ""
     points: Annotated[
-        List[XY_COORDS],
+        List[XYCoords],
         AfterValidator(validate_piecewise_linear_x),
         Field(description="list of (x,y) points that define the function"),
     ]
