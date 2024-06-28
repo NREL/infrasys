@@ -51,8 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "ruff"
     steps:
-      - uses: davidslusser/actions_python_ruff@v1.0.0
+      - uses: actions/checkout@v4
+      - uses: chartboost/ruff-action@v1
         with:
-          src: "src"
-          pip_install_command: "pip install -e .[dev]"
-          python_version: "3.11"
+          src: "./src"
