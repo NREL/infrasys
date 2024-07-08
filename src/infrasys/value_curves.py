@@ -12,6 +12,7 @@ from infrasys.function_data import (
     running_sum,
 )
 from pydantic import Field
+import numpy as np
 
 
 class InputOutputCurve(Component):
@@ -267,39 +268,53 @@ def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
     return
 
 
-# Converting Incremental Curves to X
 def IncrementalToAverageRate(data: IncrementalCurve) -> AverageRateCurve:
+    io_curve = IncrementalToInputOutput(data)
+
+    return InputOutputToAverageRate(io_curve)
+
+
+# Converting Average Rate Curves to X
+
+
+def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
     if isinstance(data.function_data, LinearFunctionData):
         p = data.function_data.proportional_term
         m = data.function_data.constant_term
 
         if data.initial_input is None:
-            ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
+            ValueError("Cannot convert `AverageRateCurve` with undefined `initial_input`")
         else:
             c = data.initial_input
 
         if p == 0:
-            return AverageRateCurve(
+            return InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=m, constant_term=c)
             )
         else:
-            return AverageRateCurve(
+            return InputOutputCurve(
                 function_data=QuadraticFunctionData(
-                    quadratic_term=p / 2, proportional_term=m, constant_term=c
+                    quadratic_term=p, proportional_term=m, constant_term=c
                 ),
                 input_at_zero=data.input_at_zero,
             )
 
     elif isinstance(data.function_data, PiecewiseStepData):
         if data.initial_input is None:
-            ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
+            ValueError("Cannot convert `AverageCurve` with undefined `initial_input`")
         else:
             c = data.initial_input
 
-        points = running_sum(data.function_data)
-
-        return AverageRateCurve(
-            function_data=PiecewiseLinearData(points=[(p.x, p.y + c) for p in points]),
+        xs = data.function_data.x_coords
+        ys = np.multiply(xs[1:], data.function_data.y_coords).tolist()
+        return InputOutputCurve(
+            function_data=PiecewiseLinearData(list(zip(xs, ys))),
             input_at_zero=data.input_at_zero,
         )
     return
+
+
+def AverageRatetoIncremental(data: AverageRateCurve) -> IncrementalCurve:
+    io_curve = AverageRateToInputOutput(data)
+
+    return InputOutputToIncremental(io_curve)
