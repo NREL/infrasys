@@ -203,7 +203,7 @@ def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
         p = data.function_data.proportional_term
 
         return AverageRateCurve(
-            function_data=LinearFunctionData(q, p),
+            function_data=LinearFunctionData(proportional_term=q, constant_term=p),
             initial_input=data.function_data.constant_term,
             input_at_zero=data.input_at_zero,
         )
@@ -212,7 +212,7 @@ def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
         p = data.function_data.proportional_term
 
         return AverageRateCurve(
-            function_data=LinearFunctionData(q, p),
+            function_data=LinearFunctionData(proportional_term=q, constant_term=p),
             initial_input=data.function_data.constant_term,
             input_at_zero=data.input_at_zero,
         )
@@ -255,10 +255,9 @@ def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
         p = data.function_data.proportional_term
         m = data.function_data.constant_term
 
-        if data.initial_input is None:
-            ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
-        else:
-            c = data.initial_input
+        c = data.initial_input
+        if c is None:
+            raise ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
 
         if p == 0:
             return InputOutputCurve(
@@ -273,10 +272,9 @@ def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
             )
 
     elif isinstance(data.function_data, PiecewiseStepData):
-        if data.initial_input is None:
-            ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
-        else:
-            c = data.initial_input
+        c = data.initial_input
+        if c is None:
+            raise ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
 
         points = running_sum(data.function_data)
 
