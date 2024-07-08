@@ -198,10 +198,38 @@ def get_slopes(vc: List[XYCoords]) -> List[float]:
 
 
 def get_x_lengths(x_coords: List[float]) -> List[float]:
+    """Calculates the length of each segment of piecewise function
+
+    Parameters
+    ----------
+    x_coords : List[float]
+        List of x-coordinates
+
+    Returns
+    ----------
+    List[float]
+        List of values that represent the length of each piecewise segment.
+    """
     return np.subtract(x_coords[1:], x_coords[:-1]).tolist()
 
 
 def running_sum(data: PiecewiseStepData) -> List[XYCoords]:
+    """Calculates y-values from slope data in PiecewiseStepData
+
+    Uses the x coordinates and slope data in PiecewiseStepData to
+    calculate the corresponding y-values, such that:
+    `y[i] = y[i-1] + slope[i-1]*(x[i] - x[i-1])`
+
+    Parameters
+    ----------
+    data : PiecewiseStepData
+        Piecewise function data used to calculate y-coordinates
+
+    Returns
+    ----------
+    point : List[XYCoords]
+        List of (x,y) coordinates as NamedTuples.
+    """
     points = []
     slopes = data.y_coords
     x_coords = data.x_coords
