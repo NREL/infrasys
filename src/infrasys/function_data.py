@@ -170,3 +170,28 @@ class PiecewiseStepData(Component):
             raise ValueError("Must specify one fewer y-coordinates than x-coordinates")
 
         return self
+
+
+def get_slopes(vc: List[XYCoords]) -> List[float]:
+    """Calculate slopes from XYCoord data
+
+    Function used to calculate the slopes from a list of XYCoords.
+    Slopes are calculated between each section of the piecewise curve.
+    Returns a list of slopes that can be used to define Value Curves.
+
+    Parameters
+    ----------
+    vc : List[XYCoords]
+        List of named tuples of (x,y) coordinates.
+
+    Returns
+    ----------
+    slopes : List[float]
+        List of slopes for each section of given piecewise linear data.
+    """
+    slopes = []
+    (prev_x, prev_y) = vc[0]
+    for comp_x, comp_y in vc[1:]:
+        slopes.append((comp_y - prev_y) / (comp_x - prev_x))
+        (prev_x, prev_y) = (comp_x, comp_y)
+    return slopes
