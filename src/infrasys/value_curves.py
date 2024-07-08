@@ -9,6 +9,7 @@ from infrasys.function_data import (
     PiecewiseLinearData,
     PiecewiseStepData,
     get_slopes,
+    running_sum,
 )
 from pydantic import Field
 
@@ -126,17 +127,22 @@ def InputOutputLinearToQuadratic(data: InputOutputCurve) -> InputOutputCurve:
 def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
     """Function to convert InputOutputCurve to IncrementalCurve
 
-    TEXT HERE
+    Function takes and InputOutputCurve and converts it to a corresponding
+    incremental curve depending on the type of function_data. If the InputOutputCurve
+    uses LinearFunctionData or QuadraticFunctionData, the corresponding
+    IncrementalCurve uses the corresponding derivative for its `function_data`. If
+    the input uses PiecewiseLinearData, the slopes of each segment are calculated and
+    converted to PiecewiseStepData for the IncrementalCurve.
 
     Parameters
     ----------
     data : InputOutputCurve
-        `InputOutputCurve` using `LinearFunctionData` for its function data.
+        InputOutputCurve using LinearFunctionData for its function data.
 
     Returns
     ----------
     IncrementalCurve
-        `IncrementalCurve` using either `LinearFunctionData` or `PiecewiseStepData`.
+        IncrementalCurve using either LinearFunctionData or PiecewiseStepData.
     """
 
     if isinstance(data.function_data, LinearFunctionData):
@@ -173,17 +179,23 @@ def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
 def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
     """Function to convert InputOutputCurve to AverageRateCurve
 
-    TEXT HERE
+    Function takes and InputOutputCurve and converts it to a corresponding
+    AverageRateCurve depending on the type of function_data. If the InputOutputCurve
+    uses LinearFunctionData or QuadraticFunctionData, the corresponding
+    IncrementalCurve uses the LinearFunctionData, with a slope equal to the `quadratic_term`
+    (0.0 if originally linear), and a intercept equal to the `proportional_term`. If
+    the input uses PiecewiseLinearData, the slopes of each segment are calculated and
+    converted to PiecewiseStepData for the AverageRateCurve.
 
     Parameters
     ----------
     data : InputOutputCurve
-        `InputOutputCurve` using `LinearFunctionData` for its function data.
+        InputOutputCurve using LinearFunctionData for its function data.
 
     Returns
     ----------
     AverageRateCurve
-        `AverageRateCurve` using either `LinearFunctionData` or `PiecewiseStepData`.
+        AverageRateCurve using either LinearFunctionData or PiecewiseStepData.
     """
     if isinstance(data.function_data, LinearFunctionData):
         q = 0.0
@@ -214,4 +226,80 @@ def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
             input_at_zero=data.input_at_zero,
         )
 
+    return
+
+
+# Converting Incremental Curves to X
+def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
+    if isinstance(data.function_data, LinearFunctionData):
+        p = data.function_data.proportional_term
+        m = data.function_data.constant_term
+
+        if data.initial_input is None:
+            ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
+        else:
+            c = data.initial_input
+
+        if p == 0:
+            return InputOutputCurve(
+                function_data=LinearFunctionData(proportional_term=m, constant_term=c)
+            )
+        else:
+            return InputOutputCurve(
+                function_data=QuadraticFunctionData(
+                    quadratic_term=p / 2, proportional_term=m, constant_term=c
+                ),
+                input_at_zero=data.input_at_zero,
+            )
+
+    elif isinstance(data.function_data, PiecewiseStepData):
+        if data.initial_input is None:
+            ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
+        else:
+            c = data.initial_input
+
+        points = running_sum(data.function_data)
+
+        return InputOutputCurve(
+            function_data=PiecewiseLinearData(points=[(p.x, p.y + c) for p in points]),
+            input_at_zero=data.input_at_zero,
+        )
+    return
+
+
+# Converting Incremental Curves to X
+def IncrementalToAverageRate(data: IncrementalCurve) -> AverageRateCurve:
+    if isinstance(data.function_data, LinearFunctionData):
+        p = data.function_data.proportional_term
+        m = data.function_data.constant_term
+
+        if data.initial_input is None:
+            ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
+        else:
+            c = data.initial_input
+
+        if p == 0:
+            return AverageRateCurve(
+                function_data=LinearFunctionData(proportional_term=m, constant_term=c)
+            )
+        else:
+            return AverageRateCurve(
+                function_data=QuadraticFunctionData(
+                    quadratic_term=p / 2, proportional_term=m, constant_term=c
+                ),
+                input_at_zero=data.input_at_zero,
+            )
+
+    elif isinstance(data.function_data, PiecewiseStepData):
+        if data.initial_input is None:
+            ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
+        else:
+            c = data.initial_input
+
+        points = running_sum(data.function_data)
+
+        return AverageRateCurve(
+            function_data=PiecewiseLinearData(points=[(p.x, p.y + c) for p in points]),
+            input_at_zero=data.input_at_zero,
+        )
     return
