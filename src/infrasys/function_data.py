@@ -198,7 +198,7 @@ def get_slopes(vc: List[XYCoords]) -> List[float]:
 
 
 def get_x_lengths(x_coords: List[float]) -> List[float]:
-    return np.subtract(x_coords[1:], x_coords[:-1])
+    return np.subtract(x_coords[1:], x_coords[:-1]).tolist()
 
 
 def running_sum(data: PiecewiseStepData) -> List[XYCoords]:
