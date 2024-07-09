@@ -174,8 +174,6 @@ def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
             input_at_zero=data.input_at_zero,
         )
 
-    return
-
 
 def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
     """Function to convert InputOutputCurve to AverageRateCurve
@@ -226,8 +224,6 @@ def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
             initial_input=data.function_data.points[0].y,
             input_at_zero=data.input_at_zero,
         )
-
-    return
 
 
 # Converting Incremental Curves to X
@@ -282,7 +278,6 @@ def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
             function_data=PiecewiseLinearData(points=[(p.x, p.y + c) for p in points]),
             input_at_zero=data.input_at_zero,
         )
-    return
 
 
 def IncrementalToAverageRate(data: IncrementalCurve) -> AverageRateCurve:
@@ -333,10 +328,9 @@ def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
         p = data.function_data.proportional_term
         m = data.function_data.constant_term
 
-        if data.initial_input is None:
-            ValueError("Cannot convert `AverageRateCurve` with undefined `initial_input`")
-        else:
-            c = data.initial_input
+        c = data.initial_input
+        if c is None:
+            raise ValueError("Cannot convert `AverageRateCurve` with undefined `initial_input`")
 
         if p == 0:
             return InputOutputCurve(
@@ -351,23 +345,21 @@ def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
             )
 
     elif isinstance(data.function_data, PiecewiseStepData):
-        if data.initial_input is None:
-            ValueError("Cannot convert `AverageCurve` with undefined `initial_input`")
-        else:
-            c = data.initial_input
+        c = data.initial_input
+        if c is None:
+            raise ValueError("Cannot convert `AverageRateCurve` with undefined `initial_input`")
 
         xs = data.function_data.x_coords
         ys = np.multiply(xs[1:], data.function_data.y_coords).tolist()
         ys.insert(0, c)
 
         return InputOutputCurve(
-            function_data=PiecewiseLinearData(list(zip(xs, ys))),
+            function_data=PiecewiseLinearData(points=list(zip(xs, ys))),
             input_at_zero=data.input_at_zero,
         )
-    return
 
 
-def AverageRatetoIncremental(data: AverageRateCurve) -> IncrementalCurve:
+def AverageRateToIncremental(data: AverageRateCurve) -> IncrementalCurve:
     """Function to convert AverageRateCurve to IncrementalCurve
 
     Function takes an AverageRateCurve and first converts it to an
