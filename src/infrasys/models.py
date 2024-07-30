@@ -71,7 +71,7 @@ def get_class_and_name_from_label(label: str) -> tuple[str, str | UUID]:
     """Return the class and name from a label.
     If the name is a stringified UUID, it will be converted to a UUID.
     """
-    class_name, name = label.split(".")
+    class_name, name = label.split(".", maxsplit=1)
     name_or_uuid: str | UUID = name
     try:
         name_or_uuid = UUID(name)
