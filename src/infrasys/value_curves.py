@@ -3,6 +3,7 @@
 from infrasys import Component
 from typing import Union
 from typing_extensions import Annotated
+from infrasys.exceptions import ISMethodError
 from infrasys.function_data import (
     LinearFunctionData,
     QuadraticFunctionData,
@@ -18,15 +19,18 @@ import numpy as np
 class InputOutputCurve(Component):
     """Input-output curve relating production quality to cost.
 
-    An input-output curve, directly relating the production quantity to the cost: `y = f(x)`.
-    Can be used, for instance, in the representation of a Cost Curve where `x` is MW
-    and `y` is currency/hr, or in the representation of a Fuel Curve where `x` is MW
-    and `y` is fuel/hr.
+    An input-output curve, directly relating the production quantity to the cost:
+
+    .. math:: y = f(x).
+
+    Can be used, for instance, in the representation of a Cost Curve where :math:`x` is MW
+    and :math:`y` is currency/hr, or in the representation of a Fuel Curve where :math:`x` is MW
+    and :math:`y` is fuel/hr.
     """
 
     name: Annotated[str, Field(frozen=True)] = ""
     function_data: Annotated[
-        Union[QuadraticFunctionData, LinearFunctionData, PiecewiseLinearData],
+        QuadraticFunctionData | LinearFunctionData | PiecewiseLinearData,
         Field(description="The underlying `FunctionData` representation of this `ValueCurve`"),
     ]
     input_at_zero: Annotated[
@@ -41,25 +45,29 @@ class IncrementalCurve(Component):
     """Incremental/marginal curve to relate production quantity to cost derivative.
 
     An incremental (or 'marginal') curve, relating the production quantity to the derivative of
-    cost: `y = f'(x)`. Can be used, for instance, in the representation of a Cost Curve
-    where `x` is MW and `y` is currency/MWh, or in the representation of a Fuel Curve
-    where `x` is MW and `y` is fuel/MWh.
+    cost:
+
+    ..math:: y = f'(x).
+
+    Can be used, for instance, in the representation of a Cost Curve
+    where :math:`x` is MW and :math:`y` is currency/MWh, or in the representation of a Fuel Curve
+    where :math:`x` is MW and :math:`y` is fuel/MWh.
     """
 
     name: Annotated[str, Field(frozen=True)] = ""
     function_data: Annotated[
-        Union[LinearFunctionData, PiecewiseStepData],
+        LinearFunctionData | PiecewiseStepData,
         Field(description="The underlying `FunctionData` representation of this `ValueCurve`"),
     ]
     initial_input: Annotated[
-        Union[float, None],
+        float | None,
         Field(
             description="The value of f(x) at the least x for which the function is defined, or \
                 the origin for functions with no left endpoint, used for conversion to `InputOutputCurve`"
         ),
     ]
     input_at_zero: Annotated[
-        Union[None, float],
+        float | None,
         Field(
             description="Optional, an explicit representation of the input value at zero output."
         ),
@@ -70,38 +78,43 @@ class AverageRateCurve(Component):
     """Average rate curve relating production quality to average cost rate.
 
     An average rate curve, relating the production quantity to the average cost rate from the
-    origin: `y = f(x)/x`. Can be used, for instance, in the representation of a
-    Cost Curve where `x` is MW and `y` is currency/MWh, or in the representation of a
-    Fuel Curve where `x` is MW and `y` is fuel/MWh. Typically calculated by dividing
+    origin:
+
+    .. math:: y = f(x)/x.
+
+    Can be used, for instance, in the representation of a
+    Cost Curve where :math:`x` is MW and :math:`y` is currency/MWh, or in the representation of a
+    Fuel Curve where :math:`x` is MW and :math:`y` is fuel/MWh. Typically calculated by dividing
     absolute values of cost rate or fuel input rate by absolute values of electric power.
     """
 
     name: Annotated[str, Field(frozen=True)] = ""
     function_data: Annotated[
-        Union[LinearFunctionData, PiecewiseStepData],
+        LinearFunctionData | PiecewiseStepData,
         Field(
             description="The underlying `FunctionData` representation of this `ValueCurve`, or \
                 only the oblique asymptote when using `LinearFunctionData`"
         ),
     ]
     initial_input: Annotated[
-        Union[float, None],
+        float | None,
         Field(
             description="The value of f(x) at the least x for which the function is defined, or \
                 the origin for functions with no left endpoint, used for conversion to `InputOutputCurve`"
         ),
     ]
     input_at_zero: Annotated[
-        Union[None, float],
+        float | None,
         Field(
             description="Optional, an explicit representation of the input value at zero output."
         ),
     ] = None
 
 
-# Converting IO curves to X
 def InputOutputLinearToQuadratic(data: InputOutputCurve) -> InputOutputCurve:
     """Function to convert linear InputOutput Curve to quadratic
+
+    Converting IO curves to X
 
     Parameters
     ----------
@@ -109,11 +122,15 @@ def InputOutputLinearToQuadratic(data: InputOutputCurve) -> InputOutputCurve:
         `InputOutputCurve` using `LinearFunctionData` for its function data.
 
     Returns
-    ----------
+    -------
     InputOutputCurve
         `InputOutputCurve` using `QuadraticFunctionData` for its function data.
     """
     q = 0.0
+
+    if isinstance(data.function_data, PiecewiseStepData | PiecewiseLinearData):
+        raise ISMethodError("Can not convert Piecewise data to Quadratic.")
+
     p = data.function_data.proportional_term
     c = data.function_data.constant_term
 
@@ -129,10 +146,10 @@ def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
     """Function to convert InputOutputCurve to IncrementalCurve
 
     Function takes and InputOutputCurve and converts it to a corresponding
-    incremental curve depending on the type of function_data. If the InputOutputCurve
-    uses LinearFunctionData or QuadraticFunctionData, the corresponding
-    IncrementalCurve uses the corresponding derivative for its `function_data`. If
-    the input uses PiecewiseLinearData, the slopes of each segment are calculated and
+    incremental curve depending on the type of function_data. If the :class:`InputOutputCurve`
+    uses :class:`LinearFunctionData` or :class:`QuadraticFunctionData`, the corresponding
+    :class:`IncrementalCurve` uses the corresponding derivative for its `function_data`. If
+    the input uses :class:`PiecewiseLinearData`, the slopes of each segment are calculated and
     converted to PiecewiseStepData for the IncrementalCurve.
 
     Parameters
@@ -141,50 +158,57 @@ def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
         Original InputOutputCurve for conversion.
 
     Returns
-    ----------
+    -------
     IncrementalCurve
         IncrementalCurve using either LinearFunctionData or PiecewiseStepData after conversion.
+
+    Raises
+    ------
+    ISMethodError
+        Function is not valid for the type of data provided.
     """
+    match data.function_data:
+        case LinearFunctionData():
+            q = 0.0
+            p = data.function_data.proportional_term
 
-    if isinstance(data.function_data, LinearFunctionData):
-        q = 0.0
-        p = data.function_data.proportional_term
+            return IncrementalCurve(
+                function_data=LinearFunctionData(proportional_term=q, constant_term=p),
+                initial_input=data.function_data.constant_term,
+                input_at_zero=data.input_at_zero,
+            )
+        case QuadraticFunctionData():
+            q = data.function_data.quadratic_term
+            p = data.function_data.proportional_term
 
-        return IncrementalCurve(
-            function_data=LinearFunctionData(proportional_term=q, constant_term=p),
-            initial_input=data.function_data.constant_term,
-            input_at_zero=data.input_at_zero,
-        )
-    elif isinstance(data.function_data, QuadraticFunctionData):
-        q = data.function_data.quadratic_term
-        p = data.function_data.proportional_term
+            return IncrementalCurve(
+                function_data=LinearFunctionData(proportional_term=2 * q, constant_term=p),
+                initial_input=data.function_data.constant_term,
+                input_at_zero=data.input_at_zero,
+            )
+        case PiecewiseLinearData():
+            x = [fd.x for fd in data.function_data.points]
+            slopes = get_slopes(data.function_data.points)
 
-        return IncrementalCurve(
-            function_data=LinearFunctionData(proportional_term=2 * q, constant_term=p),
-            initial_input=data.function_data.constant_term,
-            input_at_zero=data.input_at_zero,
-        )
-    elif isinstance(data.function_data, PiecewiseLinearData):
-        x = [fd.x for fd in data.function_data.points]
-        slopes = get_slopes(data.function_data.points)
-
-        return IncrementalCurve(
-            function_data=PiecewiseStepData(x_coords=x, y_coords=slopes),
-            initial_input=data.function_data.points[0].y,
-            input_at_zero=data.input_at_zero,
-        )
+            return IncrementalCurve(
+                function_data=PiecewiseStepData(x_coords=x, y_coords=slopes),
+                initial_input=data.function_data.points[0].y,
+                input_at_zero=data.input_at_zero,
+            )
+        case _:
+            raise ISMethodError("Function is not valid for the type of data provided.")
 
 
 def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
     """Function to convert InputOutputCurve to AverageRateCurve
 
-    Function takes and InputOutputCurve and converts it to a corresponding
-    AverageRateCurve depending on the type of function_data. If the InputOutputCurve
-    uses LinearFunctionData or QuadraticFunctionData, the corresponding
-    IncrementalCurve uses the LinearFunctionData, with a slope equal to the `quadratic_term`
-    (0.0 if originally linear), and a intercept equal to the `proportional_term`. If
-    the input uses PiecewiseLinearData, the slopes of each segment are calculated and
-    converted to PiecewiseStepData for the AverageRateCurve.
+    If the :class:`InputOutputCurve` uses :class:`LinearFunctionData` or
+    :class:`QuadraticFunctionData`, the corresponding :class:`IncrementalCurve`
+    uses the :class`LinearFunctionData`, with a slope equal to the
+    `quadratic_term` (0.0 if originally linear), and a intercept equal to the
+    `proportional_term`. If the input uses :class:`PiecewiseLinearData`, the
+    slopes of each segment are calculated and converted to PiecewiseStepData
+    for the AverageRateCurve.
 
     Parameters
     ----------
@@ -195,38 +219,45 @@ def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
     ----------
     AverageRateCurve
         AverageRateCurve using either LinearFunctionData or PiecewiseStepData after conversion.
+
+    Raises
+    ------
+    ISMethodError
+        Function is not valid for the type of data provided.
     """
-    if isinstance(data.function_data, LinearFunctionData):
-        q = 0.0
-        p = data.function_data.proportional_term
+    match data.function_data:
+        case LinearFunctionData():
+            q = 0.0
+            p = data.function_data.proportional_term
 
-        return AverageRateCurve(
-            function_data=LinearFunctionData(proportional_term=q, constant_term=p),
-            initial_input=data.function_data.constant_term,
-            input_at_zero=data.input_at_zero,
-        )
-    elif isinstance(data.function_data, QuadraticFunctionData):
-        q = data.function_data.quadratic_term
-        p = data.function_data.proportional_term
+            return AverageRateCurve(
+                function_data=LinearFunctionData(proportional_term=q, constant_term=p),
+                initial_input=data.function_data.constant_term,
+                input_at_zero=data.input_at_zero,
+            )
+        case QuadraticFunctionData():
+            q = data.function_data.quadratic_term
+            p = data.function_data.proportional_term
 
-        return AverageRateCurve(
-            function_data=LinearFunctionData(proportional_term=q, constant_term=p),
-            initial_input=data.function_data.constant_term,
-            input_at_zero=data.input_at_zero,
-        )
-    elif isinstance(data.function_data, PiecewiseLinearData):
-        # I think I need to add in the getters and stuff from function_data to make this easier
-        x = [fd.x for fd in data.function_data.points]
-        slopes_from_origin = [fd.y / fd.x for fd in data.function_data.points[1:]]
+            return AverageRateCurve(
+                function_data=LinearFunctionData(proportional_term=q, constant_term=p),
+                initial_input=data.function_data.constant_term,
+                input_at_zero=data.input_at_zero,
+            )
+        case PiecewiseLinearData():
+            # I think I need to add in the getters and stuff from function_data to make this easier
+            x = [fd.x for fd in data.function_data.points]
+            slopes_from_origin = [fd.y / fd.x for fd in data.function_data.points[1:]]
 
-        return AverageRateCurve(
-            function_data=PiecewiseStepData(x_coords=x, y_coords=slopes_from_origin),
-            initial_input=data.function_data.points[0].y,
-            input_at_zero=data.input_at_zero,
-        )
+            return AverageRateCurve(
+                function_data=PiecewiseStepData(x_coords=x, y_coords=slopes_from_origin),
+                initial_input=data.function_data.points[0].y,
+                input_at_zero=data.input_at_zero,
+            )
+        case _:
+            raise ISMethodError("Function is not valid for the type of data provided.")
 
 
-# Converting Incremental Curves to X
 def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
     """Function to convert IncrementalCurve to InputOutputCurve
 
@@ -302,7 +333,6 @@ def IncrementalToAverageRate(data: IncrementalCurve) -> AverageRateCurve:
     return InputOutputToAverageRate(io_curve)
 
 
-# Converting Average Rate Curves to X
 def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
     """Function to convert IncrementalCurve to InputOutputCurve
 
@@ -323,40 +353,45 @@ def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
     InputOutputCurve
         InputOutputCurve using either QuadraticFunctionData or PiecewiseStepData.
     """
+    match data.function_data:
+        case LinearFunctionData():
+            p = data.function_data.proportional_term
+            m = data.function_data.constant_term
 
-    if isinstance(data.function_data, LinearFunctionData):
-        p = data.function_data.proportional_term
-        m = data.function_data.constant_term
+            c = data.initial_input
+            if c is None:
+                raise ValueError(
+                    "Cannot convert `AverageRateCurve` with undefined `initial_input`"
+                )
 
-        c = data.initial_input
-        if c is None:
-            raise ValueError("Cannot convert `AverageRateCurve` with undefined `initial_input`")
+            if p == 0:
+                return InputOutputCurve(
+                    function_data=LinearFunctionData(proportional_term=m, constant_term=c)
+                )
+            else:
+                return InputOutputCurve(
+                    function_data=QuadraticFunctionData(
+                        quadratic_term=p, proportional_term=m, constant_term=c
+                    ),
+                    input_at_zero=data.input_at_zero,
+                )
+        case PiecewiseLinearData():
+            c = data.initial_input
+            if c is None:
+                raise ValueError(
+                    "Cannot convert `AverageRateCurve` with undefined `initial_input`"
+                )
 
-        if p == 0:
+            xs = data.function_data.x_coords
+            ys = np.multiply(xs[1:], data.function_data.y_coords).tolist()
+            ys.insert(0, c)
+
             return InputOutputCurve(
-                function_data=LinearFunctionData(proportional_term=m, constant_term=c)
-            )
-        else:
-            return InputOutputCurve(
-                function_data=QuadraticFunctionData(
-                    quadratic_term=p, proportional_term=m, constant_term=c
-                ),
+                function_data=PiecewiseLinearData(points=list(zip(xs, ys))),
                 input_at_zero=data.input_at_zero,
             )
-
-    elif isinstance(data.function_data, PiecewiseStepData):
-        c = data.initial_input
-        if c is None:
-            raise ValueError("Cannot convert `AverageRateCurve` with undefined `initial_input`")
-
-        xs = data.function_data.x_coords
-        ys = np.multiply(xs[1:], data.function_data.y_coords).tolist()
-        ys.insert(0, c)
-
-        return InputOutputCurve(
-            function_data=PiecewiseLinearData(points=list(zip(xs, ys))),
-            input_at_zero=data.input_at_zero,
-        )
+        case _:
+            raise ISMethodError("Function is not valid for the type of data provided.")
 
 
 def AverageRateToIncremental(data: AverageRateCurve) -> IncrementalCurve:
