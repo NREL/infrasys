@@ -18,6 +18,7 @@ from infrasys.value_curves import (
     AverageRateToIncremental,
 )
 from infrasys import Component
+from infrasys.exceptions import ISMethodError
 from .models.simple_system import SimpleSystem
 import pytest
 
@@ -153,6 +154,7 @@ def test_average_rate_conversion():
     new_curve = AverageRateToIncremental(curve)
     assert isinstance(new_curve, IncrementalCurve)
 
+    assert isinstance(curve.function_data, LinearFunctionData)
     curve.function_data.proportional_term = 0.0
     new_curve = AverageRateToInputOutput(curve)
     assert isinstance(new_curve, InputOutputCurve)
@@ -162,7 +164,7 @@ def test_average_rate_conversion():
     # Piecewise step data
     data = PiecewiseStepData(x_coords=[1.0, 3.0, 5.0], y_coords=[2.0, 6.0])
     curve = AverageRateCurve(function_data=data, initial_input=None)
-    with pytest.raises(ValueError):
+    with pytest.raises(ISMethodError):
         AverageRateToInputOutput(curve)
 
     curve.initial_input = 0.0

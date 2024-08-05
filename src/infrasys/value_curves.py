@@ -375,10 +375,10 @@ def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
                     ),
                     input_at_zero=data.input_at_zero,
                 )
-        case PiecewiseLinearData():
+        case PiecewiseStepData():
             c = data.initial_input
             if c is None:
-                raise ValueError(
+                raise ISMethodError(
                     "Cannot convert `AverageRateCurve` with undefined `initial_input`"
                 )
 
