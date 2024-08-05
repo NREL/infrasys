@@ -77,12 +77,14 @@ def validate_piecewise_linear_x(points: List[XYCoords]) -> List[XYCoords]:
     x_coords = [p.x for p in points]
 
     if len(x_coords) < 2:
-        raise ValueError("Must specify at least two x-coordinates.")
+        msg = "Must specify at least two x-coordinates."
+        raise ValueError(msg)
     if not (
         x_coords == sorted(x_coords)
         or (np.isnan(x_coords[0]) and x_coords[1:] == sorted(x_coords[1:]))
     ):
-        raise ValueError(f"Piecewise x-coordinates must be ascending, got {x_coords}.")
+        msg = f"Piecewise x-coordinates must be ascending, got {x_coords}."
+        raise ValueError(msg)
 
     return points
 
@@ -106,12 +108,14 @@ def validate_piecewise_step_x(x_coords: List[float]) -> List[float]:
     """
 
     if len(x_coords) < 2:
-        raise ValueError("Must specify at least two x-coordinates.")
+        msg = "Must specify at least two x-coordinates."
+        raise ValueError(msg)
     if not (
         x_coords == sorted(x_coords)
         or (np.isnan(x_coords[0]) and x_coords[1:] == sorted(x_coords[1:]))
     ):
-        raise ValueError(f"Piecewise x-coordinates must be ascending, got {x_coords}.")
+        msg = f"Piecewise x-coordinates must be ascending, got {x_coords}."
+        raise ValueError(msg)
 
     return x_coords
 
@@ -173,7 +177,8 @@ class PiecewiseStepData(Component):
         validate_piecewise_step_x(self.x_coords)
 
         if len(self.y_coords) != len(self.x_coords) - 1:
-            raise ValueError("Must specify one fewer y-coordinates than x-coordinates")
+            msg = "Must specify one fewer y-coordinates than x-coordinates"
+            raise ValueError(msg)
 
         return self
 
