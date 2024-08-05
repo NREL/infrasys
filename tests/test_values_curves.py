@@ -80,10 +80,12 @@ def test_input_output_conversion():
     )
     new_curve = InputOutputToAverageRate(curve)
     assert isinstance(new_curve, AverageRateCurve)
+    assert isinstance(new_curve.function_data, LinearFunctionData)
     assert new_curve.function_data.proportional_term == q
 
     new_curve = InputOutputToIncremental(curve)
     assert isinstance(new_curve, IncrementalCurve)
+    assert isinstance(new_curve.function_data, LinearFunctionData)
     assert new_curve.function_data.proportional_term == 2 * q
 
     # Piecewise linear data
@@ -92,6 +94,7 @@ def test_input_output_conversion():
     curve = InputOutputCurve(function_data=PiecewiseLinearData(points=xy))
     new_curve = InputOutputToAverageRate(curve)
     assert isinstance(new_curve, AverageRateCurve)
+    assert isinstance(new_curve.function_data, PiecewiseStepData)
     assert new_curve.function_data.y_coords == [2.0, 2.5]
 
     new_curve = InputOutputToIncremental(curve)
@@ -104,7 +107,8 @@ def test_incremental_conversion():
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0),
         initial_input=None,
     )
-    with pytest.raises(ValueError):
+    assert isinstance(curve.function_data, LinearFunctionData)
+    with pytest.raises(ISOperationNotAllowed):
         IncrementalToInputOutput(curve)
 
     curve.initial_input = 0.0
@@ -125,7 +129,7 @@ def test_incremental_conversion():
     # Piecewise step data
     data = PiecewiseStepData(x_coords=[1.0, 3.0, 5.0], y_coords=[2.0, 6.0])
     curve = IncrementalCurve(function_data=data, initial_input=None)
-    with pytest.raises(ValueError):
+    with pytest.raises(ISOperationNotAllowed):
         IncrementalToInputOutput(curve)
 
     curve.initial_input = 0.0
@@ -142,7 +146,7 @@ def test_average_rate_conversion():
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0),
         initial_input=None,
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ISOperationNotAllowed):
         AverageRateToInputOutput(curve)
 
     curve.initial_input = 0.0
@@ -213,6 +217,7 @@ def test_value_curve_serialization(tmp_path):
     v2 = system2.get_component(ValueCurveComponent, "test")
 
     assert v2 is not None
+    assert isinstance(v1.value_curve.function_data, LinearFunctionData)
     assert (
         v1.value_curve.function_data.proportional_term
         == v2.value_curve.function_data.proportional_term
