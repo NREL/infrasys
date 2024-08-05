@@ -31,7 +31,3 @@ class ISNotStored(ISBaseException):
 
 class ISOperationNotAllowed(ISBaseException):
     """Raised if the requested operation is not allowed."""
-
-
-class ISMethodError(ISBaseException):
-    """Rased if the requested method is not allowed."""

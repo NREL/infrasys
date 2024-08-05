@@ -3,7 +3,7 @@
 from infrasys import Component
 from typing import Union
 from typing_extensions import Annotated
-from infrasys.exceptions import ISMethodError
+from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.function_data import (
     LinearFunctionData,
     QuadraticFunctionData,
@@ -129,7 +129,8 @@ def InputOutputLinearToQuadratic(data: InputOutputCurve) -> InputOutputCurve:
     q = 0.0
 
     if isinstance(data.function_data, PiecewiseStepData | PiecewiseLinearData):
-        raise ISMethodError("Can not convert Piecewise data to Quadratic.")
+        msg = "Can not convert Piecewise data to Quadratic."
+        raise ISOperationNotAllowed(msg)
 
     p = data.function_data.proportional_term
     c = data.function_data.constant_term
@@ -164,7 +165,7 @@ def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
 
     Raises
     ------
-    ISMethodError
+    ISOperationNotAllowed
         Function is not valid for the type of data provided.
     """
     match data.function_data:
@@ -196,7 +197,8 @@ def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
                 input_at_zero=data.input_at_zero,
             )
         case _:
-            raise ISMethodError("Function is not valid for the type of data provided.")
+            msg = "Function is not valid for the type of data provided."
+            raise ISOperationNotAllowed(msg)
 
 
 def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
@@ -222,7 +224,7 @@ def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
 
     Raises
     ------
-    ISMethodError
+    ISOperationNotAllowed
         Function is not valid for the type of data provided.
     """
     match data.function_data:
@@ -255,7 +257,8 @@ def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
                 input_at_zero=data.input_at_zero,
             )
         case _:
-            raise ISMethodError("Function is not valid for the type of data provided.")
+            msg = "Function is not valid for the type of data provided."
+            raise ISOperationNotAllowed(msg)
 
 
 def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
@@ -284,7 +287,8 @@ def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
 
         c = data.initial_input
         if c is None:
-            raise ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
+            msg = "Cannot convert `IncrementalCurve` with undefined `initial_input`"
+            raise ISOperationNotAllowed(msg)
 
         if p == 0:
             return InputOutputCurve(
@@ -301,7 +305,8 @@ def IncrementalToInputOutput(data: IncrementalCurve) -> InputOutputCurve:
     elif isinstance(data.function_data, PiecewiseStepData):
         c = data.initial_input
         if c is None:
-            raise ValueError("Cannot convert `IncrementalCurve` with undefined `initial_input`")
+            msg = "Cannot convert `IncrementalCurve` with undefined `initial_input`"
+            raise ISOperationNotAllowed(msg)
 
         points = running_sum(data.function_data)
 
@@ -360,9 +365,8 @@ def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
 
             c = data.initial_input
             if c is None:
-                raise ValueError(
-                    "Cannot convert `AverageRateCurve` with undefined `initial_input`"
-                )
+                msg = "Cannot convert `AverageRateCurve` with undefined `initial_input`"
+                raise ISOperationNotAllowed(msg)
 
             if p == 0:
                 return InputOutputCurve(
@@ -378,9 +382,8 @@ def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
         case PiecewiseStepData():
             c = data.initial_input
             if c is None:
-                raise ISMethodError(
-                    "Cannot convert `AverageRateCurve` with undefined `initial_input`"
-                )
+                msg = "Cannot convert `AverageRateCurve` with undefined `initial_input`"
+                raise ISOperationNotAllowed(msg)
 
             xs = data.function_data.x_coords
             ys = np.multiply(xs[1:], data.function_data.y_coords).tolist()
@@ -391,7 +394,8 @@ def AverageRateToInputOutput(data: AverageRateCurve) -> InputOutputCurve:
                 input_at_zero=data.input_at_zero,
             )
         case _:
-            raise ISMethodError("Function is not valid for the type of data provided.")
+            msg = "Function is not valid for the type of data provided."
+            raise ISOperationNotAllowed(msg)
 
 
 def AverageRateToIncremental(data: AverageRateCurve) -> IncrementalCurve:
