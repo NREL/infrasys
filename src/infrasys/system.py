@@ -154,7 +154,8 @@ class System:
             data = system_data
         else:
             if "system" in data:
-                raise ISConflictingArguments("data contains the key 'system'")
+                msg = "data contains the key 'system'"
+                raise ISConflictingArguments(msg)
             data["system"] = system_data
         with open(filename, "w", encoding="utf-8") as f_out:
             json.dump(data, f_out, indent=indent)
@@ -337,9 +338,8 @@ class System:
             fpath = Path(fpath)
 
         if fpath.exists() and not overwrite:
-            raise FileExistsError(
-                f"{fpath} exists already. To overwrite the folder pass `overwrite=True`"
-            )
+            msg = f"{fpath} exists already. To overwrite the folder pass `overwrite=True`"
+            raise FileExistsError(msg)
 
         fpath.mkdir(parents=True, exist_ok=True)
         self.to_json(fpath / filename, overwrite=overwrite)
@@ -991,7 +991,8 @@ class System:
 
     def merge_system(self, other: "System") -> None:
         """Merge the contents of another system into this one."""
-        raise NotImplementedError("merge_system")
+        msg = "merge_system"
+        raise NotImplementedError(msg)
 
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 

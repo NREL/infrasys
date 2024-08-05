@@ -256,7 +256,8 @@ class ComponentManager:
 
     def change_uuid(self, component: Component) -> None:
         """Change the component UUID."""
-        raise NotImplementedError("change_component_uuid")
+        msg = "change_component_uuid"
+        raise NotImplementedError(msg)
 
     def update(
         self,

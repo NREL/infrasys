@@ -19,7 +19,8 @@ class ParquetTimeSeriesStorage(TimeSeriesStorageBase):
         start_time: datetime | None = None,
         length: int | None = None,
     ) -> TimeSeriesData:
-        raise NotImplementedError("ParquetTimeSeriesStorage.get_time_series")
+        msg = "ParquetTimeSeriesStorage.get_time_series"
+        raise NotImplementedError(msg)
 
     def remove_time_series(self, uuid: UUID) -> None:
         ...

@@ -81,7 +81,8 @@ class TimeSeriesManager:
         """
         self._handle_read_only()
         if not components:
-            raise ISOperationNotAllowed("add_time_series requires at least one component")
+            msg = "add_time_series requires at least one component"
+            raise ISOperationNotAllowed(msg)
 
         ts_type = type(time_series)
         if not issubclass(ts_type, TimeSeriesData):
@@ -274,4 +275,5 @@ class TimeSeriesManager:
 
     def _handle_read_only(self) -> None:
         if self._read_only:
-            raise ISOperationNotAllowed("Cannot modify time series in read-only mode.")
+            msg = "Cannot modify time series in read-only mode."
+            raise ISOperationNotAllowed(msg)
