@@ -15,7 +15,13 @@ class XYCoords(NamedTuple):
     y: float
 
 
-class LinearFunctionData(Component):
+class FunctionData(Component):
+    """BaseClass of FunctionData"""
+
+    name: Annotated[str, Field(frozen=True)] = ""
+
+
+class LinearFunctionData(FunctionData):
     """Data representation for linear cost function.
 
     Used to represent linear cost functions of the form
@@ -25,7 +31,6 @@ class LinearFunctionData(Component):
     where :math:`m` is the proportional term and :math:`c` is the constant term.
     """
 
-    name: Annotated[str, Field(frozen=True)] = ""
     proportional_term: Annotated[
         float, Field(description="the proportional term in the represented function.")
     ]
@@ -34,17 +39,17 @@ class LinearFunctionData(Component):
     ]
 
 
-class QuadraticFunctionData(Component):
+class QuadraticFunctionData(FunctionData):
     """Data representation for quadratic cost function.
 
     Used to represent quadratic of cost functions of the form
 
     .. math:: f(x) = ax^2 + bx + c,
 
-    where :math:`a` is the quadratic term, :math:`b` is the proportional term and :math:`c` is the constant term.
+    where :math:`a` is the quadratic term, :math:`b` is the proportional term and :math:`c` is the
+    constant term.
     """
 
-    name: Annotated[str, Field(frozen=True)] = ""
     quadratic_term: Annotated[
         float, Field(description="the quadratic term in the represented function.")
     ]
@@ -59,9 +64,8 @@ class QuadraticFunctionData(Component):
 def validate_piecewise_linear_x(points: List[XYCoords]) -> List[XYCoords]:
     """Validates the x data for PiecewiseLinearData class
 
-    X data is checked to ensure there is at least two values of x,
-    which is the minimum required to generate a cost curve, and is
-    given in ascending order (e.g. [1, 2, 3], not [1, 3, 2]).
+    X data is checked to ensure there is at least two values of x, which is the minimum required to
+    generate a cost curve, and is given in ascending order (e.g. [1, 2, 3], not [1, 3, 2]).
 
     Parameters
     ----------
@@ -92,9 +96,8 @@ def validate_piecewise_linear_x(points: List[XYCoords]) -> List[XYCoords]:
 def validate_piecewise_step_x(x_coords: List[float]) -> List[float]:
     """Validates the x data for PiecewiseStepData class
 
-    X data is checked to ensure there is at least two values of x,
-    which is the minimum required to generate a cost curve, and is
-    given in ascending order (e.g. [1, 2, 3], not [1, 3, 2]).
+    X data is checked to ensure there is at least two values of x, which is the minimum required to
+    generate a cost curve, and is given in ascending order (e.g. [1, 2, 3], not [1, 3, 2]).
 
     Parameters
     ----------
@@ -120,15 +123,15 @@ def validate_piecewise_step_x(x_coords: List[float]) -> List[float]:
     return x_coords
 
 
-class PiecewiseLinearData(Component):
+class PiecewiseLinearData(FunctionData):
     """Data representation for piecewise linear cost function.
 
-    Used to represent linear data as a series of points: two points define one
-    segment, three points define two segments, etc. The curve starts at the first point given, not the origin.
-    Principally used for the representation of cost functions where the points store quantities (x, y), such as (MW, USD/h).
+    Used to represent linear data as a series of points: two points define one segment, three
+    points define two segments, etc. The curve starts at the first point given, not the origin.
+    Principally used for the representation of cost functions where the points store quantities (x,
+    y), such as (MW, USD/h).
     """
 
-    name: Annotated[str, Field(frozen=True)] = ""
     points: Annotated[
         List[XYCoords],
         AfterValidator(validate_piecewise_linear_x),
@@ -136,21 +139,19 @@ class PiecewiseLinearData(Component):
     ]
 
 
-class PiecewiseStepData(Component):
+class PiecewiseStepData(FunctionData):
     """Data representation for piecewise step cost function.
 
     Used to represent a step function as a series of endpoint x-coordinates and segment
-    y-coordinates: two x-coordinates and one y-coordinate defines a single segment, three x-coordinates and
-    two y-coordinates define two segments, etc.
+    y-coordinates: two x-coordinates and one y-coordinate defines a single segment, three
+    x-coordinates and two y-coordinates define two segments, etc.
 
-    This can be useful to represent the derivative of a
-    :class:`PiecewiseLinearData`, where the y-coordinates of this step function
-    represent the slopes of that piecewise linear function.
-    Principally used for the representation of cost functions where the points store
-    quantities (x, :math:`dy/dx`), such as (MW, USD/MWh).
+    This can be useful to represent the derivative of a :class:`PiecewiseLinearData`, where the
+    y-coordinates of this step function represent the slopes of that piecewise linear function.
+    Principally used for the representation of cost functions where the points store quantities (x,
+    :math:`dy/dx`), such as (MW, USD/MWh).
     """
 
-    name: Annotated[str, Field(frozen=True)] = ""
     x_coords: Annotated[
         List[float],
         Field(description="the x-coordinates of the endpoints of the segments."),
@@ -159,8 +160,8 @@ class PiecewiseStepData(Component):
         List[float],
         Field(
             description=(
-                "The y-coordinates of the segments: `y_coords[1]` is the y-value between `x_coords[0]` and `x_coords[1]`, etc. "
-                "Must have one fewer elements than `x_coords`."
+                "The y-coordinates of the segments: `y_coords[1]` is the y-value between "
+                "`x_coords[0]` and `x_coords[1]`, etc. Must have one fewer elements than `x_coords`."
             )
         ),
     ]
@@ -169,10 +170,10 @@ class PiecewiseStepData(Component):
     def validate_piecewise_xy(self):
         """Method to validate the x and y data for PiecewiseStepData class
 
-        Model validator used to validate given data for the :class:`PiecewiseStepData`.
-        Calls `validate_piecewise_step_x` to check if `x_coords` is valid, then checks if
-        the length of `y_coords` is exactly one less than `x_coords`, which is necessary
-        to define the cost functions correctly.
+        Model validator used to validate given data for the :class:`PiecewiseStepData`. Calls
+        `validate_piecewise_step_x` to check if `x_coords` is valid, then checks if the length of
+        `y_coords` is exactly one less than `x_coords`, which is necessary to define the cost
+        functions correctly.
         """
         validate_piecewise_step_x(self.x_coords)
 
@@ -181,75 +182,3 @@ class PiecewiseStepData(Component):
             raise ValueError(msg)
 
         return self
-
-
-def get_slopes(vc: List[XYCoords]) -> List[float]:
-    """Calculate slopes from XYCoord data
-
-    Slopes are calculated between each section of the piecewise curve.
-    Returns a list of slopes that can be used to define Value Curves.
-
-    Parameters
-    ----------
-    vc : List[XYCoords]
-        List of named tuples of (x, y) coordinates.
-
-    Returns
-    ----------
-    slopes : List[float]
-        List of slopes for each section of given piecewise linear data.
-    """
-    slopes = []
-    (prev_x, prev_y) = vc[0]
-    for comp_x, comp_y in vc[1:]:
-        slopes.append((comp_y - prev_y) / (comp_x - prev_x))
-        (prev_x, prev_y) = (comp_x, comp_y)
-    return slopes
-
-
-def get_x_lengths(x_coords: List[float]) -> List[float]:
-    """Calculates the length of each segment of piecewise function
-
-    Parameters
-    ----------
-    x_coords : List[float]
-        List of x-coordinates
-
-    Returns
-    ----------
-    List[float]
-        List of values that represent the length of each piecewise segment.
-    """
-    return np.subtract(x_coords[1:], x_coords[:-1]).tolist()
-
-
-def running_sum(data: PiecewiseStepData) -> List[XYCoords]:
-    """Calculates y-values from slope data in PiecewiseStepData
-
-    Uses the x coordinates and slope data in PiecewiseStepData to calculate the corresponding y-values, such that:
-
-    .. math:: y(i) = y(i-1) + \\text{slope}(i-1) \\times \\left( x(i) - x(i-1) \\right)
-
-
-    Parameters
-    ----------
-    data : PiecewiseStepData
-        Piecewise function data used to calculate y-coordinates
-
-    Returns
-    ----------
-    point : List[XYCoords]
-        List of (x,y) coordinates as NamedTuples.
-    """
-    points = []
-    slopes = data.y_coords
-    x_coords = data.x_coords
-    x_lengths = get_x_lengths(x_coords)
-    running_y = 0.0
-
-    points.append(XYCoords(x=x_coords[0], y=running_y))
-    for prev_slope, this_x, dx in zip(slopes, x_coords[1:], x_lengths):
-        running_y += prev_slope * dx
-        points.append(XYCoords(x=this_x, y=running_y))
-
-    return points

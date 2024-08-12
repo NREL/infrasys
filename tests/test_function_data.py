@@ -3,8 +3,8 @@ from infrasys.function_data import (
     PiecewiseStepData,
     PiecewiseLinearData,
     XYCoords,
-    get_slopes,
-    running_sum,
+    # get_slopes,
+    # running_sum,
 )
 from infrasys import Component
 from .models.simple_system import SimpleSystem
@@ -42,22 +42,22 @@ def test_piecewise_linear():
 
 def test_piecewise_step():
     # Check minimum x values
-    test_x = [2]
-    test_y = [1]
+    test_x = [2.0]
+    test_y = [1.0]
 
     with pytest.raises(ValueError):
         PiecewiseStepData(x_coords=test_x, y_coords=test_y)
 
     # Check ascending x values
-    test_x = [1, 4, 3]
-    test_y = [2, 4]
+    test_x = [1.0, 4.0, 3.0]
+    test_y = [2.0, 4.0]
 
     with pytest.raises(ValueError):
         PiecewiseStepData(x_coords=test_x, y_coords=test_y)
 
     # Check length of x and y lists
-    test_x = [1, 2, 3]
-    test_y = [2, 4, 3]
+    test_x = [1.0, 2.0, 3.0]
+    test_y = [2.0, 4.0, 3.0]
 
     with pytest.raises(ValueError):
         PiecewiseStepData(x_coords=test_x, y_coords=test_y)
@@ -99,28 +99,28 @@ def test_function_data_serialization(tmp_path):
     assert f1.function_data.constant_term == f2.function_data.constant_term
 
 
-def test_slopes_calculation():
-    test_xy = [XYCoords(1.0, 2.0), XYCoords(2.0, 4.0), XYCoords(4.0, 10.0)]
+# def test_slopes_calculation():
+#     test_xy = [XYCoords(1.0, 2.0), XYCoords(2.0, 4.0), XYCoords(4.0, 10.0)]
+#
+#     slopes = get_slopes(test_xy)
+#
+#     correct_slopes = [2.0, 3.0]
+#
+#     assert slopes == correct_slopes
 
-    slopes = get_slopes(test_xy)
 
-    correct_slopes = [2.0, 3.0]
-
-    assert slopes == correct_slopes
-
-
-def test_running_sum():
-    test_x = [1.0, 3.0, 6.0]
-    test_y = [2.0, 4.0]
-
-    pws = PiecewiseStepData(x_coords=test_x, y_coords=test_y)
-
-    points = running_sum(pws)
-
-    x_values = [p.x for p in points]
-    y_values = [p.y for p in points]
-
-    correct_y_values = [0.0, 4.0, 16.0]
-
-    assert x_values == test_x
-    assert y_values == correct_y_values
+# def test_running_sum():
+#     test_x = [1.0, 3.0, 6.0]
+#     test_y = [2.0, 4.0]
+#
+#     pws = PiecewiseStepData(x_coords=test_x, y_coords=test_y)
+#
+#     points = running_sum(pws)
+#
+#     x_values = [p.x for p in points]
+#     y_values = [p.y for p in points]
+#
+#     correct_y_values = [0.0, 4.0, 16.0]
+#
+#     assert x_values == test_x
+#     assert y_values == correct_y_values
