@@ -2,10 +2,14 @@
 
 from typing_extensions import Annotated
 from infrasys.component import Component
+from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.function_data import (
     FunctionData,
     LinearFunctionData,
+    QuadraticFunctionData,
+    PiecewiseLinearData,
     PiecewiseStepData,
+    get_slopes,
 )
 from pydantic import Field
 
@@ -92,3 +96,121 @@ class AverageRateCurve(ValueCurve):
                 the origin for functions with no left endpoint, used for conversion to `InputOutputCurve`"
         ),
     ]
+
+
+def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
+    """Function to convert InputOutputCurve to IncrementalCurve
+
+    Function takes and InputOutputCurve and converts it to a corresponding
+    incremental curve depending on the type of function_data. If the :class:`InputOutputCurve`
+    uses :class:`LinearFunctionData` or :class:`QuadraticFunctionData`, the corresponding
+    :class:`IncrementalCurve` uses the corresponding derivative for its `function_data`. If
+    the input uses :class:`PiecewiseLinearData`, the slopes of each segment are calculated and
+    converted to PiecewiseStepData for the IncrementalCurve.
+
+    Parameters
+    ----------
+    data : InputOutputCurve
+        Original InputOutputCurve for conversion.
+
+    Returns
+    -------
+    IncrementalCurve
+        IncrementalCurve using either LinearFunctionData or PiecewiseStepData after conversion.
+
+    Raises
+    ------
+    ISOperationNotAllowed
+        Function is not valid for the type of data provided.
+    """
+    match data.function_data:
+        case LinearFunctionData():
+            q = 0.0
+            p = data.function_data.proportional_term
+
+            return IncrementalCurve(
+                function_data=LinearFunctionData(proportional_term=q, constant_term=p),
+                initial_input=data.function_data.constant_term,
+                input_at_zero=data.input_at_zero,
+            )
+        case QuadraticFunctionData():
+            q = data.function_data.quadratic_term
+            p = data.function_data.proportional_term
+
+            return IncrementalCurve(
+                function_data=LinearFunctionData(proportional_term=2 * q, constant_term=p),
+                initial_input=data.function_data.constant_term,
+                input_at_zero=data.input_at_zero,
+            )
+        case PiecewiseLinearData():
+            x = [fd.x for fd in data.function_data.points]
+            slopes = get_slopes(data.function_data.points)
+
+            return IncrementalCurve(
+                function_data=PiecewiseStepData(x_coords=x, y_coords=slopes),
+                initial_input=data.function_data.points[0].y,
+                input_at_zero=data.input_at_zero,
+            )
+        case _:
+            msg = "Function is not valid for the type of data provided."
+            raise ISOperationNotAllowed(msg)
+
+
+def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
+    """Function to convert InputOutputCurve to AverageRateCurve
+
+    If the :class:`InputOutputCurve` uses :class:`LinearFunctionData` or
+    :class:`QuadraticFunctionData`, the corresponding :class:`IncrementalCurve`
+    uses the :class`LinearFunctionData`, with a slope equal to the
+    `quadratic_term` (0.0 if originally linear), and a intercept equal to the
+    `proportional_term`. If the input uses :class:`PiecewiseLinearData`, the
+    slopes of each segment are calculated and converted to PiecewiseStepData
+    for the AverageRateCurve.
+
+    Parameters
+    ----------
+    data : InputOutputCurve
+        Original InputOutputCurve for conversion.
+
+    Returns
+    ----------
+    AverageRateCurve
+        AverageRateCurve using either LinearFunctionData or PiecewiseStepData after conversion.
+
+    Raises
+    ------
+    ISOperationNotAllowed
+        Function is not valid for the type of data provided.
+    """
+    match data.function_data:
+        case LinearFunctionData():
+            q = 0.0
+            p = data.function_data.proportional_term
+
+            return AverageRateCurve(
+                function_data=LinearFunctionData(proportional_term=q, constant_term=p),
+                initial_input=data.function_data.constant_term,
+                input_at_zero=data.input_at_zero,
+            )
+        case QuadraticFunctionData():
+            q = data.function_data.quadratic_term
+            p = data.function_data.proportional_term
+
+            return AverageRateCurve(
+                function_data=LinearFunctionData(proportional_term=q, constant_term=p),
+                initial_input=data.function_data.constant_term,
+                input_at_zero=data.input_at_zero,
+            )
+        case PiecewiseLinearData():
+            # I think I need to add in the getters and stuff from function_data to make this easier
+            x = [fd.x for fd in data.function_data.points]
+            slopes_from_origin = [fd.y / fd.x for fd in data.function_data.points[1:]]
+
+            return AverageRateCurve(
+                function_data=PiecewiseStepData(x_coords=x, y_coords=slopes_from_origin),
+                initial_input=data.function_data.points[0].y,
+                input_at_zero=data.input_at_zero,
+            )
+        case _:
+            msg = "Function is not valid for the type of data provided."
+            raise ISOperationNotAllowed(msg)
