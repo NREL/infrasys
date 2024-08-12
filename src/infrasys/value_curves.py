@@ -2,9 +2,7 @@
 
 from typing_extensions import Annotated
 from infrasys.component import Component
-from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.function_data import (
-    FunctionData,
     LinearFunctionData,
     QuadraticFunctionData,
     PiecewiseLinearData,
@@ -37,7 +35,7 @@ class InputOutputCurve(ValueCurve):
     """
 
     function_data: Annotated[
-        FunctionData,
+        LinearFunctionData | QuadraticFunctionData | PiecewiseLinearData,
         Field(description="The underlying `FunctionData` representation of this `ValueCurve`"),
     ]
 
@@ -151,9 +149,6 @@ def InputOutputToIncremental(data: InputOutputCurve) -> IncrementalCurve:
                 initial_input=data.function_data.points[0].y,
                 input_at_zero=data.input_at_zero,
             )
-        case _:
-            msg = "Function is not valid for the type of data provided."
-            raise ISOperationNotAllowed(msg)
 
 
 def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
@@ -211,6 +206,3 @@ def InputOutputToAverageRate(data: InputOutputCurve) -> AverageRateCurve:
                 initial_input=data.function_data.points[0].y,
                 input_at_zero=data.input_at_zero,
             )
-        case _:
-            msg = "Function is not valid for the type of data provided."
-            raise ISOperationNotAllowed(msg)

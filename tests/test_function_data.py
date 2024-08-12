@@ -68,6 +68,7 @@ def test_function_data_custom_serialization():
     )
 
     model_dump = component.model_dump(mode="json")
+    print(model_dump)
     assert model_dump["function_data"]["proportional_term"] == 1.0
 
     model_dump = component.model_dump(context={"magnitude_only": True})
