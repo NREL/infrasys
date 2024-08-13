@@ -184,22 +184,20 @@ class PiecewiseStepData(FunctionData):
         return self
 
 
-def get_slopes(vc: List[XYCoords]) -> List[float]:
-    """Calculate slopes from XYCoord data
-    Slopes are calculated between each section of the piecewise curve.
-    Returns a list of slopes that can be used to define Value Curves.
-    Parameters
-    ----------
-    vc : List[XYCoords]
-        List of named tuples of (x, y) coordinates.
-    Returns
-    ----------
-    slopes : List[float]
-        List of slopes for each section of given piecewise linear data.
-    """
-    slopes = []
-    (prev_x, prev_y) = vc[0]
-    for comp_x, comp_y in vc[1:]:
-        slopes.append((comp_y - prev_y) / (comp_x - prev_x))
-        (prev_x, prev_y) = (comp_x, comp_y)
-    return slopes
+def get_x_lengths(x_coords: List[float]) -> List[float]:
+    return np.subtract(x_coords[1:], x_coords[:-1])
+
+
+def running_sum(data: PiecewiseStepData) -> List[XYCoords]:
+    points = []
+    slopes = data.y_coords
+    x_coords = data.x_coords
+    x_lengths = get_x_lengths(x_coords)
+    running_y = 0.0
+
+    points.append(XYCoords(x=x_coords[0], y=running_y))
+    for prev_slope, this_x, dx in zip(slopes, x_coords[1:], x_lengths):
+        running_y += prev_slope * dx
+        points.append(XYCoords(x=this_x, y=running_y))
+
+    return points
