@@ -25,7 +25,9 @@ class CostCurve(ProductionVariableCostCurve):
     vom_units: Annotated[
         InputOutputCurve,
         Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
-    ] = InputOutputCurve(LinearFunctionData(0.0))
+    ] = InputOutputCurve(
+        function_data=LinearFunctionData(proportional_term=0.0, constant_term=0.0)
+    )
 
 
 class FuelCurve(ProductionVariableCostCurve):
@@ -44,7 +46,9 @@ class FuelCurve(ProductionVariableCostCurve):
     vom_units: Annotated[
         InputOutputCurve,
         Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
-    ] = InputOutputCurve(LinearFunctionData(0.0))
+    ] = InputOutputCurve(
+        function_data=LinearFunctionData(proportional_term=0.0, constant_term=0.0)
+    )
     fuel_cost: Annotated[
         float,
         Field(

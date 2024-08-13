@@ -118,15 +118,12 @@ def test_value_curve_custom_serialization():
     )
 
     model_dump = component.model_dump(mode="json")
-    print(model_dump)
     assert model_dump["value_curve"]["function_data"]["proportional_term"] == 1.0
 
     model_dump = component.model_dump(context={"magnitude_only": True})
-    # print(model_dump)
     assert model_dump["value_curve"]["function_data"]["proportional_term"] == 1.0
 
     model_dump = component.model_dump(mode="json", context={"magnitude_only": True})
-    # print(model_dump)
     assert model_dump["value_curve"]["function_data"]["proportional_term"] == 1.0
 
 
