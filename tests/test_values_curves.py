@@ -1,19 +1,17 @@
 from infrasys.function_data import (
     LinearFunctionData,
     QuadraticFunctionData,
-    PiecewiseLinearData,
     PiecewiseStepData,
-    XYCoords,
 )
 from infrasys.value_curves import (
     InputOutputCurve,
     IncrementalCurve,
     AverageRateCurve,
-    InputOutputToAverageRate,
-    InputOutputToIncremental,
 )
 from infrasys import Component
+from infrasys.exceptions import ISOperationNotAllowed
 from .models.simple_system import SimpleSystem
+import pytest
 
 
 class ValueCurveComponent(Component):
@@ -49,46 +47,66 @@ def test_average_rate_curve():
     assert isinstance(curve.function_data, LinearFunctionData)
 
 
-def test_input_output_conversion():
-    # LinearFunctionData function data
-    curve = InputOutputCurve(
-        function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0)
+def test_average_rate_conversion():
+    # Linear function data
+    curve = AverageRateCurve(
+        function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0),
+        initial_input=None,
     )
-    new_curve = InputOutputToAverageRate(curve)
-    assert isinstance(new_curve, AverageRateCurve)
+    with pytest.raises(ISOperationNotAllowed):
+        curve.to_input_output()
 
-    new_curve = InputOutputToIncremental(curve)
-    assert isinstance(new_curve, IncrementalCurve)
+    curve.initial_input = 0.0
+    new_curve = curve.to_input_output()
+    assert isinstance(new_curve, InputOutputCurve)
+    assert isinstance(new_curve.function_data, QuadraticFunctionData)
+    assert new_curve.function_data.quadratic_term == 1.0
 
-    # Quadratic function data
-    q = 3.0
-    p = 2.0
-    c = 1.0
+    curve.function_data.proportional_term = 0.0
+    new_curve = curve.to_input_output()
+    assert isinstance(new_curve, InputOutputCurve)
+    assert isinstance(new_curve.function_data, LinearFunctionData)
+    assert new_curve.function_data.proportional_term == 2.0
 
-    curve = InputOutputCurve(
-        function_data=QuadraticFunctionData(quadratic_term=q, proportional_term=p, constant_term=c)
+    # Piecewise step data
+    data = PiecewiseStepData(x_coords=[1.0, 3.0, 5.0], y_coords=[2.0, 6.0])
+    curve = AverageRateCurve(function_data=data, initial_input=None)
+    with pytest.raises(ISOperationNotAllowed):
+        curve.to_input_output()
+
+    curve.initial_input = 0.0
+    new_curve = curve.to_input_output()
+    assert isinstance(new_curve, InputOutputCurve)
+
+
+def test_incremental_conversion():
+    # Linear function data
+    curve = IncrementalCurve(
+        function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0),
+        initial_input=None,
     )
-    new_curve = InputOutputToAverageRate(curve)
-    assert isinstance(new_curve, AverageRateCurve)
+    with pytest.raises(ISOperationNotAllowed):
+        curve.to_input_output()
+    curve.initial_input = 0.0
+    new_curve = curve.to_input_output()
+    assert isinstance(new_curve, InputOutputCurve)
+    assert isinstance(new_curve.function_data, QuadraticFunctionData)
+    assert new_curve.function_data.quadratic_term == 0.5
+
+    curve.function_data.proportional_term = 0.0
+    new_curve = curve.to_input_output()
+    assert isinstance(new_curve, InputOutputCurve)
     assert isinstance(new_curve.function_data, LinearFunctionData)
-    assert new_curve.function_data.proportional_term == q
+    assert new_curve.function_data.proportional_term == 1.0
 
-    new_curve = InputOutputToIncremental(curve)
-    assert isinstance(new_curve, IncrementalCurve)
-    assert isinstance(new_curve.function_data, LinearFunctionData)
-    assert new_curve.function_data.proportional_term == 2 * q
-
-    # Piecewise linear data
-    xy = [XYCoords(1.0, 2.0), XYCoords(2.0, 4.0), XYCoords(4.0, 10.0)]
-
-    curve = InputOutputCurve(function_data=PiecewiseLinearData(points=xy))
-    new_curve = InputOutputToAverageRate(curve)
-    assert isinstance(new_curve, AverageRateCurve)
-    assert isinstance(new_curve.function_data, PiecewiseStepData)
-    assert new_curve.function_data.y_coords == [2.0, 2.5]
-
-    new_curve = InputOutputToIncremental(curve)
-    assert isinstance(new_curve, IncrementalCurve)
+    # Piecewise step data
+    data = PiecewiseStepData(x_coords=[1.0, 3.0, 5.0], y_coords=[2.0, 6.0])
+    curve = IncrementalCurve(function_data=data, initial_input=None)
+    with pytest.raises(ISOperationNotAllowed):
+        curve.to_input_output()
+    curve.initial_input = 0.0
+    new_curve = curve.to_input_output()
+    assert isinstance(new_curve, InputOutputCurve)
 
 
 def test_value_curve_custom_serialization():
