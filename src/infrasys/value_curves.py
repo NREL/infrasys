@@ -87,39 +87,39 @@ class IncrementalCurve(ValueCurve):
         InputOutputCurve
             InputOutputCurve using either QuadraticFunctionData or PiecewiseStepData.
         """
-        if isinstance(self.function_data, LinearFunctionData):
-            p = self.function_data.proportional_term
-            m = self.function_data.constant_term
+        match self.function_data:
+            case LinearFunctionData():
+                p = self.function_data.proportional_term
+                m = self.function_data.constant_term
 
-            c = self.initial_input
-            if c is None:
-                msg = "Cannot convert `IncrementalCurve` with undefined `initial_input`"
-                raise ISOperationNotAllowed(msg)
+                c = self.initial_input
+                if c is None:
+                    msg = "Cannot convert `IncrementalCurve` with undefined `initial_input`"
+                    raise ISOperationNotAllowed(msg)
 
-            if p == 0:
+                if p == 0:
+                    return InputOutputCurve(
+                        function_data=LinearFunctionData(proportional_term=m, constant_term=c)
+                    )
+                else:
+                    return InputOutputCurve(
+                        function_data=QuadraticFunctionData(
+                            quadratic_term=p / 2, proportional_term=m, constant_term=c
+                        ),
+                        input_at_zero=self.input_at_zero,
+                    )
+            case PiecewiseStepData():
+                c = self.initial_input
+                if c is None:
+                    msg = "Cannot convert `IncrementalCurve` with undefined `initial_input`"
+                    raise ISOperationNotAllowed(msg)
+
+                points = running_sum(self.function_data)
+
                 return InputOutputCurve(
-                    function_data=LinearFunctionData(proportional_term=m, constant_term=c)
-                )
-            else:
-                return InputOutputCurve(
-                    function_data=QuadraticFunctionData(
-                        quadratic_term=p / 2, proportional_term=m, constant_term=c
-                    ),
+                    function_data=PiecewiseLinearData(points=[(p.x, p.y + c) for p in points]),
                     input_at_zero=self.input_at_zero,
                 )
-
-        elif isinstance(self.function_data, PiecewiseStepData):
-            c = self.initial_input
-            if c is None:
-                msg = "Cannot convert `IncrementalCurve` with undefined `initial_input`"
-                raise ISOperationNotAllowed(msg)
-
-            points = running_sum(self.function_data)
-
-            return InputOutputCurve(
-                function_data=PiecewiseLinearData(points=[(p.x, p.y + c) for p in points]),
-                input_at_zero=self.input_at_zero,
-            )
 
 
 class AverageRateCurve(ValueCurve):
