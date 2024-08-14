@@ -1,4 +1,4 @@
-from infrasys.production_variable_cost_curve import CostCurve, FuelCurve
+from infrasys.cost_curves import CostCurve, FuelCurve
 from infrasys.function_data import LinearFunctionData
 from infrasys.value_curves import InputOutputCurve
 from infrasys import Component
