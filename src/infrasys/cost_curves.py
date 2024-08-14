@@ -10,8 +10,9 @@ class ProductionVariableCostCurve(Component):
 
 
 class CostCurve(ProductionVariableCostCurve):
-    """Direct representation of the variable operation cost of a power plant in currency. Composed
-    of a Value Curve that may represent input-output, incremental, or average rate
+    """Direct representation of the variable operation cost of a power plant in currency.
+
+    Composed of a Value Curve that may represent input-output, incremental, or average rate
     data. The default units for the x-axis are MW and can be specified with
     `power_units`.
     """
@@ -31,9 +32,10 @@ class CostCurve(ProductionVariableCostCurve):
 
 
 class FuelCurve(ProductionVariableCostCurve):
-    """Representation of the variable operation cost of a power plant in terms of fuel (MBTU,
-    liters, m^3, etc.), coupled with a conversion factor between fuel and currency. Composed of
-    a Value Curve that may represent input-output, incremental, or average rate data.
+    """Representation of the variable operation cost of a power plant in terms of fuel.
+
+    Fuel units (MBTU, liters, m^3, etc.) coupled with a conversion factor between fuel and currency.
+    Composed of a Value Curve that may represent input-output, incremental, or average rate data.
     The default units for the x-axis are MW and can be specified with `power_units`.
     """
 
