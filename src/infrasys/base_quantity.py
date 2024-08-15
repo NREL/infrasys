@@ -24,7 +24,8 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
 
     def __init_subclass__(cls, **kwargs):
         if not cls.__base_unit__:
-            raise TypeError("__base_unit__ should be defined")
+            msg = "__base_unit__ should be defined"
+            raise TypeError(msg)
         super().__init_subclass__(**kwargs)
 
     # Required for pydantic validation

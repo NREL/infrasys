@@ -376,9 +376,8 @@ class TimeSeriesMetadataStore:
             self._execute(cur, query)
             count_deleted = self._execute(cur, "SELECT changes()").fetchall()[0][0]
             if count_deleted != len(ids):
-                raise Exception(
-                    f"Bug: Unexpected length mismatch {len(ts_uuids)=} {count_deleted=}"
-                )
+                msg = f"Bug: Unexpected length mismatch {len(ts_uuids)=} {count_deleted=}"
+                raise Exception(msg)
             self._con.commit()
             return list(ts_uuids)
 
@@ -393,7 +392,8 @@ class TimeSeriesMetadataStore:
         self._con.commit()
         count_deleted = self._execute(cur, "SELECT changes()").fetchall()[0][0]
         if len(uuids) != count_deleted:
-            raise Exception(f"Bug: Unexpected length mismatch: {len(uuids)=} {count_deleted=}")
+            msg = f"Bug: Unexpected length mismatch: {len(uuids)=} {count_deleted=}"
+            raise Exception(msg)
         return uuids
 
     def sql(self, query: str) -> list[tuple]:
@@ -416,7 +416,8 @@ class TimeSeriesMetadataStore:
 
     def _make_components_str(self, *components: Component) -> str:
         if not components:
-            raise ISOperationNotAllowed("At least one component must be passed.")
+            msg = "At least one component must be passed."
+            raise ISOperationNotAllowed(msg)
         or_clause = "OR ".join([f"component_uuid = '{x.uuid}'" for x in components])
         return f"({or_clause})"
 
