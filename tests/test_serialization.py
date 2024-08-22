@@ -59,7 +59,7 @@ def test_serialization(tmp_path):
     system.to_json(filename, overwrite=True)
     system2 = SimpleSystem.from_json(filename)
     for key, val in system.__dict__.items():
-        if key not in ("_component_mgr", "_time_series_mgr"):
+        if key not in ("_component_mgr", "_time_series_mgr", "_con"):
             assert getattr(system2, key) == val
 
     components2 = list(system2.iter_all_components())
@@ -195,16 +195,14 @@ def test_system_save(tmp_path, simple_system_with_time_series):
     simple_system = simple_system_with_time_series
     custom_folder = "my_system"
     fpath = tmp_path / custom_folder
-    fname = "test_system"
+    fname = "test_system.json"
     simple_system.save(fpath, filename=fname)
     assert os.path.exists(fpath), f"Folder {fpath} was not created successfully"
     assert os.path.exists(fpath / fname), f"Serialized system {fname} was not created successfully"
 
-    fname = "test_system"
     with pytest.raises(FileExistsError):
         simple_system.save(fpath, filename=fname)
 
-    fname = "test_system"
     simple_system.save(fpath, filename=fname, overwrite=True)
     assert os.path.exists(fpath), f"Folder {fpath} was not created successfully"
     assert os.path.exists(fpath / fname), f"Serialized system {fname} was not created successfully"

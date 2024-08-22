@@ -6,7 +6,6 @@ import json
 import os
 import sqlite3
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Optional, Sequence
 from uuid import UUID
 
@@ -28,11 +27,11 @@ class TimeSeriesMetadataStore:
     """Stores time series metadata in a SQLite database."""
 
     TABLE_NAME = "time_series_metadata"
-    DB_FILENAME = "time_series_metadata.db"
 
-    def __init__(self):
-        self._con = sqlite3.connect(":memory:")
-        self._create_metadata_table()
+    def __init__(self, con: sqlite3.Connection, initialize: bool = True):
+        self._con = con
+        if initialize:
+            self._create_metadata_table()
         self._supports_sqlite_json = _does_sqlite_support_json()
         if not self._supports_sqlite_json:
             # This is true on Ubuntu 22.04, which is used by GitHub runners as of March 2024.
@@ -125,24 +124,6 @@ class TimeSeriesMetadataStore:
             for component in components
         ]
         self._insert_rows(rows)
-
-    def backup(self, directory: Path | str) -> None:
-        """Backup the database to a file in directory."""
-        path = directory if isinstance(directory, Path) else Path(directory)
-        filename = path / self.DB_FILENAME
-        with sqlite3.connect(filename) as con:
-            self._con.backup(con)
-        con.close()
-        logger.info("Backed up the time series metadata to {}", filename)
-
-    def restore(self, directory: Path | str) -> None:
-        """Restore the database from a file to memory."""
-        path = directory if isinstance(directory, Path) else Path(directory)
-        filename = path / self.DB_FILENAME
-        with sqlite3.connect(filename) as con:
-            con.backup(self._con)
-        con.close()
-        logger.info("Restored the time series metadata to memory")
 
     def get_time_series_counts(self) -> "TimeSeriesCounts":
         """Return summary counts of components and time series."""

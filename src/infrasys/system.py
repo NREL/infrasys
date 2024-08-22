@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import sqlite3
 from operator import itemgetter
 from collections import defaultdict
 from datetime import datetime
@@ -33,16 +34,20 @@ from infrasys.serialization import (
 )
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData, TimeSeriesMetadata
+from infrasys.utils.sqlite import backup, create_in_memory_db, restore
 
 
 class System:
     """Implements behavior for systems"""
+
+    DB_FILENAME = "time_series_metadata.db"
 
     def __init__(
         self,
         name: Optional[str] = None,
         description: Optional[str] = None,
         auto_add_composed_components: bool = False,
+        con: Optional[sqlite3.Connection] = None,
         time_series_manager: Optional[TimeSeriesManager] = None,
         uuid: Optional[UUID] = None,
         **kwargs: Any,
@@ -60,6 +65,8 @@ class System:
             The default behavior is to raise an ISOperationNotAllowed when this condition occurs.
             This handles values that are components, such as generator.bus, and lists of
             components, such as subsystem.generators, but not any other form of nested components.
+        con : None | sqlite3.Connection
+            Users should not pass this. De-serialization (from_json) will pass a Connection.
         time_series_manager : None | TimeSeriesManager
             Users should not pass this. De-serialization (from_json) will pass a constructed
             manager.
@@ -79,8 +86,11 @@ class System:
         self._name = name
         self._description = description
         self._component_mgr = ComponentManager(self._uuid, auto_add_composed_components)
+        self._con = con or create_in_memory_db()
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
-        self._time_series_mgr = time_series_manager or TimeSeriesManager(**time_series_kwargs)
+        self._time_series_mgr = time_series_manager or TimeSeriesManager(
+            self._con, **time_series_kwargs
+        )
         self._data_format_version: Optional[str] = None
         # Note to devs: if you add new fields, add support in to_json/from_json as appropriate.
 
@@ -127,10 +137,9 @@ class System:
             msg = f"{filename=} already exists. Choose a different path or set overwrite=True."
             raise ISFileExists(msg)
 
-        if not filename.parent.exists():
-            filename.parent.mkdir()
-
+        filename.parent.mkdir(exist_ok=True)
         time_series_dir = filename.parent / (filename.stem + "_time_series")
+        time_series_dir.mkdir(exist_ok=True)
         system_data = {
             "name": self.name,
             "description": self.description,
@@ -161,7 +170,8 @@ class System:
             json.dump(data, f_out, indent=indent)
             logger.info("Wrote system data to {}", filename)
 
-        self._time_series_mgr.serialize(self._make_time_series_directory(filename))
+        backup(self._con, time_series_dir / self.DB_FILENAME)
+        self._time_series_mgr.serialize(time_series_dir)
 
     @classmethod
     def from_json(
@@ -257,12 +267,20 @@ class System:
         """
         system_data = data if "system" not in data else data["system"]
         ts_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
+        ts_path = (
+            time_series_parent_dir
+            if isinstance(time_series_parent_dir, Path)
+            else Path(time_series_parent_dir)
+        )
+        con = create_in_memory_db()
+        restore(con, ts_path / data["time_series"]["directory"] / System.DB_FILENAME)
         time_series_manager = TimeSeriesManager.deserialize(
-            data["time_series"], time_series_parent_dir, **ts_kwargs
+            con, data["time_series"], ts_path, **ts_kwargs
         )
         system = cls(
             name=system_data.get("name"),
             description=system_data.get("description"),
+            con=con,
             time_series_manager=time_series_manager,
             uuid=UUID(system_data["uuid"]),
             **kwargs,
