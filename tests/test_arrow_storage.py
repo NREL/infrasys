@@ -56,7 +56,7 @@ def test_copy_files(tmp_path):
     system.to_json(filename)
 
     logger.info("Starting deserialization")
-    system2 = SimpleSystem.from_json(filename, base_directory=tmp_path)
+    system2 = SimpleSystem.from_json(filename)
     gen1b = system2.get_component(SimpleGenerator, gen1.name)
     time_series = system2.time_series.get(gen1b)
     time_series_fpath = (

@@ -1,5 +1,6 @@
 """Manages time series arrays"""
 
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Type
@@ -32,7 +33,13 @@ def _process_time_series_kwarg(key: str, **kwargs: Any) -> Any:
 class TimeSeriesManager:
     """Manages time series for a system."""
 
-    def __init__(self, storage: Optional[TimeSeriesStorageBase] = None, **kwargs) -> None:
+    def __init__(
+        self,
+        con: sqlite3.Connection,
+        storage: Optional[TimeSeriesStorageBase] = None,
+        initialize: bool = True,
+        **kwargs,
+    ) -> None:
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
         self._storage = storage or (
@@ -40,7 +47,7 @@ class TimeSeriesManager:
             if _process_time_series_kwarg("time_series_in_memory", **kwargs)
             else ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
         )
-        self._metadata_store = TimeSeriesMetadataStore()
+        self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
 
         # TODO: create parsing mechanism? CSV, CSV + JSON
 
@@ -245,11 +252,11 @@ class TimeSeriesManager:
     def serialize(self, dst: Path | str, src: Optional[Path | str] = None) -> None:
         """Serialize the time series data to dst."""
         self._storage.serialize(dst, src)
-        self._metadata_store.backup(dst)
 
     @classmethod
     def deserialize(
         cls,
+        con: sqlite3.Connection,
         data: dict[str, Any],
         parent_dir: Path | str,
         **kwargs: Any,
@@ -269,9 +276,7 @@ class TimeSeriesManager:
             storage = ArrowTimeSeriesStorage.create_with_temp_directory()
             storage.serialize(src=time_series_dir, dst=storage.get_time_series_directory())
 
-        mgr = cls(storage=storage, **kwargs)
-        mgr.metadata_store.restore(time_series_dir)
-        return mgr
+        return cls(con, storage=storage, initialize=False, **kwargs)
 
     def _handle_read_only(self) -> None:
         if self._read_only:
