@@ -597,6 +597,22 @@ class System:
         """
         return self._component_mgr.get_types()
 
+    def list_parent_components(
+        self, component: Component, component_type: Optional[Type[Component]] = None
+    ) -> list[Component]:
+        """Return a list of all components that compose this component.
+
+        An example usage is where you need to find all components connected to a bus and the Bus
+        class does not contain that information. The system tracks these connections internally
+        and can find those components quickly.
+
+        Examples
+        --------
+        >>> components = system.list_parent_components(bus)
+        >>> print(f"These components are connected to {bus.label}: ", " ".join(components))
+        """
+        return self._component_mgr.list_parent_components(component, component_type=component_type)
+
     def list_components_by_name(self, component_type: Type[Component], name: str) -> list[Any]:
         """Return all components that match component_type and name.
 
@@ -625,6 +641,12 @@ class System:
         """
         return self._component_mgr.iter_all()
 
+    def rebuild_component_associations(self) -> None:
+        """Clear the component associations and rebuild the table. This may be necessary
+        if a user reassigns connected components that are part of a system.
+        """
+        self._component_mgr.rebuild_component_associations()
+
     def remove_component(self, component: Component) -> Any:
         """Remove the component from the system and return it.
 
@@ -636,6 +658,8 @@ class System:
         ------
         ISNotStored
             Raised if the component is not stored in the system.
+        ISOperationNotAllowed
+            Raised if the other components hold references to this component.
 
         Examples
         --------

@@ -8,6 +8,7 @@ import pytest
 
 from infrasys.exceptions import (
     ISAlreadyAttached,
+    ISInvalidParameter,
     ISNotStored,
     ISOperationNotAllowed,
     ISConflictingArguments,
@@ -31,6 +32,8 @@ def test_system():
     gen = SimpleGenerator(name="test-gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen])
     system.add_components(geo, bus, gen, subsystem)
+    with pytest.raises(ISInvalidParameter):
+        system.add_components()
 
     gen2 = system.get_component(SimpleGenerator, "test-gen")
     assert gen2 is gen
@@ -139,6 +142,53 @@ def test_get_components_multiple_types():
         )
     )
     assert len(selected_components) == 2  # 1 SimpleGenerator + 1 RenewableGenerator
+
+
+def test_component_associations(tmp_path):
+    system = SimpleSystem()
+    for i in range(3):
+        geo = Location(x=i, y=i + 1)
+        bus = SimpleBus(name=f"bus{i}", voltage=1.1, coordinates=geo)
+        gen1 = SimpleGenerator(
+            name=f"gen{i}a", active_power=1.0, rating=1.0, bus=bus, available=True
+        )
+        gen2 = SimpleGenerator(
+            name=f"gen{i}b", active_power=1.0, rating=1.0, bus=bus, available=True
+        )
+        subsystem = SimpleSubsystem(name=f"test-subsystem{i}", generators=[gen1, gen2])
+        system.add_components(geo, bus, gen1, gen2, subsystem)
+
+    def check_attached_components(my_sys):
+        for i in range(3):
+            bus = my_sys.get_component(SimpleBus, f"bus{i}")
+            gen1 = my_sys.get_component(SimpleGenerator, f"gen{i}a")
+            gen2 = my_sys.get_component(SimpleGenerator, f"gen{i}b")
+            attached = my_sys.list_parent_components(bus, component_type=SimpleGenerator)
+            assert len(attached) == 2
+            labels = {gen1.label, gen2.label}
+            for component in attached:
+                assert component.label in labels
+                attached_subsystems = my_sys.list_parent_components(component)
+                assert len(attached_subsystems) == 1
+                assert attached_subsystems[0].name == f"test-subsystem{i}"
+                assert not my_sys.list_parent_components(attached_subsystems[0])
+
+            for component in (bus, gen1, gen2):
+                with pytest.raises(ISOperationNotAllowed):
+                    my_sys.remove_component(component)
+
+    check_attached_components(system)
+    system._component_mgr._associations.clear()
+    for component in system.iter_all_components():
+        assert not system.list_parent_components(component)
+
+    system.rebuild_component_associations()
+    check_attached_components(system)
+
+    save_dir = tmp_path / "test_system"
+    system.save(save_dir)
+    system2 = SimpleSystem.from_json(save_dir / "system.json")
+    check_attached_components(system2)
 
 
 def test_time_series_attach_from_array():
