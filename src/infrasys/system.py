@@ -597,6 +597,53 @@ class System:
         """
         return self._component_mgr.get_types()
 
+    def has_component(self, component) -> bool:
+        """Return True if the component is attached."""
+        return self._component_mgr.has_component(component)
+
+    def list_child_components(
+        self, component: Component, component_type: Optional[Type[Component]] = None
+    ) -> list[Component]:
+        """Return a list of all components that this component composes.
+
+        Parameters
+        ----------
+        component: Component
+        component_type: Optional[Type[Component]]
+            Filter the returned list to components of this type.
+
+        See Also
+        --------
+        list_parent_components
+        """
+        return self._component_mgr.list_child_components(component, component_type=component_type)
+
+    def list_parent_components(
+        self, component: Component, component_type: Optional[Type[Component]] = None
+    ) -> list[Component]:
+        """Return a list of all components that compose this component.
+
+        An example usage is where you need to find all components connected to a bus and the Bus
+        class does not contain that information. The system tracks these connections internally
+        and can find those components quickly.
+
+        Parameters
+        ----------
+        component: Component
+        component_type: Optional[Type[Component]]
+            Filter the returned list to components of this type.
+
+        Examples
+        --------
+        >>> components = system.list_parent_components(bus)
+        >>> print(f"These components are connected to {bus.label}: ", " ".join(components))
+
+        See Also
+        --------
+        list_child_components
+        """
+        return self._component_mgr.list_parent_components(component, component_type=component_type)
+
     def list_components_by_name(self, component_type: Type[Component], name: str) -> list[Any]:
         """Return all components that match component_type and name.
 
@@ -625,17 +672,34 @@ class System:
         """
         return self._component_mgr.iter_all()
 
-    def remove_component(self, component: Component) -> Any:
+    def rebuild_component_associations(self) -> None:
+        """Clear the component associations and rebuild the table. This may be necessary
+        if a user reassigns connected components that are part of a system.
+        """
+        self._component_mgr.rebuild_component_associations()
+
+    def remove_component(
+        self, component: Component, cascade_down: bool = True, force: bool = False
+    ) -> Any:
         """Remove the component from the system and return it.
 
         Parameters
         ----------
         component : Component
+        cascade_down : bool
+            If True, remove all child components if they have no other parents. Defaults to True.
+            For example, if a generator has a bus, no other component holds a reference to that
+            bus, and you call remove_component on that generator, the bus will get removed as well.
+        force : bool
+            If True, remove the component even if other components hold references to this
+            component. Defaults to False.
 
         Raises
         ------
         ISNotStored
             Raised if the component is not stored in the system.
+        ISOperationNotAllowed
+            Raised if the other components hold references to this component and force=False.
 
         Examples
         --------
@@ -651,15 +715,25 @@ class System:
                     variable_name=metadata.variable_name,
                     **metadata.user_attributes,
                 )
-        component = self._component_mgr.remove(component)
+        component = self._component_mgr.remove(component, cascade_down=cascade_down, force=force)
 
-    def remove_component_by_name(self, component_type: Type[Component], name: str) -> Any:
+    def remove_component_by_name(
+        self,
+        component_type: Type[Component],
+        name: str,
+        cascade_down: bool = True,
+        force: bool = False,
+    ) -> Any:
         """Remove the component with component_type and name from the system and return it.
 
         Parameters
         ----------
         component_type : Type
         name : str
+        cascade_down : bool
+            Refer :meth:`remove_component`.
+        force : bool
+            Refer :meth:`remove_component`.
 
         Raises
         ------
@@ -673,14 +747,20 @@ class System:
         >>> generators = system.remove_by_name(Generator, "gen1")
         """
         component = self.get_component(component_type, name)
-        return self.remove_component(component)
+        return self.remove_component(component, cascade_down=cascade_down, force=force)
 
-    def remove_component_by_uuid(self, uuid: UUID) -> Any:
+    def remove_component_by_uuid(
+        self, uuid: UUID, cascade_down: bool = True, force: bool = False
+    ) -> Any:
         """Remove the component with uuid from the system and return it.
 
         Parameters
         ----------
         uuid : UUID
+        cascade_down : bool
+            Refer :meth:`remove_component`.
+        force : bool
+            Refer :meth:`remove_component`.
 
         Raises
         ------
@@ -693,7 +773,7 @@ class System:
         >>> generator = system.remove_component_by_uuid(uuid)
         """
         component = self.get_component_by_uuid(uuid)
-        return self.remove_component(component)
+        return self.remove_component(component, cascade_down=cascade_down, force=force)
 
     def update_components(
         self,

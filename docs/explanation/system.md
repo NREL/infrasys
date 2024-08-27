@@ -58,3 +58,41 @@ Component.model_json_schema()
 - `infrasys` includes some basic quantities in [infrasys.quantities](#quantity-api).
 - Pint will automatically convert a list or list of lists of values into a `numpy.ndarray`.
 infrasys will handle serialization/de-serialization of these types.
+
+
+### Component Associations
+The system tracks associations between components in order to optimize lookups.
+
+For example, suppose a Generator class has a field for a Bus. It is trivial to find a generator's
+bus. However, if you need to find all generators connected to specific bus, you would have to
+traverse all generators in the system and check their bus values.
+
+Every time you add a component to a system, `infrasys` inspects the component type for composed
+components. It checks for directly connected components, such as `Generator.bus`, and lists of
+components. (It does not inspect other composite data structures like dictionaries.)
+
+`infrasys` stores these component associations in a SQLite table and so lookups are fast.
+
+Here is how to complete this example:
+
+```python
+generators = system.list_parent_components(bus)
+```
+
+If you only want to find specific types, you can pass that type as well.
+```python
+generators = system.list_parent_components(bus, component_type=Generator)
+```
+
+**Warning**: There is one potentially problematic case.
+
+Suppose that you have a system with generators and buses and then reassign the buses, as in
+```
+gen1.bus = other_bus
+```
+
+`infrasys` cannot detect such reassignments and so the component associations will be incorrect.
+You must inform `infrasys` to rebuild its internal table.
+```
+system.rebuild_component_associations()
+```
