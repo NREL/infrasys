@@ -173,6 +173,7 @@ def test_component_associations(tmp_path):
                 assert attached_subsystems[0].name == f"test-subsystem{i}"
                 assert not my_sys.list_parent_components(attached_subsystems[0])
                 assert my_sys.list_child_components(component) == [bus]
+                assert my_sys.list_child_components(component, component_type=SimpleBus) == [bus]
 
             for component in (bus, gen1, gen2):
                 with pytest.raises(ISOperationNotAllowed):
