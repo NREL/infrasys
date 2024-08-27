@@ -31,7 +31,10 @@ class ComponentAssociations:
         schema_text = ",".join(schema)
         cur = self._con.cursor()
         execute(cur, f"CREATE TABLE {self.TABLE_NAME}({schema_text})")
-        execute(cur, f"CREATE INDEX by_ac_uuid ON {self.TABLE_NAME}(attached_component_uuid)")
+        execute(
+            cur,
+            f"CREATE INDEX by_c_uuid ON {self.TABLE_NAME}(component_uuid, attached_component_uuid)",
+        )
         self._con.commit()
         logger.debug("Created in-memory component associations table")
 
@@ -60,6 +63,22 @@ class ComponentAssociations:
         execute(self._con.cursor(), f"DELETE FROM {self.TABLE_NAME}")
         logger.info("Cleared all component associations.")
 
+    def list_child_components(
+        self, component: Component, component_type: Optional[Type[Component]] = None
+    ) -> list[UUID]:
+        """Return a list of all component UUIDS that this component composes.
+        For example, return the bus attached to a generator.
+        """
+        where_clause = "WHERE component_uuid = ?"
+        if component_type is None:
+            params = [str(component.uuid)]
+        else:
+            params = [str(component.uuid), component_type.__name__]
+            where_clause += " AND attached_component_type = ?"
+        query = f"SELECT attached_component_uuid FROM {self.TABLE_NAME} {where_clause}"
+        cur = self._con.cursor()
+        return [UUID(x[0]) for x in execute(cur, query, params)]
+
     def list_parent_components(
         self, component: Component, component_type: Optional[Type[Component]] = None
     ) -> list[UUID]:
@@ -75,6 +94,17 @@ class ComponentAssociations:
         query = f"SELECT component_uuid FROM {self.TABLE_NAME} {where_clause}"
         cur = self._con.cursor()
         return [UUID(x[0]) for x in execute(cur, query, params)]
+
+    def remove(self, component: Component) -> None:
+        """Delete all rows with this component."""
+        query = f"""
+            DELETE
+            FROM {self.TABLE_NAME}
+            WHERE component_uuid = ? OR attached_component_uuid = ?
+        """
+        params = [str(component.uuid), str(component.uuid)]
+        execute(self._con.cursor(), query, params)
+        logger.debug("Removed all associations with component {}", component.label)
 
     def _insert_rows(self, rows: list[tuple]) -> None:
         cur = self._con.cursor()

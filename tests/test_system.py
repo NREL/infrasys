@@ -172,6 +172,7 @@ def test_component_associations(tmp_path):
                 assert len(attached_subsystems) == 1
                 assert attached_subsystems[0].name == f"test-subsystem{i}"
                 assert not my_sys.list_parent_components(attached_subsystems[0])
+                assert my_sys.list_child_components(component) == [bus]
 
             for component in (bus, gen1, gen2):
                 with pytest.raises(ISOperationNotAllowed):
@@ -511,16 +512,19 @@ def test_deepcopy_component(simple_system_with_time_series: SimpleSystem):
     assert gen2.bus is not gen1.bus
 
 
-@pytest.mark.parametrize("in_memory", [True, False])
-def test_remove_component(in_memory):
+@pytest.mark.parametrize("inputs", [(True, False), (True, False)])
+def test_remove_component(inputs):
+    in_memory, cascade_down = inputs
     system = SimpleSystem(
         name="test-system",
         auto_add_composed_components=True,
         time_series_in_memory=in_memory,
     )
     gen1 = SimpleGenerator.example()
+    bus = gen1.bus
     system.add_components(gen1)
     gen2 = system.copy_component(gen1, name="gen2", attach=True)
+    assert gen2.bus is bus
     variable_name = "active_power"
     length = 8784
     data = range(length)
@@ -529,11 +533,13 @@ def test_remove_component(in_memory):
     ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     system.add_time_series(ts, gen1, gen2)
 
-    system.remove_component_by_name(type(gen1), gen1.name)
+    system.remove_component_by_name(type(gen1), gen1.name, cascade_down=cascade_down)
+    assert system.has_component(bus)
     assert not system.has_time_series(gen1)
     assert system.has_time_series(gen2)
 
-    system.remove_component_by_uuid(gen2.uuid)
+    system.remove_component_by_uuid(gen2.uuid, cascade_down=cascade_down)
+    assert system.has_component(bus) != cascade_down
     assert not system.has_time_series(gen2)
 
     with pytest.raises(ISNotStored):
