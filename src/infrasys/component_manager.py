@@ -216,7 +216,7 @@ class ComponentManager:
                         subcomponent[i] = sub_component_.label
             yield data
 
-    def remove(self, component: Component) -> Any:
+    def remove(self, component: Component, force: bool = False) -> Any:
         """Remove the component from the system and return it.
 
         Notes
@@ -237,11 +237,14 @@ class ComponentManager:
         attached_components = self.list_parent_components(component)
         if attached_components:
             label = ", ".join((x.label for x in attached_components))
-            msg = (
-                f"Cannot remove {component.label} because it is attached to these components: "
-                f"{label}"
-            )
-            raise ISOperationNotAllowed(msg)
+            if force:
+                logger.warning("Remove {} even though it is attached to these components: {label}")
+            else:
+                msg = (
+                    f"Cannot remove {component.label} because it is attached to these components: "
+                    f"{label}"
+                )
+                raise ISOperationNotAllowed(msg)
 
         container = self._components[component_type][component.name]
         for i, comp in enumerate(container):

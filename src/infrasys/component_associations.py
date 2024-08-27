@@ -51,9 +51,6 @@ class ComponentAssociations:
                 elif isinstance(val, list) and val and isinstance(val[0], Component):
                     for item in val:
                         rows.append(self._make_row(component, item))
-                # FUTURE: consider supporting dictionaries like these examples:
-                # dict[str, Component]
-                # dict[str, [Component]]
 
         if rows:
             self._insert_rows(rows)

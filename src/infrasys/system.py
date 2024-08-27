@@ -606,6 +606,12 @@ class System:
         class does not contain that information. The system tracks these connections internally
         and can find those components quickly.
 
+        Parameters
+        ----------
+        component: Component
+        component_type: Optional[Type[Component]]
+            Filter the returned list to components of this type.
+
         Examples
         --------
         >>> components = system.list_parent_components(bus)
@@ -647,19 +653,22 @@ class System:
         """
         self._component_mgr.rebuild_component_associations()
 
-    def remove_component(self, component: Component) -> Any:
+    def remove_component(self, component: Component, force: bool = False) -> Any:
         """Remove the component from the system and return it.
 
         Parameters
         ----------
         component : Component
+        force : bool
+            If True, remove the component even if other components hold references to this
+            component. Defaults to False.
 
         Raises
         ------
         ISNotStored
             Raised if the component is not stored in the system.
         ISOperationNotAllowed
-            Raised if the other components hold references to this component.
+            Raised if the other components hold references to this component and force=False.
 
         Examples
         --------
@@ -675,7 +684,7 @@ class System:
                     variable_name=metadata.variable_name,
                     **metadata.user_attributes,
                 )
-        component = self._component_mgr.remove(component)
+        component = self._component_mgr.remove(component, force=force)
 
     def remove_component_by_name(self, component_type: Type[Component], name: str) -> Any:
         """Remove the component with component_type and name from the system and return it.

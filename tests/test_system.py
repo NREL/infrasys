@@ -190,6 +190,14 @@ def test_component_associations(tmp_path):
     system2 = SimpleSystem.from_json(save_dir / "system.json")
     check_attached_components(system2)
 
+    bus = system2.get_component(SimpleBus, "bus1")
+    with pytest.raises(ISOperationNotAllowed):
+        system2.remove_component(bus)
+    system2.remove_component(bus, force=True)
+    gen = system2.get_component(SimpleGenerator, "gen1a")
+    with pytest.raises(ISNotStored):
+        system2.get_component(SimpleBus, gen.bus.name)
+
 
 def test_time_series_attach_from_array():
     system = SimpleSystem()
