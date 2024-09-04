@@ -13,6 +13,7 @@ from loguru import logger
 
 from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed, ISNotStored
 from infrasys import Component
+from infrasys.supplemental_attribute_manager import SupplementalAttribute
 from infrasys.serialization import (
     deserialize_value,
     serialize_value,
@@ -83,7 +84,7 @@ class TimeSeriesMetadataStore:
     def add(
         self,
         metadata: TimeSeriesMetadata,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
     ) -> None:
         """Add metadata to the store.
 
@@ -161,7 +162,7 @@ class TimeSeriesMetadataStore:
 
     def get_metadata(
         self,
-        component: Component,
+        component: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
@@ -205,7 +206,7 @@ class TimeSeriesMetadataStore:
 
     def has_time_series_metadata(
         self,
-        component: Component,
+        component: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes: Any,
@@ -256,7 +257,7 @@ class TimeSeriesMetadataStore:
 
     def list_metadata(
         self,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
@@ -283,7 +284,7 @@ class TimeSeriesMetadataStore:
 
     def _list_metadata_no_sql_json(
         self,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
@@ -310,7 +311,7 @@ class TimeSeriesMetadataStore:
 
     def list_rows(
         self,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         columns=None,
@@ -335,7 +336,7 @@ class TimeSeriesMetadataStore:
 
     def remove(
         self,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
@@ -393,7 +394,7 @@ class TimeSeriesMetadataStore:
         finally:
             self._con.commit()
 
-    def _make_components_str(self, params: list[str], *components: Component) -> str:
+    def _make_components_str(self, params: list[str], *components: Component | SupplementalAttribute) -> str:
         if not components:
             msg = "At least one component must be passed."
             raise ISOperationNotAllowed(msg)
@@ -445,7 +446,7 @@ class TimeSeriesMetadataStore:
 
     def _try_time_series_metadata_by_full_params(
         self,
-        component: Component,
+        component: Component | SupplementalAttribute,
         variable_name: str,
         time_series_type: str,
         column: str,
@@ -470,7 +471,7 @@ class TimeSeriesMetadataStore:
 
     def _try_get_time_series_metadata_by_full_params(
         self,
-        component: Component,
+        component: Component | SupplementalAttribute,
         variable_name: str,
         time_series_type: str,
         **user_attributes: str,
@@ -500,7 +501,7 @@ class TimeSeriesMetadataStore:
 
     def _try_has_time_series_metadata_by_full_params(
         self,
-        component: Component,
+        component: Component | SupplementalAttribute,
         variable_name: str,
         time_series_type: str,
         **user_attributes: str,
