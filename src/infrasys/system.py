@@ -34,6 +34,7 @@ from infrasys.serialization import (
 )
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData, TimeSeriesMetadata
+from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
 from infrasys.utils.sqlite import backup, create_in_memory_db, restore
 
 
@@ -49,6 +50,7 @@ class System:
         auto_add_composed_components: bool = False,
         con: Optional[sqlite3.Connection] = None,
         time_series_manager: Optional[TimeSeriesManager] = None,
+        supplemental_attribute_manager: Optional[SupplementalAttributeManager] = None,
         uuid: Optional[UUID] = None,
         **kwargs: Any,
     ) -> None:
@@ -90,6 +92,9 @@ class System:
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
         self._time_series_mgr = time_series_manager or TimeSeriesManager(
             self._con, **time_series_kwargs
+        )
+        self._supplemental_attr_mgr = supplemental_attribute_manager or SupplementalAttributeManager(
+            
         )
         self._data_format_version: Optional[str] = None
         # Note to devs: if you add new fields, add support in to_json/from_json as appropriate.
