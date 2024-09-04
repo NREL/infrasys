@@ -11,12 +11,12 @@ from typing_extensions import Annotated
 
 from infrasys.component import Component
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
-from infrasys.models import make_label, get_class_and_name_from_label
+from infrasys.models import InfraSysBaseModelWithIdentifers, make_label, get_class_and_name_from_label
 from infrasys.supplemental_attribute_associations import SupplementalAttributeAssociations
 
-class SupplementalAttribute(Component):
+class SupplementalAttribute(InfraSysBaseModelWithIdentifers):
     name = Annotated[str, Field(frozen=True)]
-    uuid = Annotated[UUID, Field(frozen=True)]
+
 
 class SupplementalAttributeManager:
     """Manages supplemental attributes"""
