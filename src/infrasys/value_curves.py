@@ -1,7 +1,6 @@
 """Defines classes for value curves using cost functions"""
 
 from typing_extensions import Annotated
-from infrasys.component import Component
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.function_data import (
     LinearFunctionData,
@@ -13,9 +12,10 @@ from infrasys.function_data import (
 from pydantic import Field
 import numpy as np
 
+from infrasys.models import InfraSysBaseModelWithIdentifers
 
-class ValueCurve(Component):
-    name: Annotated[str, Field(frozen=True)] = ""
+
+class ValueCurve(InfraSysBaseModelWithIdentifers):
     input_at_zero: Annotated[
         float | None,
         Field(

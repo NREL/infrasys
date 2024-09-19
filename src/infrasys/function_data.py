@@ -1,12 +1,14 @@
 """Defines models for cost functions"""
 
-from infrasys import Component
-from typing_extensions import Annotated
-from pydantic import Field, model_validator
-from pydantic.functional_validators import AfterValidator
-from typing import NamedTuple, List
+from typing import List, NamedTuple
+
 import numpy as np
 import pint
+from pydantic import Field, model_validator
+from pydantic.functional_validators import AfterValidator
+from typing_extensions import Annotated
+
+from infrasys.models import InfraSysBaseModelWithIdentifers
 
 
 class XYCoords(NamedTuple):
@@ -16,10 +18,10 @@ class XYCoords(NamedTuple):
     y: float
 
 
-class FunctionData(Component):
+class FunctionData(InfraSysBaseModelWithIdentifers):
     """BaseClass of FunctionData"""
 
-    name: Annotated[str, Field(frozen=True)] = ""
+    ...
 
 
 class LinearFunctionData(FunctionData):

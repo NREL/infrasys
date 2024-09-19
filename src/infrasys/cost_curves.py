@@ -1,12 +1,12 @@
 from typing_extensions import Annotated
-from infrasys.component import Component
 from pydantic import Field
+from infrasys.models import InfraSysBaseModelWithIdentifers
 from infrasys.value_curves import InputOutputCurve, IncrementalCurve, AverageRateCurve, LinearCurve
 import pint
 
 
-class ProductionVariableCostCurve(Component):
-    name: Annotated[str, Field(frozen=True)] = ""
+class ProductionVariableCostCurve(InfraSysBaseModelWithIdentifers):
+    ...
 
 
 class CostCurve(ProductionVariableCostCurve):
