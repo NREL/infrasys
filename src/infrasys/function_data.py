@@ -6,6 +6,7 @@ from pydantic import Field, model_validator
 from pydantic.functional_validators import AfterValidator
 from typing import NamedTuple, List
 import numpy as np
+import pint
 
 
 class XYCoords(NamedTuple):
@@ -32,7 +33,8 @@ class LinearFunctionData(FunctionData):
     """
 
     proportional_term: Annotated[
-        float, Field(description="the proportional term in the represented function.")
+        pint.Quantity | float,
+        Field(description="the proportional term in the represented function."),
     ]
     constant_term: Annotated[
         float, Field(description="the constant term in the represented function.")

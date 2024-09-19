@@ -1,8 +1,8 @@
 from typing_extensions import Annotated
 from infrasys.component import Component
 from pydantic import Field
-from infrasys.value_curves import InputOutputCurve, IncrementalCurve, AverageRateCurve
-from infrasys.function_data import LinearFunctionData
+from infrasys.value_curves import InputOutputCurve, IncrementalCurve, AverageRateCurve, LinearCurve
+import pint
 
 
 class ProductionVariableCostCurve(Component):
@@ -23,12 +23,10 @@ class CostCurve(ProductionVariableCostCurve):
             description="The underlying `ValueCurve` representation of this `ProductionVariableCostCurve`"
         ),
     ]
-    vom_units: Annotated[
+    vom_cost: Annotated[
         InputOutputCurve,
         Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
-    ] = InputOutputCurve(
-        function_data=LinearFunctionData(proportional_term=0.0, constant_term=0.0)
-    )
+    ] = LinearCurve(0)
 
 
 class FuelCurve(ProductionVariableCostCurve):
@@ -45,15 +43,13 @@ class FuelCurve(ProductionVariableCostCurve):
             description="The underlying `ValueCurve` representation of this `ProductionVariableCostCurve`"
         ),
     ]
-    vom_units: Annotated[
+    vom_cost: Annotated[
         InputOutputCurve,
         Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
-    ] = InputOutputCurve(
-        function_data=LinearFunctionData(proportional_term=0.0, constant_term=0.0)
-    )
+    ] = LinearCurve(0)
     fuel_cost: Annotated[
-        float,
+        pint.Quantity | float | None,
         Field(
             description="Either a fixed value for fuel cost or the key to a fuel cost time series"
         ),
-    ]
+    ] = 0

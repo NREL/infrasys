@@ -209,3 +209,19 @@ class AverageRateCurve(ValueCurve):
             case _:
                 msg = "Function is not valid for the type of data provided."
                 raise ISOperationNotAllowed(msg)
+
+
+def LinearCurve(proportional_term: float | None, constant_term: float | None = None):
+    if proportional_term is None:
+        return InputOutputCurve(
+            function_data=LinearFunctionData(proportional_term=0, constant_term=0)
+        )
+    if constant_term:
+        return InputOutputCurve(
+            function_data=LinearFunctionData(
+                proportional_term=proportional_term, constant_term=constant_term
+            )
+        )
+    return InputOutputCurve(
+        function_data=LinearFunctionData(proportional_term=proportional_term, constant_term=0)
+    )
