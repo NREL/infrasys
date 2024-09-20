@@ -93,8 +93,8 @@ class System:
         self._time_series_mgr = time_series_manager or TimeSeriesManager(
             self._con, **time_series_kwargs
         )
-        self._supplemental_attr_mgr = supplemental_attribute_manager or SupplementalAttributeManager(
-            
+        self._supplemental_attr_mgr = (
+            supplemental_attribute_manager or SupplementalAttributeManager(self._con)
         )
         self._data_format_version: Optional[str] = None
         # Note to devs: if you add new fields, add support in to_json/from_json as appropriate.

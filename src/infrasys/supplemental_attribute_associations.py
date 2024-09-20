@@ -1,27 +1,14 @@
 """Stores supplemental attribute associations in SQLite database"""
 
-import hashlib
-import itertools
-import json
-import os
 import sqlite3
-from dataclasses import dataclass
-from typing import Any, Optional, Sequence
-from uuid import UUID
 
 from loguru import logger
 
-from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed, ISNotStored
 from infrasys import Component
-from infrasys.serialization import (
-    deserialize_value,
-    serialize_value,
-    SerializedTypeMetadata,
-    TYPE_METADATA,
-)
 from infrasys.supplemental_attribute_manager import SupplementalAttribute
 from infrasys.time_series_metadata_store import _does_sqlite_support_json
 from infrasys.utils.sqlite import execute
+
 
 class SupplementalAttributeAssociations:
     """Stores supplemental attribute associations in a SQLite database."""
@@ -44,6 +31,7 @@ class SupplementalAttributeAssociations:
                 "have degraded performance.",
                 sqlite3.sqlite_version,
             )
+
     def _create_association_table(self):
         schema = [
             "attribute_uuid TEXT",
@@ -75,32 +63,35 @@ class SupplementalAttributeAssociations:
             Raised if the time series metadata already stored.
         """
 
-        #attribute_hash = _compute_user_attribute_hash(metadata.user_attributes)
-        #where_clause, params = self._make_where_clause(
+        # attribute_hash = _compute_user_attribute_hash(metadata.user_attributes)
+        # where_clause, params = self._make_where_clause(
         #    components,
         #    metadata.variable_name,
         #    metadata.type,
         #    attribute_hash=attribute_hash,
         #    **metadata.user_attributes,
-        #)
-        #cur = self._con.cursor()
+        # )
+        # cur = self._con.cursor()
 
-        #query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
-        #res = execute(cur, query, params=params).fetchone()
-        #if res[0] > 0:
+        # query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
+        # res = execute(cur, query, params=params).fetchone()
+        # if res[0] > 0:
         #    msg = f"Time series with {metadata=} is already stored."
         #    raise ISAlreadyAttached(msg)
 
-        #Check this later lol
-        rows = (
+        # Check this later
+        rows = [
+            (
+                None,
                 str(attribute.uuid),
-                str(type(attribute)),
+                type(attribute),
                 str(component.uuid),
-                str(type(component)),
+                type(component),
             )
+        ]
 
         self._insert_rows(rows)
-    
+
     def _insert_rows(self, rows: list[tuple]) -> None:
         cur = self._con.cursor()
         placeholder = ",".join(["?"] * len(rows[0]))
