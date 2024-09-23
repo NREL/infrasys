@@ -16,8 +16,10 @@ class Location(Component):
     y: float
     crs: str | None = None
 
+
 class GeographicInfo(SupplementalAttribute):
     """Specifies geographic location as a dictionary."""
 
-    name: Annotated[str, Field(frozen=True)] = ""
-    geojson: Annotated[dict[str, float], Field(description="Dictionary of geographical information")]
+    geojson: Annotated[
+        dict[str, float], Field(description="Dictionary of geographical information")
+    ]
