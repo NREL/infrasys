@@ -3,17 +3,11 @@
 import sqlite3
 from typing import Any, Type
 from uuid import UUID
-from pydantic import Field
-from typing_extensions import Annotated
 
 from infrasys.component import Component
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored
-from infrasys.models import InfraSysBaseModelWithIdentifers
+from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.supplemental_attribute_associations import SupplementalAttributeAssociations
-
-
-class SupplementalAttribute(InfraSysBaseModelWithIdentifers):
-    name: Annotated[str, Field(frozen=True)] = ""
 
 
 class SupplementalAttributeManager:

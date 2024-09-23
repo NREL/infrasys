@@ -5,7 +5,7 @@ import sqlite3
 from loguru import logger
 
 from infrasys import Component
-from infrasys.supplemental_attribute_manager import SupplementalAttribute
+from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_metadata_store import _does_sqlite_support_json
 from infrasys.utils.sqlite import execute
 
