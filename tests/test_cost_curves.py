@@ -15,13 +15,13 @@ def test_cost_curve():
         value_curve=InputOutputCurve(
             function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0)
         ),
-        vom_units=InputOutputCurve(
+        vom_cost=InputOutputCurve(
             function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
         ),
     )
 
     assert cost_curve.value_curve.function_data.proportional_term == 1.0
-    assert cost_curve.vom_units.function_data.proportional_term == 2.0
+    assert cost_curve.vom_cost.function_data.proportional_term == 2.0
 
 
 def test_fuel_curve():
@@ -30,14 +30,14 @@ def test_fuel_curve():
         value_curve=InputOutputCurve(
             function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0)
         ),
-        vom_units=InputOutputCurve(
+        vom_cost=InputOutputCurve(
             function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
         ),
         fuel_cost=2.5,
     )
 
     assert fuel_curve.value_curve.function_data.proportional_term == 1.0
-    assert fuel_curve.vom_units.function_data.proportional_term == 2.0
+    assert fuel_curve.vom_cost.function_data.proportional_term == 2.0
     assert fuel_curve.fuel_cost == 2.5
 
 
@@ -48,7 +48,7 @@ def test_value_curve_custom_serialization():
             value_curve=InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0)
             ),
-            vom_units=InputOutputCurve(
+            vom_cost=InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
             ),
         ),
@@ -73,7 +73,7 @@ def test_value_curve_serialization(tmp_path):
             value_curve=InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0)
             ),
-            vom_units=InputOutputCurve(
+            vom_cost=InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
             ),
         ),
