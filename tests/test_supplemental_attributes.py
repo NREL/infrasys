@@ -14,24 +14,24 @@ class test_supplemental_attribute(SupplementalAttribute):
 
 
 class test_component(Component):
-    t: int
+    test_field: int
 
 
 def test_supplemental_attribute_manager(tmp_path):
     # system = SimpleSystem(auto_add_composed_components=True)
 
-    test_attribute = test_supplemental_attribute(name="test_attribute", test_field=1.0)
-    # test_component = Component(name="test_component")
+    test_attr = test_supplemental_attribute(name="test_attribute", test_field=1.0)
+
     con = sqlite3.connect(tmp_path / "supp_attr.db")
 
-    pls_work = test_component(name="test", t=1)
+    test_com = test_component(name="test", test_field=1)
 
     # initialize manager
     mgr = SupplementalAttributeManager(con=con)
 
     # add attribute to component
-    mgr.add(pls_work, test_attribute)
+    mgr.add(test_com, test_attr)
 
-    assert test_attribute.test_field == 1.0
+    assert test_attr.test_field == 1.0
 
     return

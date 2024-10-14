@@ -102,7 +102,6 @@ class TimeSeriesMetadataStore:
             **metadata.user_attributes,
         )
         cur = self._con.cursor()
-
         query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
         res = execute(cur, query, params=params).fetchone()
         if res[0] > 0:
@@ -394,7 +393,9 @@ class TimeSeriesMetadataStore:
         finally:
             self._con.commit()
 
-    def _make_components_str(self, params: list[str], *components: Component | SupplementalAttribute) -> str:
+    def _make_components_str(
+        self, params: list[str], *components: Component | SupplementalAttribute
+    ) -> str:
         if not components:
             msg = "At least one component must be passed."
             raise ISOperationNotAllowed(msg)

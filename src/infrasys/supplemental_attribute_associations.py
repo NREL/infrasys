@@ -74,10 +74,10 @@ class SupplementalAttributeAssociationsStore:
     def _create_indexes(self, cur) -> None:
         execute(
             cur,
-            f"CREATE INDEX by_attribute_and_component ON {self.TABLE_NAME} "
-            f"(attribute_uuid, component_uuid)",
+            f"CREATE INDEX by_cu_ct_sau_hash ON {self.TABLE_NAME} "
+            f"(component_uuid, component_type, attribute_type, user_attributes_hash)",
         )
-        execute(cur, f"CREATE INDEX by_component ON {self.TABLE_NAME} (component_uuid)")
+        execute(cur, f"CREATE INDEX by_component ON {self.TABLE_NAME} (attribute_uuid)")
 
     def add(self, association: SupplementalAttributeAssociations) -> None:
         """Add association to the database.
@@ -108,9 +108,9 @@ class SupplementalAttributeAssociationsStore:
             (
                 None,
                 str(association.attribute.uuid),
-                type(association.attribute),
+                str(type(association.attribute)),
                 str(association.component.uuid),
-                type(association.component),
+                str(type(association.component)),
                 attribute_hash,
             )
         ]
@@ -135,7 +135,6 @@ class SupplementalAttributeAssociationsStore:
     ) -> tuple[str, list[str]]:
         params: list[str] = []
         component_str = self._make_components_str(params, component)
-        attribute_str = self._make_components_str(params, attribute)
 
         if attribute_hash is None and user_attributes:
             _raise_if_unsupported_sql_operation()
@@ -150,7 +149,7 @@ class SupplementalAttributeAssociationsStore:
         else:
             ua_hash = ""
 
-        return f"({component_str} {attribute_str}) {ua_str} {ua_hash}", params
+        return f"({component_str}) {ua_str} {ua_hash}", params
 
     def _make_components_str(
         self, params: list[str], *components: Component | SupplementalAttribute
