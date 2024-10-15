@@ -61,6 +61,39 @@ class SupplementalAttributeManager:
 
         self._associations.add(association)
 
+    #
+    def get(
+        self,
+        component: Component,
+        attribute: SupplementalAttribute,
+        # time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        # start_time: datetime | None = None,
+        # length: int | None = None,
+        **user_attributes,
+    ) -> SupplementalAttribute:
+        """Return a time series array.
+
+        Raises
+        ------
+        ISNotStored
+            Raised if no time series matches the inputs.
+            Raised if the inputs match more than one time series.
+        ISOperationNotAllowed
+            Raised if the inputs match more than one time series.
+
+        See Also
+        --------
+        list_time_series
+        """
+        association = self._associations.get_association(
+            component,
+            attribute,
+            # variable_name=variable_name,
+            # time_series_type=time_series_type.__name__,
+            **user_attributes,
+        )
+        return association.attribute
+
     def remove(self, attribute: SupplementalAttribute) -> Any:
         """Remove the component from the system and return it.
 

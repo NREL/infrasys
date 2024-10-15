@@ -3,6 +3,7 @@
 import sqlite3
 import itertools
 import abc
+import json
 from loguru import logger
 
 from infrasys import Component
@@ -14,10 +15,15 @@ from infrasys.time_series_metadata_store import (
     _raise_if_unsupported_sql_operation,
     _make_user_attribute_filter,
     _make_user_attribute_hash_filter,
+    _do_attributes_match,
+)
+from infrasys.serialization import (
+    deserialize_value,
+    SerializedTypeMetadata,
 )
 from infrasys.utils.sqlite import execute
 from typing import Any, Optional
-from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed
+from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed, ISNotStored
 
 
 class SupplementalAttributeAssociations(InfraSysBaseModel, abc.ABC):
@@ -117,6 +123,94 @@ class SupplementalAttributeAssociationsStore:
 
         self._insert_rows(rows)
 
+    def get_association(
+        self,
+        component: Component,
+        attribute: SupplementalAttribute,
+        # variable_name: Optional[str] = None,
+        # time_series_type: Optional[str] = None,
+        **user_attributes,
+    ) -> SupplementalAttributeAssociations:
+        """Return the associations matching the inputs.
+
+        Raises
+        ------
+        ISOperationNotAllowed
+            Raised if more than one metadata instance matches the inputs.
+        """
+
+        association_list = self.list_association(
+            component,
+            attribute,
+            # variable_name=variable_name,
+            # time_series_type=time_series_type,
+            **user_attributes,
+        )
+        if not association_list:
+            msg = "No supplemental attribute matching the inputs is stored"
+            raise ISNotStored(msg)
+
+        if len(association_list) > 1:
+            msg = f"Found more than association matching inputs: {len(association_list)}"
+            raise ISOperationNotAllowed(msg)
+
+        return association_list[0]
+
+    def list_association(
+        self,
+        component: Component,
+        attribute: SupplementalAttribute,
+        # variable_name: Optional[str] = None,
+        # time_series_type: Optional[str] = None,
+        **user_attributes,
+    ) -> list[SupplementalAttributeAssociations]:
+        """Return a list of associations that match the query."""
+        if not self._supports_sqlite_json:
+            return [
+                x[1]
+                for x in self._list_association_no_sql_json(
+                    component,
+                    attribute
+                    # variable_name=variable_name,
+                    # time_series_type=time_series_type,
+                    **user_attributes,
+                )
+            ]
+
+        where_clause, params = self._make_where_clause(component, attribute)
+        query = f"SELECT metadata FROM {self.TABLE_NAME} WHERE {where_clause}"
+        cur = self._con.cursor()
+        rows = execute(cur, query, params=params).fetchall()
+        return [_deserialize_association(x[0]) for x in rows]
+
+    def _list_association_no_sql_json(
+        self,
+        component: Component,
+        attribute: SupplementalAttribute,
+        # variable_name: Optional[str] = None,
+        # time_series_type: Optional[str] = None,
+        **user_attributes,
+    ) -> list[tuple[int, SupplementalAttributeAssociations]]:
+        """Return a list of association that match the query.
+
+        Returns
+        -------
+        list[tuple[int, TimeSeriesMetadata]]
+            The first element of each tuple is the database id field that uniquely identifies the
+            row.
+        """
+        where_clause, params = self._make_where_clause(component, attribute)
+        query = f"SELECT id, metadata FROM {self.TABLE_NAME} WHERE {where_clause}"
+        cur = self._con.cursor()
+        rows = execute(cur, query, params).fetchall()
+
+        association_list = []
+        for row in rows:
+            association = _deserialize_association(row[1])
+            if _do_attributes_match(association.user_attributes, **user_attributes):
+                association_list.append((row[0], association))
+        return association_list
+
     def _insert_rows(self, rows: list[tuple]) -> None:
         cur = self._con.cursor()
         placeholder = ",".join(["?"] * len(rows[0]))
@@ -135,7 +229,9 @@ class SupplementalAttributeAssociationsStore:
     ) -> tuple[str, list[str]]:
         params: list[str] = []
         component_str = self._make_components_str(params, component)
-
+        attribute_str = self._make_attribute_str(params, component)
+        print(component_str)
+        print(attribute_str)
         if attribute_hash is None and user_attributes:
             _raise_if_unsupported_sql_operation()
             ua_hash_filter = _make_user_attribute_filter(user_attributes, params)
@@ -151,9 +247,7 @@ class SupplementalAttributeAssociationsStore:
 
         return f"({component_str}) {ua_str} {ua_hash}", params
 
-    def _make_components_str(
-        self, params: list[str], *components: Component | SupplementalAttribute
-    ) -> str:
+    def _make_components_str(self, params: list[str], *components: Component) -> str:
         if not components:
             msg = "At least one component must be passed."
             raise ISOperationNotAllowed(msg)
@@ -164,3 +258,23 @@ class SupplementalAttributeAssociationsStore:
             params.append(str(component.uuid))
 
         return f"({or_clause})"
+
+    def _make_attribute_str(self, params: list[str], *components: SupplementalAttribute) -> str:
+        if not components:
+            msg = "At least one component must be passed."
+            raise ISOperationNotAllowed(msg)
+
+        or_clause = "OR ".join((itertools.repeat("component_uuid = ? ", len(components))))
+
+        for component in components:
+            params.append(str(component.uuid))
+
+        return f"({or_clause})"
+
+
+def _deserialize_association(text: str) -> SupplementalAttributeAssociations:
+    data = json.loads(text)
+    # TODO: Check the __association__ type
+    type_association = SerializedTypeMetadata(**data.pop("__association__"))
+    association = deserialize_value(data, type_association.fields)
+    return association
