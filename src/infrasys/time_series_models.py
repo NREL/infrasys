@@ -30,7 +30,7 @@ TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
 
 
-ISArray: TypeAlias = Sequence | pa.Array | np.ndarray | BaseQuantity
+ISArray: TypeAlias = Sequence | pa.Array | np.ndarray | BaseQuantity | pint.Quantity
 
 
 class TimeSeriesStorageType(str, Enum):
@@ -80,10 +80,10 @@ class SingleTimeSeries(TimeSeriesData):
             msg = f"SingleTimeSeries length must be at least 2: {len(data)}"
             raise ValueError(msg)
 
-        if isinstance(data, BaseQuantity):
+        if isinstance(data, BaseQuantity | pint.Quantity):
             if not isinstance(data.magnitude, pa.Array):
                 cls = type(data)
-                return cls(pa.array(data.magnitude), data.units)
+                return cls(data.magnitude, data.units)
             return data
 
         if not isinstance(data, pa.Array):

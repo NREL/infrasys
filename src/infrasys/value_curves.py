@@ -1,7 +1,6 @@
 """Defines classes for value curves using cost functions"""
 
 from typing_extensions import Annotated
-from infrasys.component import Component
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.function_data import (
     LinearFunctionData,
@@ -13,9 +12,10 @@ from infrasys.function_data import (
 from pydantic import Field
 import numpy as np
 
+from infrasys.models import InfraSysBaseModelWithIdentifers
 
-class ValueCurve(Component):
-    name: Annotated[str, Field(frozen=True)] = ""
+
+class ValueCurve(InfraSysBaseModelWithIdentifers):
     input_at_zero: Annotated[
         float | None,
         Field(
@@ -209,3 +209,19 @@ class AverageRateCurve(ValueCurve):
             case _:
                 msg = "Function is not valid for the type of data provided."
                 raise ISOperationNotAllowed(msg)
+
+
+def LinearCurve(proportional_term: float | None, constant_term: float | None = None):
+    if proportional_term is None:
+        return InputOutputCurve(
+            function_data=LinearFunctionData(proportional_term=0, constant_term=0)
+        )
+    if constant_term:
+        return InputOutputCurve(
+            function_data=LinearFunctionData(
+                proportional_term=proportional_term, constant_term=constant_term
+            )
+        )
+    return InputOutputCurve(
+        function_data=LinearFunctionData(proportional_term=proportional_term, constant_term=0)
+    )
