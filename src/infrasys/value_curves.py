@@ -211,17 +211,41 @@ class AverageRateCurve(ValueCurve):
                 raise ISOperationNotAllowed(msg)
 
 
-def LinearCurve(proportional_term: float | None, constant_term: float | None = None):
-    if proportional_term is None:
-        return InputOutputCurve(
-            function_data=LinearFunctionData(proportional_term=0, constant_term=0)
-        )
-    if constant_term:
-        return InputOutputCurve(
-            function_data=LinearFunctionData(
-                proportional_term=proportional_term, constant_term=constant_term
-            )
-        )
+def LinearCurve(proportional_term: float = 0.0, constant_term: float = 0.0) -> InputOutputCurve:
+    """Creates a linear curve using the given proportional and constant terms.
+
+    Returns an instance of `InputOutputCurve` with the specified linear function parameters.
+
+    If no arguments are provided, both the `proportional_term` and `constant_term` default to 0.
+
+    Parameters
+    ----------
+    proportional_term : float, optional
+        The slope of the linear curve. Defaults to 0.0.
+    constant_term : float, optional
+        The y-intercept of the linear curve. Defaults to 0.0.
+
+    Returns
+    -------
+    InputOutputCurve
+        An instance of `InputOutputCurve` with a `LinearFunctionData` object based on the given parameters.
+
+    Examples
+    --------
+    >>> LinearCurve()
+    InputOutputCurve(function_data=LinearFunctionData(proportional_term=0.0, constant_term=0.0))
+
+    >>> LinearCurve(10)
+    InputOutputCurve(function_data=LinearFunctionData(proportional_term=10.0, constant_term=0.0))
+
+    >>> LinearCurve(10, 20)
+    InputOutputCurve(function_data=LinearFunctionData(proportional_term=10.0, constant_term=20.0))
+
+    >>> LinearCurve(proportional_term=5.0, constant_term=15.0)
+    InputOutputCurve(function_data=LinearFunctionData(proportional_term=5.0, constant_term=15.0))
+    """
     return InputOutputCurve(
-        function_data=LinearFunctionData(proportional_term=proportional_term, constant_term=0)
+        function_data=LinearFunctionData(
+            proportional_term=proportional_term, constant_term=constant_term
+        )
     )
