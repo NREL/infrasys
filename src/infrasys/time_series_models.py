@@ -45,7 +45,6 @@ class TimeSeriesStorageType(str, Enum):
 class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Base class for all time series models"""
 
-    units: Optional[str] = None
     variable_name: str
     normalization: NormalizationModel = None
 
@@ -74,16 +73,15 @@ class SingleTimeSeries(TimeSeriesData):
 
     @field_validator("data", mode="before")
     @classmethod
-    def check_data(cls, data) -> pa.Array | BaseQuantity:  # Standarize what object we receive.
+    def check_data(
+        cls, data
+    ) -> pa.Array | pa.ChunkedArray | pint.Quantity:  # Standarize what object we receive.
         """Check time series data."""
         if len(data) < 2:
             msg = f"SingleTimeSeries length must be at least 2: {len(data)}"
             raise ValueError(msg)
 
-        if isinstance(data, BaseQuantity | pint.Quantity):
-            if not isinstance(data.magnitude, pa.Array):
-                cls = type(data)
-                return cls(data.magnitude, data.units)
+        if isinstance(data, pint.Quantity | BaseQuantity):
             return data
 
         if not isinstance(data, pa.Array):
