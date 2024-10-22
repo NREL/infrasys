@@ -21,8 +21,6 @@ class XYCoords(NamedTuple):
 class FunctionData(InfraSysBaseModelWithIdentifers):
     """BaseClass of FunctionData"""
 
-    ...
-
 
 class LinearFunctionData(FunctionData):
     """Data representation for linear cost function.

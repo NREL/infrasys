@@ -253,7 +253,6 @@ def test_time_series():
     list(itertools.product([True, False], [True, False], [True, False])),
 )
 def test_time_series_retrieval(in_memory, use_quantity, sql_json):
-    # in_memory, use_quantity, sql_json = params
     try:
         if not sql_json:
             os.environ["__INFRASYS_NON_JSON_SQLITE__"] = "1"

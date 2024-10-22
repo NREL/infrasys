@@ -26,7 +26,7 @@ class CostCurve(ProductionVariableCostCurve):
     vom_cost: Annotated[
         InputOutputCurve,
         Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
-    ] = LinearCurve(0)
+    ] = LinearCurve(0.0)
 
 
 class FuelCurve(ProductionVariableCostCurve):
@@ -46,10 +46,10 @@ class FuelCurve(ProductionVariableCostCurve):
     vom_cost: Annotated[
         InputOutputCurve,
         Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
-    ] = LinearCurve(0)
+    ] = LinearCurve(0.0)
     fuel_cost: Annotated[
-        pint.Quantity | float | None,
+        pint.Quantity | float,
         Field(
             description="Either a fixed value for fuel cost or the key to a fuel cost time series"
         ),
-    ] = 0
+    ] = 0.0

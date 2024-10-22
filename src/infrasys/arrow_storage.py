@@ -13,7 +13,6 @@ import pint
 from loguru import logger
 
 from infrasys.exceptions import ISNotStored
-from infrasys.base_quantity import BaseQuantity
 from infrasys.time_series_models import (
     SingleTimeSeries,
     SingleTimeSeriesMetadata,
@@ -128,9 +127,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
     ) -> pa.RecordBatch:
         """Create record batch to save array to disk."""
         pa_array = time_series.data
-        if not isinstance(pa_array, pa.Array) and isinstance(
-            pa_array, BaseQuantity | pint.Quantity
-        ):
+        if not isinstance(pa_array, pa.Array) and isinstance(pa_array, pint.Quantity):
             pa_array = pa.array(pa_array.magnitude)
         assert isinstance(pa_array, pa.Array)
         schema = pa.schema([pa.field(variable_name, pa_array.type)])
