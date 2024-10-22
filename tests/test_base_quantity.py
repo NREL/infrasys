@@ -2,6 +2,7 @@ from pydantic import ValidationError
 from infrasys.base_quantity import ureg, BaseQuantity
 from infrasys.component import Component
 from infrasys.quantities import ActivePower, Time, Voltage
+from pint import Quantity
 from pint.errors import DimensionalityError
 import pytest
 import numpy as np
@@ -16,7 +17,7 @@ def test_base_quantity():
 
     unit = distance_quantity(100, "meter")
     assert isinstance(unit, BaseQuantity)
-
+    assert isinstance(unit, Quantity)
     # Check that we can not assign units that are not-related.
     with pytest.raises(DimensionalityError):
         _ = distance_quantity(100, "kWh")

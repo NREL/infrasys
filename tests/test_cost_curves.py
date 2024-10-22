@@ -20,7 +20,9 @@ def test_cost_curve():
         ),
     )
 
+    assert isinstance(cost_curve.value_curve.function_data, LinearFunctionData)
     assert cost_curve.value_curve.function_data.proportional_term == 1.0
+    assert isinstance(cost_curve.vom_cost.function_data, LinearFunctionData)
     assert cost_curve.vom_cost.function_data.proportional_term == 2.0
 
 
@@ -36,7 +38,9 @@ def test_fuel_curve():
         fuel_cost=2.5,
     )
 
+    assert isinstance(fuel_curve.value_curve.function_data, LinearFunctionData)
     assert fuel_curve.value_curve.function_data.proportional_term == 1.0
+    assert isinstance(fuel_curve.vom_cost.function_data, LinearFunctionData)
     assert fuel_curve.vom_cost.function_data.proportional_term == 2.0
     assert fuel_curve.fuel_cost == 2.5
 
