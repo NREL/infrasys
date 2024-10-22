@@ -249,10 +249,10 @@ def test_time_series():
 
 
 @pytest.mark.parametrize(
-    "params", list(itertools.product([True, False], [True, False], [True, False]))
+    "in_memory,use_quantity,sql_json",
+    list(itertools.product([True, False], [True, False], [True, False])),
 )
-def test_time_series_retrieval(params):
-    in_memory, use_quantity, sql_json = params
+def test_time_series_retrieval(in_memory, use_quantity, sql_json):
     try:
         if not sql_json:
             os.environ["__INFRASYS_NON_JSON_SQLITE__"] = "1"
@@ -290,29 +290,33 @@ def test_time_series_retrieval(params):
         for metadata in system.list_time_series_metadata(gen, scenario="high"):
             assert metadata.user_attributes["scenario"] == "high"
 
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="high", model_year="2030"
+        assert all(
+            np.equal(
+                system.get_time_series(
+                    gen, variable_name, scenario="high", model_year="2030"
+                ).data,
+                ts1.data,
             )
-            == ts1
         )
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="high", model_year="2035"
+        assert all(
+            np.equal(
+                system.get_time_series(
+                    gen, variable_name, scenario="high", model_year="2035"
+                ).data,
+                ts2.data,
             )
-            == ts2
         )
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="low", model_year="2030"
+        assert all(
+            np.equal(
+                system.get_time_series(gen, variable_name, scenario="low", model_year="2030").data,
+                ts3.data,
             )
-            == ts3
         )
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="low", model_year="2035"
+        assert all(
+            np.equal(
+                system.get_time_series(gen, variable_name, scenario="low", model_year="2035").data,
+                ts4.data,
             )
-            == ts4
         )
 
         with pytest.raises(ISAlreadyAttached):
@@ -324,12 +328,6 @@ def test_time_series_retrieval(params):
             gen, variable_name=variable_name, scenario="high", model_year="2030"
         )
         assert not system.has_time_series(gen, variable_name=variable_name, model_year="2036")
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="high", model_year="2030"
-            )
-            == ts1
-        )
         with pytest.raises(ISOperationNotAllowed):
             system.get_time_series(gen, variable_name=variable_name, scenario="high")
         with pytest.raises(ISNotStored):

@@ -82,8 +82,8 @@ def test_with_quantity():
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == initial_time
-    assert isinstance(ts.data.magnitude, pa.Array)
-    assert ts.data[-1].as_py() == length - 1
+    assert isinstance(ts.data, ActivePower)
+    assert ts.data[-1].magnitude == length - 1
 
 
 def test_normalization():

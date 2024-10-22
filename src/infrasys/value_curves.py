@@ -1,7 +1,6 @@
 """Defines classes for value curves using cost functions"""
 
 from typing_extensions import Annotated
-from infrasys.component import Component
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.function_data import (
     LinearFunctionData,
@@ -13,9 +12,10 @@ from infrasys.function_data import (
 from pydantic import Field
 import numpy as np
 
+from infrasys.models import InfraSysBaseModelWithIdentifers
 
-class ValueCurve(Component):
-    name: Annotated[str, Field(frozen=True)] = ""
+
+class ValueCurve(InfraSysBaseModelWithIdentifers):
     input_at_zero: Annotated[
         float | None,
         Field(
@@ -209,3 +209,43 @@ class AverageRateCurve(ValueCurve):
             case _:
                 msg = "Function is not valid for the type of data provided."
                 raise ISOperationNotAllowed(msg)
+
+
+def LinearCurve(proportional_term: float = 0.0, constant_term: float = 0.0) -> InputOutputCurve:
+    """Creates a linear curve using the given proportional and constant terms.
+
+    Returns an instance of `InputOutputCurve` with the specified linear function parameters.
+
+    If no arguments are provided, both the `proportional_term` and `constant_term` default to 0.
+
+    Parameters
+    ----------
+    proportional_term : float, optional
+        The slope of the linear curve. Defaults to 0.0.
+    constant_term : float, optional
+        The y-intercept of the linear curve. Defaults to 0.0.
+
+    Returns
+    -------
+    InputOutputCurve
+        An instance of `InputOutputCurve` with a `LinearFunctionData` object based on the given parameters.
+
+    Examples
+    --------
+    >>> LinearCurve()
+    InputOutputCurve(function_data=LinearFunctionData(proportional_term=0.0, constant_term=0.0))
+
+    >>> LinearCurve(10)
+    InputOutputCurve(function_data=LinearFunctionData(proportional_term=10.0, constant_term=0.0))
+
+    >>> LinearCurve(10, 20)
+    InputOutputCurve(function_data=LinearFunctionData(proportional_term=10.0, constant_term=20.0))
+
+    >>> LinearCurve(proportional_term=5.0, constant_term=15.0)
+    InputOutputCurve(function_data=LinearFunctionData(proportional_term=5.0, constant_term=15.0))
+    """
+    return InputOutputCurve(
+        function_data=LinearFunctionData(
+            proportional_term=proportional_term, constant_term=constant_term
+        )
+    )

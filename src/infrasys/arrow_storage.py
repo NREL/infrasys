@@ -9,10 +9,10 @@ from typing import Any, Optional
 from uuid import UUID
 
 import pyarrow as pa
+import pint
 from loguru import logger
 
 from infrasys.exceptions import ISNotStored
-from infrasys.base_quantity import BaseQuantity
 from infrasys.time_series_models import (
     SingleTimeSeries,
     SingleTimeSeriesMetadata,
@@ -122,9 +122,13 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             normalization=metadata.normalization,
         )
 
-    def _convert_to_record_batch(self, array: SingleTimeSeries, variable_name: str):
+    def _convert_to_record_batch(
+        self, time_series: SingleTimeSeries, variable_name: str
+    ) -> pa.RecordBatch:
         """Create record batch to save array to disk."""
-        pa_array = array.data.magnitude if isinstance(array.data, BaseQuantity) else array.data
+        pa_array = time_series.data
+        if not isinstance(pa_array, pa.Array) and isinstance(pa_array, pint.Quantity):
+            pa_array = pa.array(pa_array.magnitude)
         assert isinstance(pa_array, pa.Array)
         schema = pa.schema([pa.field(variable_name, pa_array.type)])
         return pa.record_batch([pa_array], schema=schema)
