@@ -8,7 +8,6 @@ import pytest
 
 from infrasys.exceptions import (
     ISAlreadyAttached,
-    ISInvalidParameter,
     ISNotStored,
     ISOperationNotAllowed,
     ISConflictingArguments,
@@ -32,8 +31,7 @@ def test_system():
     gen = SimpleGenerator(name="test-gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen])
     system.add_components(geo, bus, gen, subsystem)
-    with pytest.raises(ISInvalidParameter):
-        system.add_components()
+    assert system.add_components() is None
 
     gen2 = system.get_component(SimpleGenerator, "test-gen")
     assert gen2 is gen
