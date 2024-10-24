@@ -12,7 +12,6 @@ from infrasys.exceptions import (
     ISAlreadyAttached,
     ISNotStored,
     ISOperationNotAllowed,
-    ISInvalidParameter,
 )
 from infrasys.models import make_label, get_class_and_name_from_label
 
@@ -50,8 +49,7 @@ class ComponentManager:
             Raised if a component is already attached to a system.
         """
         if not components:
-            msg = "add_associations requires at least one component"
-            raise ISInvalidParameter(msg)
+            return
 
         for component in components:
             self._add(component, deserialization_in_progress)
