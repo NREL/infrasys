@@ -108,7 +108,7 @@ class SingleTimeSeries(TimeSeriesData):
         Parameters
         ----------
         ts_data
-            List of SingleTimeSeries data
+            list of SingleTimeSeries data
 
         Returns
         -------
@@ -131,7 +131,8 @@ class SingleTimeSeries(TimeSeriesData):
 
         # Validate uniformity across properties
         if any(len(prop) != 1 for prop in unique_props.values()):
-            msg = f"Inconsistent timeseries data: {unique_props}"
+            inconsistent_props = {k: v for k, v in unique_props.items() if len(v) > 1}
+            msg = f"Inconsistent timeseries data: {inconsistent_props}"
             raise InconsistentTimeseriesAggregation(msg)
 
         # Aggregate data
