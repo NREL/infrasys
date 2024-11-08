@@ -4,7 +4,6 @@ import abc
 import importlib
 from datetime import datetime, timedelta
 from enum import Enum
-from io import UnsupportedOperation
 from typing import (
     Any,
     Literal,
@@ -137,11 +136,20 @@ class SingleTimeSeries(TimeSeriesData):
 
         # Aggregate data
         is_quantity = issubclass(next(iter(unique_props["data_type"])), BaseQuantity)
-        magnitude_type = type(ts_data[0].data.magnitude) if is_quantity else next(iter(unique_props["data_type"]))
+        magnitude_type = (
+            type(ts_data[0].data.magnitude)
+            if is_quantity
+            else next(iter(unique_props["data_type"]))
+        )
 
         # Aggregate data based on magnitude type
         if issubclass(magnitude_type, pa.Array):
-            new_data = sum([data.data.to_numpy() * (data.data.units if is_quantity else 1) for data in ts_data])
+            new_data = sum(
+                [
+                    data.data.to_numpy() * (data.data.units if is_quantity else 1)
+                    for data in ts_data
+                ]
+            )
         elif issubclass(magnitude_type, np.ndarray):
             new_data = sum([data.data for data in ts_data])
         elif issubclass(magnitude_type, list) and not is_quantity:

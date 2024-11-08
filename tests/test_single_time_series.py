@@ -101,11 +101,12 @@ def test_normalization():
     for i, val in enumerate(ts.data):
         assert val.as_py() == data[i] / max_val
 
+
 def test_normal_array_aggregate():
     length = 10
     initial_time = datetime(year=2020, month=1, day=1)
     time_array = [initial_time + timedelta(hours=i) for i in range(length)]
-    data =  [1.1, 2.2, 3.3, 4.5, 5.5]
+    data = [1.1, 2.2, 3.3, 4.5, 5.5]
     variable_name = "active_power"
     ts1 = ts2 = SingleTimeSeries.from_time_array(
         data, variable_name, time_array, normalization=None
@@ -114,11 +115,12 @@ def test_normal_array_aggregate():
     assert isinstance(ts_agg, SingleTimeSeries)
     assert list([el.as_py() for el in ts_agg.data]) == [2.2, 4.4, 6.6, 9, 11]
 
+
 def test_pint_array_aggregate():
     length = 10
     initial_time = datetime(year=2020, month=1, day=1)
     time_array = [initial_time + timedelta(hours=i) for i in range(length)]
-    data =  ActivePower([1.1, 2.2, 3.3, 4.5, 5.5], "kilowatts")
+    data = ActivePower([1.1, 2.2, 3.3, 4.5, 5.5], "kilowatts")
     variable_name = "active_power"
     ts1 = ts2 = SingleTimeSeries.from_time_array(
         data, variable_name, time_array, normalization=None
