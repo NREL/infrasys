@@ -35,3 +35,6 @@ class ISNotStored(ISBaseException):
 
 class ISOperationNotAllowed(ISBaseException):
     """Raised if the requested operation is not allowed."""
+
+class InconsistentTimeseriesAggregation(ISBaseException):
+    """Raised if attempting to aggregate inconsistent time series data."""

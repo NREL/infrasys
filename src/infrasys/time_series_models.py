@@ -4,7 +4,17 @@ import abc
 import importlib
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Literal, Optional, Type, TypeAlias, Union, Sequence
+from io import UnsupportedOperation
+from typing import (
+    Any,
+    Literal,
+    Optional,
+    Self,
+    Type,
+    TypeAlias,
+    Union,
+    Sequence,
+)
 from uuid import UUID
 
 import numpy as np
@@ -21,7 +31,10 @@ from pydantic import (
 from typing_extensions import Annotated
 
 from infrasys.base_quantity import BaseQuantity
-from infrasys.exceptions import ISConflictingArguments
+from infrasys.exceptions import (
+    ISConflictingArguments,
+    InconsistentTimeseriesAggregation,
+)
 from infrasys.models import InfraSysBaseModelWithIdentifers, InfraSysBaseModel
 from infrasys.normalization import NormalizationModel
 
@@ -88,6 +101,63 @@ class SingleTimeSeries(TimeSeriesData):
             return pa.array(data)
 
         return data
+
+    @classmethod
+    def aggregate(cls, ts_data: list[Self]) -> Self:
+        """Method to aggregate list of SingleTimeSeries data.
+
+        Parameters
+        ----------
+        ts_data
+            List of SingleTimeSeries data
+
+        Returns
+        -------
+        SingleTimeSeries
+
+        Raises
+        ------
+        InconsistentTimeseriesAggregation
+            Raised if incompatible timeseries data are passed.
+        """
+
+        # Extract unique properties from ts_data
+        unique_props = {
+            "length": {data.length for data in ts_data},
+            "resolution": {data.resolution for data in ts_data},
+            "start_time": {data.initial_time for data in ts_data},
+            "variable": {data.variable_name for data in ts_data},
+            "data_type": {type(data.data) for data in ts_data},
+        }
+
+        # Validate uniformity across properties
+        if any(len(prop) != 1 for prop in unique_props.values()):
+            msg = f"Inconsistent timeseries data: {unique_props}"
+            raise InconsistentTimeseriesAggregation(msg)
+
+        # Aggregate data
+        is_quantity = issubclass(next(iter(unique_props["data_type"])), BaseQuantity)
+        magnitude_type = type(ts_data[0].data.magnitude) if is_quantity else next(iter(unique_props["data_type"]))
+
+        # Aggregate data based on magnitude type
+        if issubclass(magnitude_type, pa.Array):
+            new_data = sum([data.data.to_numpy() * (data.data.units if is_quantity else 1) for data in ts_data])
+        elif issubclass(magnitude_type, np.ndarray):
+            new_data = sum([data.data for data in ts_data])
+        elif issubclass(magnitude_type, list) and not is_quantity:
+            new_data = sum([np.array(data) for data in ts_data])
+        else:
+            msg = f"Unsupported data type for aggregation: {magnitude_type}"
+            raise TypeError(msg)
+
+        # Return new SingleTimeSeries instance
+        return SingleTimeSeries(
+            data=new_data,
+            variable_name=unique_props["variable"].pop(),
+            initial_time=unique_props["start_time"].pop(),
+            resolution=unique_props["resolution"].pop(),
+            normalization=None,
+        )
 
     @classmethod
     def from_array(
