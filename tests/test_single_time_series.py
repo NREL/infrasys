@@ -131,3 +131,18 @@ def test_pint_array_aggregate():
     ts_agg = SingleTimeSeries.aggregate([ts1, ts2], "avg")
     assert isinstance(ts_agg, SingleTimeSeries)
     assert list(ts_agg.data.magnitude) == [1.1, 2.2, 3.3, 4.5, 5.5]
+
+
+def test_scalar_single_timeseries_multiplier():
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    time_array = [initial_time + timedelta(hours=i) for i in range(length)]
+    data = ActivePower([1.1, 2.2, 3.3, 4.5, 5.5], "kilowatts")
+    variable_name = "active_power"
+    ts1 = SingleTimeSeries.from_time_array(data, variable_name, time_array, normalization=None)
+    ts2 = ts1 * 2
+    assert isinstance(ts2, SingleTimeSeries)
+    assert list(ts2.data.magnitude) == [2.2, 4.4, 6.6, 9, 11]
+    ts3 = ts1 * ActivePower(2, "kilowatts")
+    assert isinstance(ts3, SingleTimeSeries)
+    assert list(ts3.data.magnitude) == [2.2, 4.4, 6.6, 9, 11]

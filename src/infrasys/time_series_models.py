@@ -263,6 +263,38 @@ class SingleTimeSeries(TimeSeriesData):
     def get_time_series_metadata_type() -> Type:
         return SingleTimeSeriesMetadata
 
+    # Support for scalar * SingleTimeSeries
+    def __mul__(self, scalar: int | float | BaseQuantity) -> Self:
+        if isinstance(scalar, (int, float, BaseQuantity)):
+            is_quantity = issubclass(type(self.data), BaseQuantity)
+            data_type = (
+                type(self.data.magnitude) if hasattr(self.data, "magnitude") else type(self.data)
+            )
+
+            if is_quantity and issubclass(data_type, pa.Array):
+                data_new = (
+                    self.data.__class__(np.array(self.data.magnitude), self.data.units) * scalar
+                )
+            elif not is_quantity and issubclass(data_type, pa.Array):
+                data_new = self.data.to_numpy() * scalar
+            elif not is_quantity and issubclass(data_type, list):
+                data_new = np.array(self.data) * scalar
+            elif issubclass(data_type, np.ndarray):
+                data_new = self.data * scalar
+            else:
+                msg = f"Unsupported {data_type=}, {is_quantity=}"
+                raise TypeError(msg)
+
+            return SingleTimeSeries(
+                data=data_new,
+                variable_name=self.variable_name,
+                normalization=self.normalization,
+                resolution=self.resolution,
+                initial_time=self.initial_time,
+            )
+        msg = "Multiplication only supported with int, float or BaseQuantity"
+        raise TypeError(msg)
+
 
 class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
