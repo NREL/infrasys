@@ -141,14 +141,15 @@ class SingleTimeSeries(TimeSeriesData):
         magnitude_type = type(ts_data[0].data.magnitude) if is_quantity else data_type
 
         # Aggregate data based on magnitude type
-        if issubclass(magnitude_type, pa.Array):
+        if issubclass(magnitude_type, pa.Array) and is_quantity:
             new_data = agg_func(
                 [
-                    data.data.__class__(np.array(data.data.magnitude))
-                    * (data.data.units if is_quantity else 1)
+                    data.data.__class__(np.array(data.data.magnitude)) * data.data.units
                     for data in ts_data
                 ]
             )
+        elif issubclass(magnitude_type, pa.Array) and not is_quantity:
+            new_data = agg_func([data.data.to_numpy() for data in ts_data])
         elif issubclass(magnitude_type, np.ndarray):
             new_data = agg_func([data.data for data in ts_data])
         elif issubclass(magnitude_type, list) and not is_quantity:

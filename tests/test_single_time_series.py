@@ -128,3 +128,6 @@ def test_pint_array_aggregate():
     ts_agg = SingleTimeSeries.aggregate([ts1, ts2])
     assert isinstance(ts_agg, SingleTimeSeries)
     assert list(ts_agg.data.magnitude) == [2.2, 4.4, 6.6, 9, 11]
+    ts_agg = SingleTimeSeries.aggregate([ts1, ts2], "avg")
+    assert isinstance(ts_agg, SingleTimeSeries)
+    assert list(ts_agg.data.magnitude) == [1.1, 2.2, 3.3, 4.5, 5.5]
