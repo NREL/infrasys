@@ -102,7 +102,7 @@ class SingleTimeSeries(TimeSeriesData):
         return data
 
     @classmethod
-    def aggregate(cls, ts_data: list[Self]) -> Self:
+    def aggregate(cls, ts_data: list[Self], agg_type: Literal["sum", "avg"] = "sum") -> Self:
         """Method to aggregate list of SingleTimeSeries data.
 
         Parameters
@@ -119,7 +119,7 @@ class SingleTimeSeries(TimeSeriesData):
         InconsistentTimeseriesAggregation
             Raised if incompatible timeseries data are passed.
         """
-
+        agg_func = {"sum": sum, "avg": lambda x: sum(x) / len(x)}[agg_type]
         # Extract unique properties from ts_data
         unique_props = {
             "length": {data.length for data in ts_data},
@@ -136,25 +136,23 @@ class SingleTimeSeries(TimeSeriesData):
             raise InconsistentTimeseriesAggregation(msg)
 
         # Aggregate data
-        is_quantity = issubclass(next(iter(unique_props["data_type"])), BaseQuantity)
-        magnitude_type = (
-            type(ts_data[0].data.magnitude)
-            if is_quantity
-            else next(iter(unique_props["data_type"]))
-        )
+        data_type = next(iter(unique_props["data_type"]))
+        is_quantity = issubclass(data_type, BaseQuantity)
+        magnitude_type = type(ts_data[0].data.magnitude) if is_quantity else data_type
 
         # Aggregate data based on magnitude type
         if issubclass(magnitude_type, pa.Array):
-            new_data = sum(
+            new_data = agg_func(
                 [
-                    data.data.to_numpy() * (data.data.units if is_quantity else 1)
+                    data.data.__class__(np.array(data.data.magnitude))
+                    * (data.data.units if is_quantity else 1)
                     for data in ts_data
                 ]
             )
         elif issubclass(magnitude_type, np.ndarray):
-            new_data = sum([data.data for data in ts_data])
+            new_data = agg_func([data.data for data in ts_data])
         elif issubclass(magnitude_type, list) and not is_quantity:
-            new_data = sum([np.array(data) for data in ts_data])
+            new_data = agg_func([np.array(data) for data in ts_data])
         else:
             msg = f"Unsupported data type for aggregation: {magnitude_type}"
             raise TypeError(msg)
