@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 import pytest
-import pyarrow as pa
+import numpy as np
 
 from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower
@@ -21,8 +21,8 @@ def test_single_time_series_attributes():
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == start
-    assert isinstance(ts.data, pa.Array)
-    assert ts.data[-1].as_py() == length - 1
+    assert isinstance(ts.data, np.ndarray)
+    assert ts.data[-1] == length - 1
 
 
 def test_from_array_construction():
@@ -37,8 +37,8 @@ def test_from_array_construction():
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == start
-    assert isinstance(ts.data, pa.Array)
-    assert ts.data[-1].as_py() == length - 1
+    assert isinstance(ts.data, np.ndarray)
+    assert ts.data[-1] == length - 1
 
 
 def test_invalid_sequence_length():
@@ -65,8 +65,8 @@ def test_from_time_array_constructor():
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == initial_time
-    assert isinstance(ts.data, pa.Array)
-    assert ts.data[-1].as_py() == length - 1
+    assert isinstance(ts.data, np.ndarray)
+    assert ts.data[-1] == length - 1
 
 
 def test_with_quantity():
@@ -99,7 +99,7 @@ def test_normalization():
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == len(data)
     for i, val in enumerate(ts.data):
-        assert val.as_py() == data[i] / max_val
+        assert val == data[i] / max_val
 
 
 def test_normal_array_aggregate():
@@ -113,7 +113,7 @@ def test_normal_array_aggregate():
     )
     ts_agg = SingleTimeSeries.aggregate([ts1, ts2])
     assert isinstance(ts_agg, SingleTimeSeries)
-    assert list([el.as_py() for el in ts_agg.data]) == [2.2, 4.4, 6.6, 9, 11]
+    assert list([el for el in ts_agg.data]) == [2.2, 4.4, 6.6, 9, 11]
 
 
 def test_pint_array_aggregate():

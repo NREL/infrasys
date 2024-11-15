@@ -214,7 +214,7 @@ def test_time_series_attach_from_array():
     system.add_time_series(ts, gen1, gen2)
     assert system.has_time_series(gen1, variable_name=variable_name)
     assert system.has_time_series(gen2, variable_name=variable_name)
-    assert system.get_time_series(gen1, variable_name=variable_name).data == ts.data
+    assert np.array_equal(system.get_time_series(gen1, variable_name=variable_name).data, ts.data)
 
 
 def test_time_series():

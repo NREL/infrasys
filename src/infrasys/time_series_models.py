@@ -17,7 +17,6 @@ from typing import (
 from uuid import UUID
 
 import numpy as np
-import pyarrow as pa
 import pint
 from pydantic import (
     Field,
@@ -29,7 +28,6 @@ from pydantic import (
 )
 from typing_extensions import Annotated
 
-from infrasys.base_quantity import BaseQuantity
 from infrasys.exceptions import (
     ISConflictingArguments,
     InconsistentTimeseriesAggregation,
@@ -42,7 +40,7 @@ TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
 
 
-ISArray: TypeAlias = Sequence | pa.Array | np.ndarray | pint.Quantity
+ISArray: TypeAlias = Sequence | np.ndarray | pint.Quantity
 
 
 class TimeSeriesStorageType(str, Enum):
@@ -74,7 +72,7 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
 class SingleTimeSeries(TimeSeriesData):
     """Defines a time array with a single dimension of floats."""
 
-    data: pa.Array | pint.Quantity
+    data: np.ndarray | pint.Quantity
     resolution: timedelta
     initial_time: datetime
 
@@ -83,21 +81,36 @@ class SingleTimeSeries(TimeSeriesData):
         """Return the length of the data."""
         return len(self.data)
 
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, SingleTimeSeries):
+            raise NotImplementedError
+        is_equal = True
+        for field in self.model_fields_set:
+            if field == "data":
+                if not (self.data == other.data).all():
+                    is_equal = False
+                    break
+            else:
+                if not getattr(self, field) == getattr(other, field):
+                    is_equal = False
+                    break
+        return is_equal
+
     @field_validator("data", mode="before")
     @classmethod
-    def check_data(
-        cls, data
-    ) -> pa.Array | pa.ChunkedArray | pint.Quantity:  # Standarize what object we receive.
+    def check_data(cls, data) -> np.ndarray | pint.Quantity:  # Standarize what object we receive.
         """Check time series data."""
         if len(data) < 2:
             msg = f"SingleTimeSeries length must be at least 2: {len(data)}"
             raise ValueError(msg)
 
         if isinstance(data, pint.Quantity):
+            if not isinstance(data.magnitude, np.ndarray):
+                return type(data)(np.array(data.magnitude), units=data.units)
             return data
 
-        if not isinstance(data, pa.Array):
-            return pa.array(data)
+        if not isinstance(data, np.ndarray):
+            return np.array(data)
 
         return data
 
@@ -136,7 +149,7 @@ class SingleTimeSeries(TimeSeriesData):
             raise InconsistentTimeseriesAggregation(msg)
 
         # Aggregate data
-        is_quantity = issubclass(next(iter(unique_props["data_type"])), BaseQuantity)
+        is_quantity = issubclass(next(iter(unique_props["data_type"])), pint.Quantity)
         magnitude_type = (
             type(ts_data[0].data.magnitude)
             if is_quantity
@@ -144,12 +157,9 @@ class SingleTimeSeries(TimeSeriesData):
         )
 
         # Aggregate data based on magnitude type
-        if issubclass(magnitude_type, pa.Array):
+        if issubclass(magnitude_type, np.ndarray):
             new_data = sum(
-                [
-                    data.data.to_numpy() * (data.data.units if is_quantity else 1)
-                    for data in ts_data
-                ]
+                [data.data * (data.data.units if is_quantity else 1) for data in ts_data]
             )
         elif issubclass(magnitude_type, np.ndarray):
             new_data = sum([data.data for data in ts_data])
@@ -274,7 +284,7 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
 
 
 class QuantityMetadata(InfraSysBaseModel):
-    """Contains the metadata needed to de-serialize time series stored within a BaseQuantity."""
+    """Contains the metadata needed to de-serialize time series stored within a pint.Quantity."""
 
     module: str
     quantity_type: Annotated[Type, WithJsonSchema({"type": "string"})]
@@ -341,7 +351,7 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
                 quantity_type=type(time_series.data),
                 units=str(time_series.data.units),
             )
-            if isinstance(time_series.data, BaseQuantity)
+            if isinstance(time_series.data, pint.Quantity)
             else None
         )
         return cls(
