@@ -27,7 +27,10 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "numpy~=1.26.4",
+    # This is what we want, but are currently be limited by pyarrow.
+    # Leave unbounded until pyarrow upgrades numpy.
+    #"numpy >= 2, < 3",
+    "numpy",
     "pyarrow~=15.0.2",
     "pint~=0.23",
     "loguru~=0.7.2",
@@ -37,7 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "furo",
-    "mypy",
+    "mypy >=1.13, < 2",
     "myst_parser",
     "pre-commit",
     "pyarrow-stubs",
@@ -55,6 +58,13 @@ dev = [
 Documentation = "https://github.com/NREL/infrasys#readme"
 Issues = "https://github.com/NREL/infrasys/issues"
 Source = "https://github.com/NREL/infrasys"
+
+[tool.mypy]
+check_untyped_defs = true
+files = [
+  "src",
+  "tests",
+]
 
 [tool.pytest.ini_options]
 pythonpath = "src"

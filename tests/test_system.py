@@ -31,7 +31,7 @@ def test_system():
     gen = SimpleGenerator(name="test-gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen])
     system.add_components(geo, bus, gen, subsystem)
-    assert system.add_components() is None
+    assert system.add_components() is None  # type: ignore
 
     gen2 = system.get_component(SimpleGenerator, "test-gen")
     assert gen2 is gen
@@ -232,7 +232,7 @@ def test_time_series():
     ts = SingleTimeSeries.from_time_array(data, variable_name, time_array)
     with pytest.raises(ValueError, match="The first argument must"):
         # Test a common mistake.
-        system.add_time_series(gen1, ts)
+        system.add_time_series(gen1, ts)  # type: ignore
 
     system.add_time_series(ts, gen1, gen2)
     assert system.has_time_series(gen1, variable_name=variable_name)
@@ -265,7 +265,7 @@ def test_time_series_retrieval(in_memory, use_quantity, sql_json):
         data = (
             [ActivePower(np.random.rand(length), "watts") for _ in range(4)]
             if use_quantity
-            else [np.random.rand(length) for _ in range(4)]
+            else [np.random.rand(length) for _ in range(4)]  # type: ignore
         )
         variable_name = "active_power"
         ts1 = SingleTimeSeries.from_time_array(data[0], variable_name, time_array)
@@ -435,22 +435,22 @@ def test_time_series_slices(in_memory):
     first_timestamp = start
     second_timestamp = start + resolution
     last_timestamp = start + (length - 1) * resolution
-    assert len(system.time_series.get(gen, variable_name=variable_name).data) == length
-    assert len(system.time_series.get(gen, variable_name=variable_name, length=10).data) == 10
+    ts_tmp = system.time_series.get(gen, variable_name=variable_name)
+    assert isinstance(ts_tmp, SingleTimeSeries)
+    assert len(ts_tmp.data) == length
+    ts_tmp = system.time_series.get(gen, variable_name=variable_name, length=10)
+    assert isinstance(ts_tmp, SingleTimeSeries)
+    assert len(ts_tmp.data) == 10
     ts2 = system.time_series.get(
         gen, variable_name=variable_name, start_time=second_timestamp, length=5
     )
+    assert isinstance(ts2, SingleTimeSeries)
     assert len(ts2.data) == 5
     assert ts2.data.tolist() == data[1:6]
 
-    assert (
-        len(
-            system.time_series.get(
-                gen, variable_name=variable_name, start_time=second_timestamp
-            ).data
-        )
-        == len(data) - 1
-    )
+    ts_tmp = system.time_series.get(gen, variable_name=variable_name, start_time=second_timestamp)
+    assert isinstance(ts_tmp, SingleTimeSeries)
+    assert len(ts_tmp.data) == len(data) - 1
 
     with pytest.raises(ISConflictingArguments, match="is less than"):
         system.time_series.get(

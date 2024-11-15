@@ -120,6 +120,7 @@ def test_serialize_quantity(tmp_path, distance):
     system = SimpleSystem()
     gen = SimpleGenerator.example()
     component = ComponentWithPintQuantity(name="test", distance=distance)
+    assert gen.bus.coordinates is not None
     system.add_components(gen.bus.coordinates, gen.bus, gen, component)
     sys_file = tmp_path / "system.json"
     system.to_json(sys_file)

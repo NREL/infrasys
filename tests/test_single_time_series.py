@@ -1,6 +1,7 @@
 """Test related to arrow storage module."""
 from datetime import datetime, timedelta
 
+import pint
 import pytest
 import numpy as np
 
@@ -127,4 +128,5 @@ def test_pint_array_aggregate():
     )
     ts_agg = SingleTimeSeries.aggregate([ts1, ts2])
     assert isinstance(ts_agg, SingleTimeSeries)
+    assert isinstance(ts_agg.data, pint.Quantity)
     assert list(ts_agg.data.magnitude) == [2.2, 4.4, 6.6, 9, 11]

@@ -7,6 +7,7 @@ from infrasys.function_data import (
     QuadraticFunctionData,
     PiecewiseLinearData,
     PiecewiseStepData,
+    XYCoords,
     running_sum,
 )
 from pydantic import Field
@@ -117,7 +118,9 @@ class IncrementalCurve(ValueCurve):
                 points = running_sum(self.function_data)
 
                 return InputOutputCurve(
-                    function_data=PiecewiseLinearData(points=[(p.x, p.y + c) for p in points]),
+                    function_data=PiecewiseLinearData(
+                        points=[XYCoords(p.x, p.y + c) for p in points]
+                    ),
                     input_at_zero=self.input_at_zero,
                 )
 
@@ -188,7 +191,10 @@ class AverageRateCurve(ValueCurve):
                 else:
                     return InputOutputCurve(
                         function_data=QuadraticFunctionData(
-                            quadratic_term=p, proportional_term=m, constant_term=c
+                            # issue 53
+                            quadratic_term=p,
+                            proportional_term=m,
+                            constant_term=c,  # type: ignore
                         ),
                         input_at_zero=self.input_at_zero,
                     )
@@ -203,7 +209,9 @@ class AverageRateCurve(ValueCurve):
                 ys.insert(0, c)
 
                 return InputOutputCurve(
-                    function_data=PiecewiseLinearData(points=list(zip(xs, ys))),
+                    function_data=PiecewiseLinearData(
+                        points=[XYCoords(x, y) for x, y in zip(xs, ys)]
+                    ),
                     input_at_zero=self.input_at_zero,
                 )
             case _:

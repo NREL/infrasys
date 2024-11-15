@@ -86,6 +86,7 @@ def test_average_rate_conversion():
     assert isinstance(new_curve.function_data, QuadraticFunctionData)
     assert new_curve.function_data.quadratic_term == 1.0
 
+    assert isinstance(curve.function_data, LinearFunctionData)
     curve.function_data.proportional_term = 0.0
     new_curve = curve.to_input_output()
     assert isinstance(new_curve, InputOutputCurve)
@@ -117,6 +118,7 @@ def test_incremental_conversion():
     assert isinstance(new_curve.function_data, QuadraticFunctionData)
     assert new_curve.function_data.quadratic_term == 0.5
 
+    assert isinstance(curve.function_data, LinearFunctionData)
     curve.function_data.proportional_term = 0.0
     new_curve = curve.to_input_output()
     assert isinstance(new_curve, InputOutputCurve)

@@ -89,4 +89,6 @@ def test_read_deserialize_time_series(tmp_path):
     assert deserialize_ts.resolution == ts.resolution
     assert deserialize_ts.initial_time == ts.initial_time
     assert isinstance(deserialize_ts.data, np.ndarray)
-    assert deserialize_ts.data[-1] == ts.length - 1
+    length = ts.length
+    assert isinstance(length, int)
+    assert np.array_equal(deserialize_ts.data, np.array(range(length)))

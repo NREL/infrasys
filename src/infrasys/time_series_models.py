@@ -18,6 +18,7 @@ from uuid import UUID
 
 import numpy as np
 import pint
+from numpy.typing import NDArray
 from pydantic import (
     Field,
     WithJsonSchema,
@@ -40,7 +41,7 @@ TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
 
 
-ISArray: TypeAlias = Sequence | np.ndarray | pint.Quantity
+ISArray: TypeAlias = Sequence | NDArray | pint.Quantity
 
 
 class TimeSeriesStorageType(str, Enum):
@@ -72,7 +73,7 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
 class SingleTimeSeries(TimeSeriesData):
     """Defines a time array with a single dimension of floats."""
 
-    data: np.ndarray | pint.Quantity
+    data: NDArray | pint.Quantity
     resolution: timedelta
     initial_time: datetime
 
@@ -98,7 +99,7 @@ class SingleTimeSeries(TimeSeriesData):
 
     @field_validator("data", mode="before")
     @classmethod
-    def check_data(cls, data) -> np.ndarray | pint.Quantity:  # Standarize what object we receive.
+    def check_data(cls, data) -> NDArray | pint.Quantity:  # Standarize what object we receive.
         """Check time series data."""
         if len(data) < 2:
             msg = f"SingleTimeSeries length must be at least 2: {len(data)}"
