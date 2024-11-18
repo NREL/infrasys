@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pyarrow as pa
+import numpy as np
 from loguru import logger
 
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
@@ -88,5 +88,7 @@ def test_read_deserialize_time_series(tmp_path):
     assert isinstance(deserialize_ts, SingleTimeSeries)
     assert deserialize_ts.resolution == ts.resolution
     assert deserialize_ts.initial_time == ts.initial_time
-    assert isinstance(deserialize_ts.data, pa.Array)
-    assert deserialize_ts.data[-1].as_py() == ts.length - 1
+    assert isinstance(deserialize_ts.data, np.ndarray)
+    length = ts.length
+    assert isinstance(length, int)
+    assert np.array_equal(deserialize_ts.data, np.array(range(length)))

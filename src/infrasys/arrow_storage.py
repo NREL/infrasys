@@ -8,6 +8,7 @@ from tempfile import mkdtemp
 from typing import Any, Optional
 from uuid import UUID
 
+import numpy as np
 import pyarrow as pa
 import pint
 from loguru import logger
@@ -112,13 +113,17 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         index, length = metadata.get_range(start_time=start_time, length=length)
         data = base_ts[metadata.variable_name][index : index + length]
         if metadata.quantity_metadata is not None:
-            data = metadata.quantity_metadata.quantity_type(data, metadata.quantity_metadata.units)
+            np_array = metadata.quantity_metadata.quantity_type(
+                data, metadata.quantity_metadata.units
+            )
+        else:
+            np_array = np.array(data)
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
             variable_name=metadata.variable_name,
             resolution=metadata.resolution,
             initial_time=start_time or metadata.initial_time,
-            data=data,
+            data=np_array,
             normalization=metadata.normalization,
         )
 
@@ -126,10 +131,10 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         self, time_series: SingleTimeSeries, variable_name: str
     ) -> pa.RecordBatch:
         """Create record batch to save array to disk."""
-        pa_array = time_series.data
-        if not isinstance(pa_array, pa.Array) and isinstance(pa_array, pint.Quantity):
-            pa_array = pa.array(pa_array.magnitude)
-        assert isinstance(pa_array, pa.Array)
+        if isinstance(time_series.data, pint.Quantity):
+            pa_array = pa.array(time_series.data.magnitude)
+        else:
+            pa_array = pa.array(time_series.data)
         schema = pa.schema([pa.field(variable_name, pa_array.type)])
         return pa.record_batch([pa_array], schema=schema)
 

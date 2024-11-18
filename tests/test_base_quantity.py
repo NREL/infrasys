@@ -76,7 +76,7 @@ def test_base_unit_validation():
     with pytest.raises(ValidationError):
         BaseQuantityComponent(name="test", voltage=Voltage(test_magnitude, "meter"))
 
-    test_component = BaseQuantityComponent(name="test", voltage=[0, 1])
+    test_component = BaseQuantityComponent(name="test", voltage=Voltage([0, 1], units="volt"))
     assert type(test_component.voltage) is Voltage
     assert test_component.voltage.magnitude.tolist() == [0, 1]
     assert test_component.voltage.units == test_unit
@@ -91,7 +91,7 @@ def test_different_validate(input_unit):
 
 
 def test_custom_serialization():
-    component = BaseQuantityComponent(name="test", voltage=10.0)
+    component = BaseQuantityComponent(name="test", voltage=Voltage(10.0, units="volt"))
 
     model_dump = component.model_dump(mode="json")
 

@@ -4,6 +4,7 @@ from typing import List, NamedTuple
 
 import numpy as np
 import pint
+from numpy.typing import NDArray
 from pydantic import Field, model_validator
 from pydantic.functional_validators import AfterValidator
 from typing_extensions import Annotated
@@ -186,7 +187,7 @@ class PiecewiseStepData(FunctionData):
         return self
 
 
-def get_x_lengths(x_coords: List[float]) -> List[float]:
+def get_x_lengths(x_coords: List[float]) -> NDArray[np.float64]:
     return np.subtract(x_coords[1:], x_coords[:-1])
 
 

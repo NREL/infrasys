@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Literal, Optional, Annotated, Union
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import Field
 
 from infrasys.models import InfraSysBaseModel
@@ -29,7 +30,7 @@ class NormalizationMax(NormalizationBase):
     max_value: Optional[float] = None
     normalization_type: Literal[NormalizationType.MAX] = NormalizationType.MAX
 
-    def normalize_array(self, data: np.ndarray) -> np.ndarray:
+    def normalize_array(self, data: NDArray) -> NDArray:
         self.max_value = np.max(data)
         return data / self.max_value
 
@@ -40,7 +41,7 @@ class NormalizationByValue(NormalizationBase):
     value: float
     normalization_type: Literal[NormalizationType.BY_VALUE] = NormalizationType.BY_VALUE
 
-    def normalize_array(self, data: np.ndarray) -> np.ndarray:
+    def normalize_array(self, data: NDArray) -> NDArray:
         return data / self.value
 
 
