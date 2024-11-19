@@ -89,15 +89,19 @@ class PydanticPintQuantity:
             - An unknown unit is provided.
             - An invalid type is provided for the value.
         TypeError
-            If an error occurs in the unit registry or context, which is not caused by user input.
-            This exception is not propagated as a `pydantic.ValidationError`.
+            If the type is not supported.
         """
-        # NOTE: `self.ureg` when passed returns the rigth type
+        # NOTE: `self.ureg` when passed returns the right type
         if not isinstance(input_value, Quantity):
-            input_value = self.ureg(input_value)
+            input_value = self.ureg(input_value)  # This convert string to numbers
 
         if isinstance(input_value, Number | list):
             input_value = input_value * self.units
+
+        # At this point `input_value` should be a `pint.Quantity`.
+        if not isinstance(input_value, Quantity):
+            msg = f"{type(input_value)} not supported"
+            raise TypeError(msg)
         try:
             input_value = input_value.to(self.units)
         except pint.DimensionalityError:
@@ -131,7 +135,7 @@ class PydanticPintQuantity:
             The serialized representation of the quantity.
             - If `to_json` is `True`, the quantity is serialized to a JSON-compatible string or dictionary.
             - If `to_json` is `False`, returns the original `pint.Quantity`.
-            - If `ser_mode=='dict'` or `info.mode=='dict'` a dictionary with magniude and units.
+            - If `ser_mode=='dict'` or `info.mode=='dict'` a dictionary with magnitude and units.
 
         Notes
         -----
@@ -141,9 +145,7 @@ class PydanticPintQuantity:
         """
         # If we pass the to_json flag, we serialize it as json, but sometimes the pydantic info can have the to_json
         # enabled. In that case so we add a check of that as well
-        info_to_json = False
-        if info is not None and info.mode_is_json():
-            info_to_json = True
+        info_to_json = True if info is not None and info.mode_is_json() else False
         to_json = to_json or info_to_json
 
         if self.ser_mode == "dict" or (info is not None and info.mode == "dict"):
@@ -153,7 +155,7 @@ class PydanticPintQuantity:
             }
 
         if self.ser_mode == "str" or to_json:
-            return f"{value}"
+            return str(value)
 
         return value
 

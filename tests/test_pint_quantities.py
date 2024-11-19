@@ -1,7 +1,7 @@
 import pytest
 from typing import Annotated
 
-from pydantic import ValidationError
+from pydantic import ValidationError, Field
 from infrasys.base_quantity import ureg
 from infrasys.component import Component
 from infrasys.pint_quantities import PydanticPintQuantity
@@ -19,6 +19,10 @@ class PintQuantityNoStrict(Component):
 
 class PintQuantityStrictDict(Component):
     voltage: Annotated[Quantity, PydanticPintQuantity("volts", ser_mode="dict")]
+
+
+class PintQuantityStrictDictPositive(Component):
+    voltage: Annotated[Quantity, PydanticPintQuantity("volts", ser_mode="dict"), Field(gt=0)]
 
 
 @pytest.mark.parametrize(
@@ -57,6 +61,9 @@ def test_pydantic_pint_arguments():
     assert isinstance(component.voltage, Quantity)
     assert component.voltage.magnitude == 10.0
     assert component.voltage.units == "volt"
+
+    with pytest.raises(ValidationError):
+        _ = PintQuantityStrictDictPositive(name="TestComponent", voltage=-10)
 
 
 def test_serialization():
