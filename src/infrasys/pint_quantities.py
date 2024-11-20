@@ -145,7 +145,7 @@ class PydanticPintQuantity:
         """
         # If we pass the to_json flag, we serialize it as json, but sometimes the pydantic info can have the to_json
         # enabled. In that case so we add a check of that as well
-        info_to_json = True if info is not None and info.mode_is_json() else False
+        info_to_json = info is not None and info.mode_is_json()
         to_json = to_json or info_to_json
 
         if self.ser_mode == "dict" or (info is not None and info.mode == "dict"):
