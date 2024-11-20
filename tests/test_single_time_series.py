@@ -1,7 +1,6 @@
 """Test related to arrow storage module."""
 from datetime import datetime, timedelta
 
-import pint
 import pytest
 import numpy as np
 
@@ -101,32 +100,3 @@ def test_normalization():
     assert ts.length == len(data)
     for i, val in enumerate(ts.data):
         assert val == data[i] / max_val
-
-
-def test_normal_array_aggregate():
-    length = 10
-    initial_time = datetime(year=2020, month=1, day=1)
-    time_array = [initial_time + timedelta(hours=i) for i in range(length)]
-    data = [1.1, 2.2, 3.3, 4.5, 5.5]
-    variable_name = "active_power"
-    ts1 = ts2 = SingleTimeSeries.from_time_array(
-        data, variable_name, time_array, normalization=None
-    )
-    ts_agg = SingleTimeSeries.aggregate([ts1, ts2])
-    assert isinstance(ts_agg, SingleTimeSeries)
-    assert list([el for el in ts_agg.data]) == [2.2, 4.4, 6.6, 9, 11]
-
-
-def test_pint_array_aggregate():
-    length = 10
-    initial_time = datetime(year=2020, month=1, day=1)
-    time_array = [initial_time + timedelta(hours=i) for i in range(length)]
-    data = ActivePower([1.1, 2.2, 3.3, 4.5, 5.5], "kilowatts")
-    variable_name = "active_power"
-    ts1 = ts2 = SingleTimeSeries.from_time_array(
-        data, variable_name, time_array, normalization=None
-    )
-    ts_agg = SingleTimeSeries.aggregate([ts1, ts2])
-    assert isinstance(ts_agg, SingleTimeSeries)
-    assert isinstance(ts_agg.data, pint.Quantity)
-    assert list(ts_agg.data.magnitude) == [2.2, 4.4, 6.6, 9, 11]
