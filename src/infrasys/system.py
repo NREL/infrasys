@@ -34,6 +34,7 @@ from infrasys.serialization import (
 )
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData, TimeSeriesMetadata
+from infrasys.time_series_storage_base import TimeSeriesStorageBase
 from infrasys.utils.sqlite import backup, create_in_memory_db, restore
 
 
@@ -1093,6 +1094,19 @@ class System:
         raise NotImplementedError(msg)
 
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
+
+    def convert_storage(self, replace=True, **kwargs) -> TimeSeriesStorageBase | None:
+        """ 
+        Converts the time series storage medium.
+
+        Parameters
+        ----------
+        replace: bool
+            if True, the underlying storage will be replaced with new storage
+            otherwise, the new storage object is returned
+
+        """
+        return self._time_series_mgr.convert_storage(**kwargs, replace=replace)
 
     @property
     def _components(self) -> ComponentManager:
