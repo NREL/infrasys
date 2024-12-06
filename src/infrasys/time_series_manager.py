@@ -40,16 +40,20 @@ class TimeSeriesManager:
         initialize: bool = True,
         **kwargs,
     ) -> None:
-        base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
-        self._storage = storage or (
-            InMemoryTimeSeriesStorage()
-            if _process_time_series_kwarg("time_series_in_memory", **kwargs)
-            else ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
-        )
+        self._storage = storage or self.create_new_storage()
         self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
 
         # TODO: create parsing mechanism? CSV, CSV + JSON
+
+    @staticmethod
+    def create_new_storage(**kwargs):
+        base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
+
+        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
+            return InMemoryTimeSeriesStorage()
+        else:
+            return ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
 
     @property
     def metadata_store(self) -> TimeSeriesMetadataStore:
@@ -282,3 +286,26 @@ class TimeSeriesManager:
         if self._read_only:
             msg = "Cannot modify time series in read-only mode."
             raise ISOperationNotAllowed(msg)
+
+    def convert_storage(self, replace: bool = False, **kwargs) -> TimeSeriesStorageBase | None:
+        """
+        Create a new storage instance and copy all time series from the current to new storage
+
+        Parameters
+        ----------
+
+        replace: bool
+            if True, replace the current storage with the new storage, otherwise return the new storage
+
+        """
+        new_storage = self.create_new_storage(**kwargs)
+        for time_series_uuid in self._storage.iter_time_series_uuids():
+            new_storage.add_raw_time_series(
+                time_series_uuid, self._storage.get_raw_time_series(time_series_uuid)
+            )
+
+        if not replace:
+            return new_storage
+        else:
+            self._storage = new_storage
+        return None

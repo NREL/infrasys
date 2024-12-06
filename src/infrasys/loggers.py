@@ -1,4 +1,5 @@
 """Contains logging configuration data."""
+
 import sys
 
 # Logger printing formats

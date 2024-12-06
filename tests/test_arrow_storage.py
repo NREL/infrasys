@@ -1,4 +1,5 @@
 """Test related to the pyarrow storage manager."""
+
 import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -7,6 +8,7 @@ import numpy as np
 from loguru import logger
 
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
+from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.system import System
 from infrasys.time_series_models import SingleTimeSeries
 
@@ -92,3 +94,20 @@ def test_read_deserialize_time_series(tmp_path):
     length = ts.length
     assert isinstance(length, int)
     assert np.array_equal(deserialize_ts.data, np.array(range(length)))
+
+
+def test_copied_storage_system(simple_system_with_time_series):
+    assert isinstance(
+        simple_system_with_time_series._time_series_mgr._storage, ArrowTimeSeriesStorage
+    )
+    gen_component = next(simple_system_with_time_series.get_components(SimpleGenerator))
+    data_array_1 = simple_system_with_time_series.list_time_series(gen_component)[0].data
+
+    simple_system_with_time_series.convert_storage(time_series_in_memory=True, replace=True)
+
+    assert isinstance(
+        simple_system_with_time_series._time_series_mgr._storage, InMemoryTimeSeriesStorage
+    )
+
+    data_array_2 = simple_system_with_time_series.list_time_series(gen_component)[0].data
+    assert np.array_equal(data_array_1, data_array_2)
