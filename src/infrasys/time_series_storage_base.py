@@ -1,6 +1,5 @@
 """Defines the base class for time series storage."""
 
-
 import abc
 from datetime import datetime
 from pathlib import Path

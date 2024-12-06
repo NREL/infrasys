@@ -288,7 +288,7 @@ class TimeSeriesManager:
             raise ISOperationNotAllowed(msg)
 
     def convert_storage(self, replace: bool = False, **kwargs) -> TimeSeriesStorageBase | None:
-        """ 
+        """
         Create a new storage instance and copy all time series from the current to new storage
 
         Parameters
@@ -300,10 +300,12 @@ class TimeSeriesManager:
         """
         new_storage = self.create_new_storage(**kwargs)
         for time_series_uuid in self._storage.iter_time_series_uuids():
-            new_storage.add_raw_time_series(time_series_uuid, self._storage.get_raw_time_series(time_series_uuid))
+            new_storage.add_raw_time_series(
+                time_series_uuid, self._storage.get_raw_time_series(time_series_uuid)
+            )
 
-        if replace:
-            self._storage = new_storage
-        else:
+        if not replace:
             return new_storage
-
+        else:
+            self._storage = new_storage
+        return None

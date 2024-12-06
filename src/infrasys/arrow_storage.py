@@ -11,7 +11,6 @@ from uuid import UUID
 import numpy as np
 from numpy.typing import NDArray
 import pyarrow as pa
-import pint
 from loguru import logger
 
 from infrasys.exceptions import ISNotStored
@@ -78,7 +77,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         else:
             logger.debug("{} was already stored", time_series_uuid)
 
-
     def get_time_series(
         self,
         metadata: TimeSeriesMetadata,
@@ -138,7 +136,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         with pa.memory_map(str(fpath), "r") as source:
             base_ts = pa.ipc.open_file(source).get_record_batch(0)
             logger.trace("Reading time series from {}", fpath)
-        return base_ts[str(time_series_uuid)]
+        return base_ts[str(time_series_uuid)].to_numpy()
 
     def _convert_to_record_batch(
         self, time_series_array: NDArray, variable_name: str

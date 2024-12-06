@@ -1096,7 +1096,7 @@ class System:
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
     def convert_storage(self, replace=True, **kwargs) -> TimeSeriesStorageBase | None:
-        """ 
+        """
         Converts the time series storage medium.
 
         Parameters

@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+import numpy as np
 from numpy.typing import NDArray
 from typing import Optional, Iterable
 from uuid import UUID
@@ -13,7 +14,6 @@ from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
     SingleTimeSeries,
-    SingleTimeSeriesMetadata,
     SingleTimeSeriesMetadataBase,
     TimeSeriesData,
     TimeSeriesMetadata,
@@ -49,7 +49,6 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             logger.debug("Added {} to store", time_series_uuid)
         else:
             logger.debug("{} was already stored", time_series_uuid)
-
 
     def get_time_series(
         self,
@@ -88,16 +87,17 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         length: int | None = None,
     ) -> SingleTimeSeries:
         base_ts = self._arrays[metadata.time_series_uuid]
-        assert isinstance(base_ts, SingleTimeSeries)
+        assert isinstance(base_ts, np.ndarray)
         if start_time is None and length is None:
-            return base_ts
-
-        index, length = metadata.get_range(start_time=start_time, length=length)
+            ts_data = base_ts
+        else:
+            index, length = metadata.get_range(start_time=start_time, length=length)
+            ts_data = base_ts[index : index + length]
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=base_ts.variable_name,
-            resolution=base_ts.resolution,
-            initial_time=start_time or base_ts.initial_time,
-            data=base_ts[index : index + length],
+            variable_name=metadata.variable_name,
+            resolution=metadata.resolution,
+            initial_time=start_time or metadata.initial_time,
+            data=ts_data,
             normalization=metadata.normalization,
         )
