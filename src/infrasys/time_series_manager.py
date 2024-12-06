@@ -40,16 +40,20 @@ class TimeSeriesManager:
         initialize: bool = True,
         **kwargs,
     ) -> None:
-        base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
-        self._storage = storage or (
-            InMemoryTimeSeriesStorage()
-            if _process_time_series_kwarg("time_series_in_memory", **kwargs)
-            else ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
-        )
+        self._storage = storage or self.create_new_storage()
         self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
 
         # TODO: create parsing mechanism? CSV, CSV + JSON
+
+    @staticmethod
+    def create_new_storage(**kwargs):
+        base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
+
+        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
+            return InMemoryTimeSeriesStorage()
+        else:
+            return ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
 
     @property
     def metadata_store(self) -> TimeSeriesMetadataStore:
