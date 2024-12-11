@@ -54,7 +54,6 @@ class TimeSeriesStorageType(str, Enum):
 class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Base class for all time series models"""
 
-    data: Any  # TODO update to generic?
     variable_name: str
     normalization: NormalizationModel = None
 
@@ -106,7 +105,6 @@ class SingleTimeSeries(TimeSeriesData):
 
         if isinstance(data, pint.Quantity):
             if not isinstance(data.magnitude, np.ndarray):
-                # Why cant this use pint.Quantity instead of type(data)?
                 return type(data)(np.array(data.magnitude), units=data.units)
             return data
 
@@ -260,6 +258,7 @@ class TimeSeriesMetadata(InfraSysBaseModel, abc.ABC):
     user_attributes: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
+    # TODO: refactor to type_ to avoid overriding builtin?
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @property

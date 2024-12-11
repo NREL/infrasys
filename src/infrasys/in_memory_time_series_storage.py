@@ -6,7 +6,6 @@ import numpy as np
 from numpy.typing import NDArray
 from typing import Optional, TypeAlias
 from uuid import UUID
-import pint
 
 from loguru import logger
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
@@ -33,14 +32,16 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         return None
 
     def add_time_series(self, metadata: TimeSeriesMetadata, time_series: TimeSeriesData) -> None:
-        if metadata.time_series_uuid not in self._arrays:
-            time_series_array = time_series.data
-            if isinstance(time_series_array, pint.Quantity):
-                time_series_array = time_series_array.magnitude
-            self._arrays[metadata.time_series_uuid] = time_series_array
-            logger.debug("Added {} to store", time_series.summary)
+        if isinstance(time_series, SingleTimeSeries):
+            if metadata.time_series_uuid not in self._arrays:
+                self._arrays[metadata.time_series_uuid] = time_series.data_array
+                logger.debug("Added {} to store", time_series.summary)
+            else:
+                logger.debug("{} was already stored", time_series.summary)
+
         else:
-            logger.debug("{} was already stored", time_series.summary)
+            msg = f"add_time_series not implemented for {type(time_series)}"
+            raise NotImplementedError(msg)
 
     def _add_raw_single_time_series(
         self, time_series_uuid: UUID, time_series_data: DataStoreType
@@ -86,13 +87,19 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         start_time: datetime | None = None,
         length: int | None = None,
     ) -> SingleTimeSeries:
-        base_ts = self._arrays[metadata.time_series_uuid]
-        assert isinstance(base_ts, np.ndarray)
-        if start_time is None and length is None:
-            ts_data = base_ts
-        else:
+        ts_data = self._arrays.get(metadata.time_series_uuid)
+        if ts_data is None:
+            msg = f"No time series with {metadata.time_series_uuid} is stored"
+            raise ISNotStored(msg)
+
+        if start_time or length:
             index, length = metadata.get_range(start_time=start_time, length=length)
-            ts_data = base_ts[index : index + length]
+            ts_data = ts_data[index : index + length]
+
+        if metadata.quantity_metadata is not None:
+            ts_data = metadata.quantity_metadata.quantity_type(
+                ts_data, metadata.quantity_metadata.units
+            )
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
             variable_name=metadata.variable_name,

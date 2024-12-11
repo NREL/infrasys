@@ -41,7 +41,7 @@ class TimeSeriesManager:
         **kwargs,
     ) -> None:
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
-        self._storage = storage or self.create_new_storage()
+        self._storage = storage or self.create_new_storage(**kwargs)
         self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
 
         # TODO: create parsing mechanism? CSV, CSV + JSON
