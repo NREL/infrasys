@@ -5,7 +5,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import Any, Optional, Iterable
+from typing import Any, Optional
 from uuid import UUID
 
 import numpy as np
@@ -50,22 +50,20 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
     def get_time_series_directory(self) -> Path:
         return self._ts_directory
 
-    def iter_time_series_uuids(self) -> Iterable[UUID]:
-        for arrow_file in self.get_time_series_directory().glob(f"*{EXTENSION}"):
-            yield UUID(arrow_file.name.replace(EXTENSION, ""))
-
     def add_time_series(
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
     ) -> None:
         if isinstance(time_series, SingleTimeSeries):
-            self.add_raw_time_series(metadata.time_series_uuid, time_series.data_array)
+            self._add_raw_single_time_series(metadata.time_series_uuid, time_series.data_array)
         else:
             msg = f"Bug: need to implement add_time_series for {type(time_series)}"
             raise NotImplementedError(msg)
 
-    def add_raw_time_series(self, time_series_uuid: UUID, time_series_data: NDArray) -> None:
+    def _add_raw_single_time_series(
+        self, time_series_uuid: UUID, time_series_data: NDArray
+    ) -> None:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
         if not fpath.exists():
             arrow_batch = self._convert_to_record_batch(time_series_data, str(time_series_uuid))
@@ -113,9 +111,12 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         start_time: datetime | None = None,
         length: int | None = None,
     ) -> SingleTimeSeries:
-        base_ts = self.get_raw_time_series(metadata.time_series_uuid)
+        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
+        with pa.memory_map(str(fpath), "r") as source:
+            base_ts = pa.ipc.open_file(source).get_record_batch(0)
+            logger.trace("Reading time series from {}", fpath)
         index, length = metadata.get_range(start_time=start_time, length=length)
-        data = base_ts[index : index + length]  # TODO use uuid col
+        data = base_ts[str(metadata.time_series_uuid)][index : index + length]
         if metadata.quantity_metadata is not None:
             np_array = metadata.quantity_metadata.quantity_type(
                 data, metadata.quantity_metadata.units
@@ -131,9 +132,9 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             normalization=metadata.normalization,
         )
 
-    def get_raw_time_series(self, time_series_uuid: UUID) -> NDArray:
+    def _get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
-        with pa.memory_map(str(fpath), "r") as source:
+        with pa.OSFile(str(fpath), "r") as source:
             base_ts = pa.ipc.open_file(source).get_record_batch(0)
             logger.trace("Reading time series from {}", fpath)
         return base_ts[str(time_series_uuid)].to_numpy()

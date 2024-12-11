@@ -3,9 +3,8 @@
 import abc
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional, Any
 from uuid import UUID
-from numpy.typing import NDArray
 
 from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
 
@@ -18,16 +17,12 @@ class TimeSeriesStorageBase(abc.ABC):
         """Store a time series array."""
 
     @abc.abstractmethod
-    def add_raw_time_series(self, time_series_uuid: UUID, time_series_data: NDArray) -> None:
+    def _add_raw_single_time_series(self, time_series_uuid: UUID, time_series_data: Any) -> None:
         """Store a time series array from raw data."""
 
     @abc.abstractmethod
-    def get_raw_time_series(self, time_series_uuid: UUID) -> NDArray:
+    def _get_raw_single_time_series(self, time_series_uuid: UUID) -> Any:
         """Get the raw time series data for a given uuid."""
-
-    @abc.abstractmethod
-    def iter_time_series_uuids(self) -> Iterable[UUID]:
-        """Create an iterable of all unique time_series_uuids in the time series storage instance."""
 
     @abc.abstractmethod
     def get_time_series_directory(self) -> Path | None:

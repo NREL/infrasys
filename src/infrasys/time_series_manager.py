@@ -299,9 +299,9 @@ class TimeSeriesManager:
 
         """
         new_storage = self.create_new_storage(**kwargs)
-        for time_series_uuid in self._storage.iter_time_series_uuids():
-            new_storage.add_raw_time_series(
-                time_series_uuid, self._storage.get_raw_time_series(time_series_uuid)
+        for time_series_uuid in self.metadata_store.unique_uuids_by_type("SingleTimeSeries"):
+            new_storage._add_raw_single_time_series(
+                time_series_uuid, self._storage._get_raw_single_time_series(time_series_uuid)
             )
 
         if not replace:
