@@ -17,11 +17,11 @@ class TimeSeriesStorageBase(abc.ABC):
         """Store a time series array."""
 
     @abc.abstractmethod
-    def _add_raw_single_time_series(self, time_series_uuid: UUID, time_series_data: Any) -> None:
+    def add_raw_single_time_series(self, time_series_uuid: UUID, time_series_data: Any) -> None:
         """Store a time series array from raw data."""
 
     @abc.abstractmethod
-    def _get_raw_single_time_series(self, time_series_uuid: UUID) -> Any:
+    def get_raw_single_time_series(self, time_series_uuid: UUID) -> Any:
         """Get the raw time series data for a given uuid."""
 
     @abc.abstractmethod

@@ -43,7 +43,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"add_time_series not implemented for {type(time_series)}"
             raise NotImplementedError(msg)
 
-    def _add_raw_single_time_series(
+    def add_raw_single_time_series(
         self, time_series_uuid: UUID, time_series_data: DataStoreType
     ) -> None:
         if time_series_uuid not in self._arrays:
@@ -62,7 +62,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             return self._get_single_time_series(metadata, start_time, length)
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
 
-    def _get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
+    def get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
         data_array = self._arrays[time_series_uuid]
         if not isinstance(data_array, np.ndarray):
             msg = f"Can't retrieve type: {type(data_array)} as single_time_series"
@@ -79,7 +79,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         base_directory = dst if isinstance(dst, Path) else Path(dst)
         storage = ArrowTimeSeriesStorage.create_with_permanent_directory(base_directory)
         for ts_uuid, ts in self._arrays.items():
-            storage._add_raw_single_time_series(ts_uuid, ts)
+            storage.add_raw_single_time_series(ts_uuid, ts)
 
     def _get_single_time_series(
         self,

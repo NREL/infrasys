@@ -56,12 +56,12 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         time_series: TimeSeriesData,
     ) -> None:
         if isinstance(time_series, SingleTimeSeries):
-            self._add_raw_single_time_series(metadata.time_series_uuid, time_series.data_array)
+            self.add_raw_single_time_series(metadata.time_series_uuid, time_series.data_array)
         else:
             msg = f"Bug: need to implement add_time_series for {type(time_series)}"
             raise NotImplementedError(msg)
 
-    def _add_raw_single_time_series(
+    def add_raw_single_time_series(
         self, time_series_uuid: UUID, time_series_data: NDArray
     ) -> None:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
@@ -132,7 +132,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             normalization=metadata.normalization,
         )
 
-    def _get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
+    def get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
         with pa.OSFile(str(fpath), "r") as source:
             base_ts = pa.ipc.open_file(source).get_record_batch(0)

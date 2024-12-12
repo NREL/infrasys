@@ -9,7 +9,7 @@ from loguru import logger
 
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys import Component
-from infrasys.exceptions import ISOperationNotAllowed
+from infrasys.exceptions import ISInvalidParameter, ISOperationNotAllowed
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.time_series_metadata_store import TimeSeriesMetadataStore
 from infrasys.time_series_models import (
@@ -47,12 +47,20 @@ class TimeSeriesManager:
         # TODO: create parsing mechanism? CSV, CSV + JSON
 
     @staticmethod
-    def create_new_storage(**kwargs):
+    def create_new_storage(perminant: bool = False, **kwargs):
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
 
         if _process_time_series_kwarg("time_series_in_memory", **kwargs):
             return InMemoryTimeSeriesStorage()
         else:
+            if perminant:
+                if base_directory is None:
+                    msg = "Can't convert to perminant storage without a base directory"
+                    raise ISInvalidParameter(msg)
+                return ArrowTimeSeriesStorage.create_with_permanent_directory(
+                    directory=base_directory
+                )
+
             return ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
 
     @property
@@ -293,8 +301,8 @@ class TimeSeriesManager:
         """
         new_storage = self.create_new_storage(**kwargs)
         for time_series_uuid in self.metadata_store.unique_uuids_by_type("SingleTimeSeries"):
-            new_storage._add_raw_single_time_series(
-                time_series_uuid, self._storage._get_raw_single_time_series(time_series_uuid)
+            new_storage.add_raw_single_time_series(
+                time_series_uuid, self._storage.get_raw_single_time_series(time_series_uuid)
             )
 
         self._storage = new_storage
