@@ -47,13 +47,13 @@ class TimeSeriesManager:
         # TODO: create parsing mechanism? CSV, CSV + JSON
 
     @staticmethod
-    def create_new_storage(perminant: bool = False, **kwargs):
+    def create_new_storage(permanent: bool = False, **kwargs):
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
 
         if _process_time_series_kwarg("time_series_in_memory", **kwargs):
             return InMemoryTimeSeriesStorage()
         else:
-            if perminant:
+            if permanent:
                 if base_directory is None:
                     msg = "Can't convert to perminant storage without a base directory"
                     raise ISInvalidParameter(msg)
@@ -296,7 +296,7 @@ class TimeSeriesManager:
             msg = "Cannot modify time series in read-only mode."
             raise ISOperationNotAllowed(msg)
 
-    def convert_storage(self, **kwargs) -> TimeSeriesStorageBase | None:
+    def convert_storage(self, **kwargs) -> None:
         """
         Create a new storage instance and copy all time series from the current to new storage
         """
