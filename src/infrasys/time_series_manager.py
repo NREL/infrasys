@@ -300,7 +300,9 @@ class TimeSeriesManager:
         Create a new storage instance and copy all time series from the current to new storage
         """
         new_storage = self.create_new_storage(**kwargs)
-        for time_series_uuid in self.metadata_store.unique_uuids_by_type("SingleTimeSeries"):
+        for time_series_uuid in self.metadata_store.unique_uuids_by_type(
+            SingleTimeSeries.__name__
+        ):
             new_storage.add_raw_single_time_series(
                 time_series_uuid, self._storage.get_raw_single_time_series(time_series_uuid)
             )

@@ -1,13 +1,15 @@
 from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
 from infrasys.time_series_models import SingleTimeSeries
 from infrasys.exceptions import ISAlreadyAttached
+from infrasys.arrow_storage import ArrowTimeSeriesStorage
+from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from datetime import timedelta, datetime
 import numpy as np
 import pytest
 
 
 def get_data_and_uuids(system):
-    uuids = system._time_series_mgr.metadata_store.unique_uuids_by_type("SingleTimeSeries")
+    uuids = system._time_series_mgr.metadata_store.unique_uuids_by_type(SingleTimeSeries.__name__)
     data = {
         uuid: system._time_series_mgr._storage.get_raw_single_time_series(uuid) for uuid in uuids
     }
@@ -15,16 +17,21 @@ def get_data_and_uuids(system):
 
 
 @pytest.mark.parametrize(
-    "original_kwargs,new_kwargs",
+    "original_kwargs,new_kwargs,original_stype,new_stype",
     [
-        ({"time_series_in_memory": True}, {}),
-        ({}, {"time_series_in_memory": True}),
+        ({"time_series_in_memory": True}, {}, InMemoryTimeSeriesStorage, ArrowTimeSeriesStorage),
+        ({}, {"time_series_in_memory": True}, ArrowTimeSeriesStorage, InMemoryTimeSeriesStorage),
     ],
 )
-def test_memory_convert_storage_time_series(original_kwargs, new_kwargs):
+def test_memory_convert_storage_time_series(
+    original_kwargs, new_kwargs, original_stype, new_stype
+):
     test_bus = SimpleBus.example()
     test_generator = SimpleGenerator.example()
     system = SimpleSystem(auto_add_composed_components=True, **original_kwargs)
+
+    assert isinstance(system._time_series_mgr._storage, original_stype)
+
     system.get_components()
     system.add_components(test_bus)
     system.add_components(test_generator)
@@ -43,6 +50,7 @@ def test_memory_convert_storage_time_series(original_kwargs, new_kwargs):
 
     system.convert_storage(**new_kwargs)
 
+    assert isinstance(system._time_series_mgr._storage, new_stype)
     new_uuids, new_data = get_data_and_uuids(system)
 
     assert set(original_uuids) == set(new_uuids)
