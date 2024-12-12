@@ -276,10 +276,6 @@ class TimeSeriesManager:
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
-        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
-            msg = "De-serialization does not support time_series_in_memory"
-            raise ISOperationNotAllowed(msg)
-
         time_series_dir = Path(parent_dir) / data["directory"]
 
         if _process_time_series_kwarg("time_series_read_only", **kwargs):
@@ -288,7 +284,12 @@ class TimeSeriesManager:
             storage = ArrowTimeSeriesStorage.create_with_temp_directory()
             storage.serialize(src=time_series_dir, dst=storage.get_time_series_directory())
 
-        return cls(con, storage=storage, initialize=False, **kwargs)
+        cls_instance = cls(con, storage=storage, initialize=False, **kwargs)
+
+        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
+            cls_instance.convert_storage(**kwargs)
+
+        return cls_instance
 
     def _handle_read_only(self) -> None:
         if self._read_only:
