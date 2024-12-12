@@ -287,16 +287,9 @@ class TimeSeriesManager:
             msg = "Cannot modify time series in read-only mode."
             raise ISOperationNotAllowed(msg)
 
-    def convert_storage(self, replace: bool = False, **kwargs) -> TimeSeriesStorageBase | None:
+    def convert_storage(self, **kwargs) -> TimeSeriesStorageBase | None:
         """
         Create a new storage instance and copy all time series from the current to new storage
-
-        Parameters
-        ----------
-
-        replace: bool
-            if True, replace the current storage with the new storage, otherwise return the new storage
-
         """
         new_storage = self.create_new_storage(**kwargs)
         for time_series_uuid in self.metadata_store.unique_uuids_by_type("SingleTimeSeries"):
@@ -304,8 +297,5 @@ class TimeSeriesManager:
                 time_series_uuid, self._storage._get_raw_single_time_series(time_series_uuid)
             )
 
-        if not replace:
-            return new_storage
-        else:
-            self._storage = new_storage
+        self._storage = new_storage
         return None

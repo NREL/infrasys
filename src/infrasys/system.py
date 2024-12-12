@@ -1095,18 +1095,11 @@ class System:
 
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
-    def convert_storage(self, replace=True, **kwargs) -> TimeSeriesStorageBase | None:
+    def convert_storage(self, **kwargs) -> TimeSeriesStorageBase | None:
         """
         Converts the time series storage medium.
-
-        Parameters
-        ----------
-        replace: bool
-            if True, the underlying storage will be replaced with new storage
-            otherwise, the new storage object is returned
-
         """
-        return self._time_series_mgr.convert_storage(**kwargs, replace=replace)
+        return self._time_series_mgr.convert_storage(**kwargs)
 
     @property
     def _components(self) -> ComponentManager:
