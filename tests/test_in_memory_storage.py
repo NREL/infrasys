@@ -9,7 +9,7 @@ import pytest
 def get_data_and_uuids(system):
     uuids = system._time_series_mgr.metadata_store.unique_uuids_by_type("SingleTimeSeries")
     data = {
-        uuid: system._time_series_mgr._storage._get_raw_single_time_series(uuid) for uuid in uuids
+        uuid: system._time_series_mgr._storage.get_raw_single_time_series(uuid) for uuid in uuids
     }
     return uuids, data
 
