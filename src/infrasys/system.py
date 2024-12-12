@@ -1094,6 +1094,44 @@ class System:
 
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
+    def convert_storage(self, **kwargs) -> None:
+        """
+        Converts the time series storage medium.
+
+        Parameters
+        ----------
+        **kwargs:
+            The same keys as TIME_SERIES_KWARGS in time_series_manager.py
+            {
+                "time_series_in_memory": bool = False,
+                "time_series_read_only": bool = False,
+                "time_series_directory": Path | None = None,
+            }
+
+            Only arguments that need to be changed from the default TIME_SERIES_KWARGS
+            need to be passed
+
+        Examples
+        --------
+
+        # Initialize the system (defaults to Arrow storage)
+        >>> system = infrasys.System(auto_add_composed_components=True)
+
+        # Add components and time series data
+        >>> generator, bus, load_data = create_some_data()
+        >>> system.add_components(generator, bus)
+        >>> system.add_time_series(load_data, generator)
+
+        # Convert the storage to in_memory
+        >>> kwargs = {"time_series_in_memory": True}
+        >>> system.convert_storage(**kwargs)
+
+        # Check the time series storage type
+        >>> isinstance(system._time_series_mgr._storage, InMemoryTimeSeriesStorage)
+        True
+        """
+        return self._time_series_mgr.convert_storage(**kwargs)
+
     @property
     def _components(self) -> ComponentManager:
         """Return the component manager."""

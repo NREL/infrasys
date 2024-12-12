@@ -209,6 +209,12 @@ class SingleTimeSeries(TimeSeriesData):
     def get_time_series_metadata_type() -> Type:
         return SingleTimeSeriesMetadata
 
+    @property
+    def data_array(self) -> NDArray:
+        if isinstance(self.data, pint.Quantity):
+            return self.data.magnitude
+        return self.data
+
 
 class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
@@ -252,6 +258,7 @@ class TimeSeriesMetadata(InfraSysBaseModel, abc.ABC):
     user_attributes: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
+    # TODO: refactor to type_ to avoid overriding builtin?
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @property
