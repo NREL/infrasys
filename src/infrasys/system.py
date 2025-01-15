@@ -7,7 +7,7 @@ from operator import itemgetter
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Optional, Type
+from typing import Any, Callable, Iterable, Optional, Type, TypeVar
 from uuid import UUID, uuid4
 
 from loguru import logger
@@ -35,6 +35,8 @@ from infrasys.serialization import (
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData, TimeSeriesMetadata
 from infrasys.utils.sqlite import backup, create_in_memory_db, restore
+
+T = TypeVar("T", bound="Component")
 
 
 class System:
@@ -488,13 +490,13 @@ class System:
         """
         return self._component_mgr.deepcopy(component)
 
-    def get_component(self, component_type: Type[Component], name: str) -> Any:
+    def get_component(self, component_type: Type[T], name: str) -> T:
         """Return the component with the passed type and name.
 
         Parameters
         ----------
-        component_type : Type[Component]
-            Type of component
+        component_type : Type[T]
+            Generic component type
         name : Type
             Name of component
 
@@ -557,13 +559,13 @@ class System:
         return self._component_mgr.get_by_uuid(uuid)
 
     def get_components(
-        self, *component_type: Type[Component], filter_func: Callable | None = None
-    ) -> Iterable[Any]:
+        self, *component_type: Type[T], filter_func: Callable | None = None
+    ) -> Iterable[T]:
         """Return the components with the passed type(s) and that optionally match filter_func.
 
         Parameters
         ----------
-        component_type : Type[Component]
+        component_type : Type[T]
             If component_type is an abstract type, all matching subtypes will be returned.
             The function will return all the matching `component_type` passed.
         filter_func : Callable | None
@@ -1093,6 +1095,44 @@ class System:
         raise NotImplementedError(msg)
 
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
+
+    def convert_storage(self, **kwargs) -> None:
+        """
+        Converts the time series storage medium.
+
+        Parameters
+        ----------
+        **kwargs:
+            The same keys as TIME_SERIES_KWARGS in time_series_manager.py
+            {
+                "time_series_in_memory": bool = False,
+                "time_series_read_only": bool = False,
+                "time_series_directory": Path | None = None,
+            }
+
+            Only arguments that need to be changed from the default TIME_SERIES_KWARGS
+            need to be passed
+
+        Examples
+        --------
+
+        # Initialize the system (defaults to Arrow storage)
+        >>> system = infrasys.System(auto_add_composed_components=True)
+
+        # Add components and time series data
+        >>> generator, bus, load_data = create_some_data()
+        >>> system.add_components(generator, bus)
+        >>> system.add_time_series(load_data, generator)
+
+        # Convert the storage to in_memory
+        >>> kwargs = {"time_series_in_memory": True}
+        >>> system.convert_storage(**kwargs)
+
+        # Check the time series storage type
+        >>> isinstance(system._time_series_mgr._storage, InMemoryTimeSeriesStorage)
+        True
+        """
+        return self._time_series_mgr.convert_storage(**kwargs)
 
     @property
     def _components(self) -> ComponentManager:

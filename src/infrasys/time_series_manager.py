@@ -9,7 +9,7 @@ from loguru import logger
 
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys import Component
-from infrasys.exceptions import ISOperationNotAllowed
+from infrasys.exceptions import ISInvalidParameter, ISOperationNotAllowed
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.time_series_metadata_store import TimeSeriesMetadataStore
 from infrasys.time_series_models import (
@@ -40,16 +40,28 @@ class TimeSeriesManager:
         initialize: bool = True,
         **kwargs,
     ) -> None:
-        base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
-        self._storage = storage or (
-            InMemoryTimeSeriesStorage()
-            if _process_time_series_kwarg("time_series_in_memory", **kwargs)
-            else ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
-        )
+        self._storage = storage or self.create_new_storage(**kwargs)
         self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
 
         # TODO: create parsing mechanism? CSV, CSV + JSON
+
+    @staticmethod
+    def create_new_storage(permanent: bool = False, **kwargs):
+        base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
+
+        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
+            return InMemoryTimeSeriesStorage()
+        else:
+            if permanent:
+                if base_directory is None:
+                    msg = "Can't convert to perminant storage without a base directory"
+                    raise ISInvalidParameter(msg)
+                return ArrowTimeSeriesStorage.create_with_permanent_directory(
+                    directory=base_directory
+                )
+
+            return ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
 
     @property
     def metadata_store(self) -> TimeSeriesMetadataStore:
@@ -264,10 +276,6 @@ class TimeSeriesManager:
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
-        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
-            msg = "De-serialization does not support time_series_in_memory"
-            raise ISOperationNotAllowed(msg)
-
         time_series_dir = Path(parent_dir) / data["directory"]
 
         if _process_time_series_kwarg("time_series_read_only", **kwargs):
@@ -276,9 +284,29 @@ class TimeSeriesManager:
             storage = ArrowTimeSeriesStorage.create_with_temp_directory()
             storage.serialize(src=time_series_dir, dst=storage.get_time_series_directory())
 
-        return cls(con, storage=storage, initialize=False, **kwargs)
+        cls_instance = cls(con, storage=storage, initialize=False, **kwargs)
+
+        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
+            cls_instance.convert_storage(**kwargs)
+
+        return cls_instance
 
     def _handle_read_only(self) -> None:
         if self._read_only:
             msg = "Cannot modify time series in read-only mode."
             raise ISOperationNotAllowed(msg)
+
+    def convert_storage(self, **kwargs) -> None:
+        """
+        Create a new storage instance and copy all time series from the current to new storage
+        """
+        new_storage = self.create_new_storage(**kwargs)
+        for time_series_uuid in self.metadata_store.unique_uuids_by_type(
+            SingleTimeSeries.__name__
+        ):
+            new_storage.add_raw_single_time_series(
+                time_series_uuid, self._storage.get_raw_single_time_series(time_series_uuid)
+            )
+
+        self._storage = new_storage
+        return None

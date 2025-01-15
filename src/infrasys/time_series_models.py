@@ -8,7 +8,6 @@ from typing import (
     Any,
     Literal,
     Optional,
-    Self,
     Type,
     TypeAlias,
     Union,
@@ -31,7 +30,6 @@ from typing_extensions import Annotated
 
 from infrasys.exceptions import (
     ISConflictingArguments,
-    InconsistentTimeseriesAggregation,
 )
 from infrasys.models import InfraSysBaseModelWithIdentifers, InfraSysBaseModel
 from infrasys.normalization import NormalizationModel
@@ -114,70 +112,6 @@ class SingleTimeSeries(TimeSeriesData):
             return np.array(data)
 
         return data
-
-    @classmethod
-    def aggregate(cls, ts_data: list[Self]) -> Self:
-        """Method to aggregate list of SingleTimeSeries data.
-
-        Parameters
-        ----------
-        ts_data
-            list of SingleTimeSeries data
-
-        Returns
-        -------
-        SingleTimeSeries
-
-        Raises
-        ------
-        InconsistentTimeseriesAggregation
-            Raised if incompatible timeseries data are passed.
-        """
-
-        # Extract unique properties from ts_data
-        unique_props = {
-            "length": {data.length for data in ts_data},
-            "resolution": {data.resolution for data in ts_data},
-            "start_time": {data.initial_time for data in ts_data},
-            "variable": {data.variable_name for data in ts_data},
-            "data_type": {type(data.data) for data in ts_data},
-        }
-
-        # Validate uniformity across properties
-        if any(len(prop) != 1 for prop in unique_props.values()):
-            inconsistent_props = {k: v for k, v in unique_props.items() if len(v) > 1}
-            msg = f"Inconsistent timeseries data: {inconsistent_props}"
-            raise InconsistentTimeseriesAggregation(msg)
-
-        # Aggregate data
-        is_quantity = issubclass(next(iter(unique_props["data_type"])), pint.Quantity)
-        magnitude_type = (
-            type(ts_data[0].data.magnitude)
-            if is_quantity
-            else next(iter(unique_props["data_type"]))
-        )
-
-        # Aggregate data based on magnitude type
-        if issubclass(magnitude_type, np.ndarray):
-            new_data = sum(
-                [data.data * (data.data.units if is_quantity else 1) for data in ts_data]
-            )
-        elif issubclass(magnitude_type, np.ndarray):
-            new_data = sum([data.data for data in ts_data])
-        elif issubclass(magnitude_type, list) and not is_quantity:
-            new_data = sum([np.array(data) for data in ts_data])
-        else:
-            msg = f"Unsupported data type for aggregation: {magnitude_type}"
-            raise TypeError(msg)
-
-        # Return new SingleTimeSeries instance
-        return SingleTimeSeries(
-            data=new_data,
-            variable_name=unique_props["variable"].pop(),
-            initial_time=unique_props["start_time"].pop(),
-            resolution=unique_props["resolution"].pop(),
-            normalization=None,
-        )
 
     @classmethod
     def from_array(
@@ -275,6 +209,12 @@ class SingleTimeSeries(TimeSeriesData):
     def get_time_series_metadata_type() -> Type:
         return SingleTimeSeriesMetadata
 
+    @property
+    def data_array(self) -> NDArray:
+        if isinstance(self.data, pint.Quantity):
+            return self.data.magnitude
+        return self.data
+
 
 class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
@@ -318,6 +258,7 @@ class TimeSeriesMetadata(InfraSysBaseModel, abc.ABC):
     user_attributes: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
+    # TODO: refactor to type_ to avoid overriding builtin?
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @property
