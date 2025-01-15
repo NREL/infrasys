@@ -113,9 +113,7 @@ class PydanticPintQuantity:
         self,
         value: Quantity,
         info: core_schema.SerializationInfo | None = None,
-        *,
-        to_json: bool = False,
-    ) -> dict | str | Quantity:
+    ) -> dict[str, Any] | str | Quantity:
         """
         Serialize a `PydanticPintQuantity`.
 
@@ -125,17 +123,12 @@ class PydanticPintQuantity:
             The quantity to serialize. This should be a `pint.Quantity` object.
         info : core_schema.SerializationInfo, optional
             The serialization information provided by the Pydantic schema. Default is `None`.
-        to_json : bool, optional
-            If `True`, serializes to a JSON-compatible format (string or dictionary).
-            If `False` (default), returns the quantity as is (i.e., `pint.Quantity`).
 
         Returns
         -------
         dict, str, or pint.Quantity
             The serialized representation of the quantity.
-            - If `to_json` is `True`, the quantity is serialized to a JSON-compatible string or dictionary.
-            - If `to_json` is `False`, returns the original `pint.Quantity`.
-            - If `ser_mode=='dict'` or `info.mode=='dict'` a dictionary with magnitude and units.
+            - If `ser_mode='dict'` or `info.mode='dict'` a dictionary with magnitude and units.
 
         Notes
         -----
@@ -143,21 +136,20 @@ class PydanticPintQuantity:
         of Pydantic models, as it allows control over the serialization format
         (e.g., JSON-compatible representation).
         """
-        # If we pass the to_json flag, we serialize it as json, but sometimes the pydantic info can have the to_json
-        # enabled. In that case so we add a check of that as well
-        info_to_json = info is not None and info.mode_is_json()
-        to_json = to_json or info_to_json
+        if info is not None:
+            mode = info.mode
+        else:
+            mode = self.ser_mode
 
-        if self.ser_mode == "dict" or (info is not None and info.mode == "dict"):
+        if mode == "dict":
             return {
                 "magnitude": value.magnitude,
-                "units": value.units if not to_json else f"{value.units}",
+                "units": f"{value.units}",
             }
-
-        if self.ser_mode == "str" or to_json:
+        elif mode == "str" or mode == "json":
             return str(value)
-
-        return value
+        else:
+            return value
 
     def __get_pydantic_core_schema__(
         self,
