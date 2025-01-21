@@ -1,3 +1,5 @@
+import os
+from infrasys.system import System
 from pydantic import ValidationError
 from infrasys.base_quantity import ureg, BaseQuantity
 from infrasys.component import Component
@@ -102,3 +104,14 @@ def test_custom_serialization():
 
     model_dump = component.model_dump(mode="json", context={"magnitude_only": True})
     assert model_dump["voltage"] == 10.0
+
+
+def test_system_save_with_pint_quantity(tmp_path):
+    component = BaseQuantityComponent(name="test", voltage=Voltage(np.float32(10.0), units="volt"))
+    system = System()
+    system.add_component(component)
+    custom_folder = "my_system"
+
+    fpath = tmp_path / custom_folder / "test_system.json"
+    system.to_json(fpath)
+    assert os.path.exists(fpath), f"Folder {fpath} was not created successfully"
