@@ -79,7 +79,7 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
         val = self.magnitude
         if isinstance(self.magnitude, np.ndarray):
             val = self.magnitude.tolist()
-        if isinstance(self.magnitude, np.generic):
+        elif isinstance(self.magnitude, np.generic):
             val = val.item()
         return {"value": val, "units": str(self.units)}
 
