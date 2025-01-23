@@ -88,7 +88,7 @@ class CachedTypeHelper:
 def serialize_value(obj: InfraSysBaseModel, *args, **kwargs) -> dict[str, Any]:
     """Serialize an infrasys object to a dictionary."""
     cls = type(obj)
-    data = obj.model_dump(*args, mode="json", **kwargs)
+    data = obj.model_dump(*args, mode="json", round_trip=True, **kwargs)
     data[TYPE_METADATA] = SerializedTypeMetadata(
         fields=SerializedBaseType(
             module=cls.__module__,
