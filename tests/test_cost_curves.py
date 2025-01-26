@@ -1,4 +1,4 @@
-from infrasys.cost_curves import CostCurve, FuelCurve, ProductionVariableCostCurve, UnitsSystems
+from infrasys.cost_curves import CostCurve, FuelCurve, ProductionVariableCostCurve, UnitSystem
 from infrasys.function_data import LinearFunctionData
 from infrasys.value_curves import InputOutputCurve
 from infrasys import Component
@@ -26,7 +26,7 @@ def test_cost_curve():
         vom_cost=InputOutputCurve(
             function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0),
         ),
-        power_units=UnitsSystems.NATURAL_UNITS,
+        power_units=UnitSystem.NATURAL_UNITS,
     )
 
     assert isinstance(cost_curve.value_curve.function_data, LinearFunctionData)
@@ -45,7 +45,7 @@ def test_fuel_curve():
             function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
         ),
         fuel_cost=2.5,
-        power_units=UnitsSystems.NATURAL_UNITS,
+        power_units=UnitSystem.NATURAL_UNITS,
     )
 
     assert isinstance(fuel_curve.value_curve.function_data, LinearFunctionData)
@@ -65,7 +65,7 @@ def test_value_curve_custom_serialization():
             vom_cost=InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
             ),
-            power_units=UnitsSystems.NATURAL_UNITS,
+            power_units=UnitSystem.NATURAL_UNITS,
         ),
     )
 
@@ -85,7 +85,7 @@ def test_nested_value_curve_serialization(tmp_path):
     gen_with_operation_cost = TestComponentWithProductionCost(
         name=gen_name,
         cost=NestedCostCurve(
-            power_units=UnitsSystems.NATURAL_UNITS,
+            power_units=UnitSystem.NATURAL_UNITS,
             value_curve=InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=0, constant_term=10)
             ),

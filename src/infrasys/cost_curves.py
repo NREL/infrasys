@@ -8,7 +8,7 @@ from infrasys.models import InfraSysBaseModel
 from infrasys.value_curves import AverageRateCurve, IncrementalCurve, InputOutputCurve, LinearCurve
 
 
-class UnitsSystems(StrEnum):
+class UnitSystem(StrEnum):
     SYSTEM_BASE = "SYSTEM_BASE"
     DEVICE_BASE = "DEVICE_BASE"
     NATURAL_UNITS = "NATURAL_UNITS"
@@ -17,7 +17,7 @@ class UnitsSystems(StrEnum):
 class ProductionVariableCostCurve(InfraSysBaseModel):
     """Abstract class ValueCurves."""
 
-    power_units: UnitsSystems
+    power_units: UnitSystem
     value_curve: Annotated[
         InputOutputCurve | IncrementalCurve | AverageRateCurve,
         Field(
