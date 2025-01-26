@@ -1,22 +1,24 @@
 """Defines classes for value curves using cost functions"""
 
-from typing_extensions import Annotated
+from typing import Generic
+
+import numpy as np
+from pydantic import Field
+from typing_extensions import Annotated, TypeVar
+
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.function_data import (
     LinearFunctionData,
-    QuadraticFunctionData,
     PiecewiseLinearData,
     PiecewiseStepData,
+    QuadraticFunctionData,
     XYCoords,
     running_sum,
 )
-from pydantic import Field
-import numpy as np
-
-from infrasys.models import InfraSysBaseModelWithIdentifers
+from infrasys.models import InfraSysBaseModel
 
 
-class ValueCurve(InfraSysBaseModelWithIdentifers):
+class ValueCurve(InfraSysBaseModel):
     input_at_zero: Annotated[
         float | None,
         Field(
@@ -25,7 +27,19 @@ class ValueCurve(InfraSysBaseModelWithIdentifers):
     ] = None
 
 
-class InputOutputCurve(ValueCurve):
+# Valid function data types for each value curve
+InputOutputCurveTypes = TypeVar(
+    "InputOutputCurveTypes", bound=LinearFunctionData | QuadraticFunctionData | PiecewiseLinearData
+)
+IncrementalCurveTypes = TypeVar(
+    "IncrementalCurveTypes", bound=LinearFunctionData | PiecewiseStepData
+)
+AverageRateCurveTypes = TypeVar(
+    "AverageRateCurveTypes", bound=LinearFunctionData | PiecewiseStepData
+)
+
+
+class InputOutputCurve(ValueCurve, Generic[InputOutputCurveTypes]):
     """Input-output curve relating production quality to cost.
 
     An input-output curve, directly relating the production quantity to the cost:
@@ -38,12 +52,12 @@ class InputOutputCurve(ValueCurve):
     """
 
     function_data: Annotated[
-        LinearFunctionData | QuadraticFunctionData | PiecewiseLinearData,
+        InputOutputCurveTypes,
         Field(description="The underlying `FunctionData` representation of this `ValueCurve`"),
     ]
 
 
-class IncrementalCurve(ValueCurve):
+class IncrementalCurve(ValueCurve, Generic[IncrementalCurveTypes]):
     """Incremental/marginal curve to relate production quantity to cost derivative.
 
     An incremental (or 'marginal') curve, relating the production quantity to the derivative of
@@ -57,7 +71,7 @@ class IncrementalCurve(ValueCurve):
     """
 
     function_data: Annotated[
-        LinearFunctionData | PiecewiseStepData,
+        IncrementalCurveTypes,
         Field(description="The underlying `FunctionData` representation of this `ValueCurve`"),
     ]
     initial_input: Annotated[
@@ -125,7 +139,7 @@ class IncrementalCurve(ValueCurve):
                 )
 
 
-class AverageRateCurve(ValueCurve):
+class AverageRateCurve(ValueCurve, Generic[AverageRateCurveTypes]):
     """Average rate curve relating production quality to average cost rate.
 
     An average rate curve, relating the production quantity to the average cost rate from the
@@ -140,7 +154,7 @@ class AverageRateCurve(ValueCurve):
     """
 
     function_data: Annotated[
-        LinearFunctionData | PiecewiseStepData,
+        AverageRateCurveTypes,
         Field(
             description="The underlying `FunctionData` representation of this `ValueCurve`, or \
                 only the oblique asymptote when using `LinearFunctionData`"
@@ -154,7 +168,9 @@ class AverageRateCurve(ValueCurve):
         ),
     ]
 
-    def to_input_output(self) -> InputOutputCurve:
+    def to_input_output(
+        self,
+    ) -> InputOutputCurve[LinearFunctionData | QuadraticFunctionData | PiecewiseLinearData]:
         """Function to convert IncrementalCurve to InputOutputCurve
 
         Function takes an AverageRateCurve and converts it to a corresponding
@@ -191,7 +207,6 @@ class AverageRateCurve(ValueCurve):
                 else:
                     return InputOutputCurve(
                         function_data=QuadraticFunctionData(
-                            # issue 53
                             quadratic_term=p,
                             proportional_term=m,
                             constant_term=c,  # type: ignore
@@ -219,7 +234,9 @@ class AverageRateCurve(ValueCurve):
                 raise ISOperationNotAllowed(msg)
 
 
-def LinearCurve(proportional_term: float = 0.0, constant_term: float = 0.0) -> InputOutputCurve:
+def LinearCurve(
+    proportional_term: float = 0.0, constant_term: float = 0.0
+) -> InputOutputCurve[LinearFunctionData]:
     """Creates a linear curve using the given proportional and constant terms.
 
     Returns an instance of `InputOutputCurve` with the specified linear function parameters.

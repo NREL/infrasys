@@ -9,7 +9,7 @@ from pydantic import Field, model_validator
 from pydantic.functional_validators import AfterValidator
 from typing_extensions import Annotated
 
-from infrasys.models import InfraSysBaseModelWithIdentifers
+from infrasys.models import InfraSysBaseModel
 
 
 class XYCoords(NamedTuple):
@@ -19,7 +19,7 @@ class XYCoords(NamedTuple):
     y: float
 
 
-class FunctionData(InfraSysBaseModelWithIdentifers):
+class FunctionData(InfraSysBaseModel):
     """BaseClass of FunctionData"""
 
 
