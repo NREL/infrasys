@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 from infrasys.function_data import (
     LinearFunctionData,
     QuadraticFunctionData,
@@ -20,7 +21,7 @@ class ValueCurveComponent(Component):
 
 
 def test_input_output_curve():
-    curve = InputOutputCurve(
+    curve: InputOutputCurve = InputOutputCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0)
     )
 
@@ -29,7 +30,7 @@ def test_input_output_curve():
 
 
 def test_incremental_curve():
-    curve = IncrementalCurve(
+    curve: IncrementalCurve = IncrementalCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0),
         initial_input=1.0,
     )
@@ -39,7 +40,7 @@ def test_incremental_curve():
 
 
 def test_average_rate_curve():
-    curve = AverageRateCurve(
+    curve: AverageRateCurve = AverageRateCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0),
         initial_input=1.0,
     )
@@ -73,7 +74,7 @@ def test_linear_curve():
 
 def test_average_rate_conversion():
     # Linear function data
-    curve = AverageRateCurve(
+    curve: AverageRateCurve = AverageRateCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0),
         initial_input=None,
     )
@@ -106,7 +107,7 @@ def test_average_rate_conversion():
 
 def test_incremental_conversion():
     # Linear function data
-    curve = IncrementalCurve(
+    curve: IncrementalCurve = IncrementalCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0),
         initial_input=None,
     )
@@ -179,3 +180,18 @@ def test_value_curve_serialization(tmp_path):
         == v2.value_curve.function_data.proportional_term
     )
     assert v1.value_curve.function_data.constant_term == v2.value_curve.function_data.constant_term
+
+
+def test_value_curve_types():
+    # Invalid function data for InputOutputCurve
+    with pytest.raises(ValidationError):
+        _ = InputOutputCurve(function_data=PiecewiseStepData(x_coords=[0, 1, 2], y_coords=[0, 1]))
+
+    # Invalid function data for IncrementalCurve
+    with pytest.raises(ValidationError):
+        _ = IncrementalCurve(
+            initial_input=0,
+            function_data=QuadraticFunctionData(
+                constant_term=0, proportional_term=10, quadratic_term=10
+            ),
+        )

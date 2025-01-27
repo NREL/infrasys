@@ -1,12 +1,33 @@
-from typing_extensions import Annotated
-from pydantic import Field
-from infrasys.models import InfraSysBaseModelWithIdentifers
-from infrasys.value_curves import InputOutputCurve, IncrementalCurve, AverageRateCurve, LinearCurve
+from enum import StrEnum
+
 import pint
+from pydantic import Field
+from typing_extensions import Annotated
+
+from infrasys.models import InfraSysBaseModel
+from infrasys.value_curves import AverageRateCurve, IncrementalCurve, InputOutputCurve, LinearCurve
 
 
-class ProductionVariableCostCurve(InfraSysBaseModelWithIdentifers):
-    ...
+class UnitSystem(StrEnum):
+    SYSTEM_BASE = "SYSTEM_BASE"
+    DEVICE_BASE = "DEVICE_BASE"
+    NATURAL_UNITS = "NATURAL_UNITS"
+
+
+class ProductionVariableCostCurve(InfraSysBaseModel):
+    """Abstract class ValueCurves."""
+
+    power_units: UnitSystem
+    value_curve: Annotated[
+        InputOutputCurve | IncrementalCurve | AverageRateCurve,
+        Field(
+            description="The underlying `ValueCurve` representation of this `ProductionVariableCostCurve`"
+        ),
+    ]
+    vom_cost: Annotated[
+        InputOutputCurve,
+        Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
+    ] = LinearCurve(0.0)
 
 
 class CostCurve(ProductionVariableCostCurve):
@@ -17,16 +38,7 @@ class CostCurve(ProductionVariableCostCurve):
     `power_units`.
     """
 
-    value_curve: Annotated[
-        InputOutputCurve | IncrementalCurve | AverageRateCurve,
-        Field(
-            description="The underlying `ValueCurve` representation of this `ProductionVariableCostCurve`"
-        ),
-    ]
-    vom_cost: Annotated[
-        InputOutputCurve,
-        Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
-    ] = LinearCurve(0.0)
+    ...
 
 
 class FuelCurve(ProductionVariableCostCurve):
@@ -37,16 +49,6 @@ class FuelCurve(ProductionVariableCostCurve):
     The default units for the x-axis are MW and can be specified with `power_units`.
     """
 
-    value_curve: Annotated[
-        InputOutputCurve | IncrementalCurve | AverageRateCurve,
-        Field(
-            description="The underlying `ValueCurve` representation of this `ProductionVariableCostCurve`"
-        ),
-    ]
-    vom_cost: Annotated[
-        InputOutputCurve,
-        Field(description="(default: natural units (MW)) The units for the x-axis of the curve"),
-    ] = LinearCurve(0.0)
     fuel_cost: Annotated[
         pint.Quantity | float,
         Field(
