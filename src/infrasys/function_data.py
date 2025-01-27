@@ -3,7 +3,6 @@
 from typing import List, NamedTuple
 
 import numpy as np
-import pint
 from numpy.typing import NDArray
 from pydantic import Field, model_validator
 from pydantic.functional_validators import AfterValidator
@@ -22,6 +21,8 @@ class XYCoords(NamedTuple):
 class FunctionData(InfraSysBaseModel):
     """BaseClass of FunctionData"""
 
+    units: str | None = None
+
 
 class LinearFunctionData(FunctionData):
     """Data representation for linear cost function.
@@ -34,7 +35,7 @@ class LinearFunctionData(FunctionData):
     """
 
     proportional_term: Annotated[
-        pint.Quantity | float,
+        float,
         Field(description="the proportional term in the represented function."),
     ]
     constant_term: Annotated[

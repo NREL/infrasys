@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-import pint
 from pydantic import Field
 from typing_extensions import Annotated
 
@@ -50,7 +49,7 @@ class FuelCurve(ProductionVariableCostCurve):
     """
 
     fuel_cost: Annotated[
-        pint.Quantity | float,
+        float,
         Field(
             description="Either a fixed value for fuel cost or the key to a fuel cost time series"
         ),
