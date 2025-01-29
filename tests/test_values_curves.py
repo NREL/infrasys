@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 from infrasys.function_data import (
     LinearFunctionData,
     QuadraticFunctionData,
@@ -7,6 +8,7 @@ from infrasys.value_curves import (
     InputOutputCurve,
     IncrementalCurve,
     AverageRateCurve,
+    LinearCurve,
 )
 from infrasys import Component
 from infrasys.exceptions import ISOperationNotAllowed
@@ -19,7 +21,7 @@ class ValueCurveComponent(Component):
 
 
 def test_input_output_curve():
-    curve = InputOutputCurve(
+    curve: InputOutputCurve = InputOutputCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0)
     )
 
@@ -28,7 +30,7 @@ def test_input_output_curve():
 
 
 def test_incremental_curve():
-    curve = IncrementalCurve(
+    curve: IncrementalCurve = IncrementalCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0),
         initial_input=1.0,
     )
@@ -38,7 +40,7 @@ def test_incremental_curve():
 
 
 def test_average_rate_curve():
-    curve = AverageRateCurve(
+    curve: AverageRateCurve = AverageRateCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0),
         initial_input=1.0,
     )
@@ -47,9 +49,32 @@ def test_average_rate_curve():
     assert isinstance(curve.function_data, LinearFunctionData)
 
 
+def test_linear_curve():
+    linear = LinearCurve()
+    assert isinstance(linear, InputOutputCurve)
+    assert getattr(linear, "function_data")
+    assert getattr(linear.function_data, "proportional_term") == 0.0
+    assert getattr(linear.function_data, "constant_term") == 0.0
+
+    m = 15.0
+    linear = LinearCurve(m)
+    assert isinstance(linear, InputOutputCurve)
+    assert getattr(linear, "function_data")
+    assert getattr(linear.function_data, "proportional_term") == m
+    assert getattr(linear.function_data, "constant_term") == 0.0
+
+    m = 10.0
+    b = 30.4
+    linear = LinearCurve(m, b)
+    assert isinstance(linear, InputOutputCurve)
+    assert getattr(linear, "function_data")
+    assert getattr(linear.function_data, "proportional_term") == m
+    assert getattr(linear.function_data, "constant_term") == b
+
+
 def test_average_rate_conversion():
     # Linear function data
-    curve = AverageRateCurve(
+    curve: AverageRateCurve = AverageRateCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0),
         initial_input=None,
     )
@@ -62,6 +87,7 @@ def test_average_rate_conversion():
     assert isinstance(new_curve.function_data, QuadraticFunctionData)
     assert new_curve.function_data.quadratic_term == 1.0
 
+    assert isinstance(curve.function_data, LinearFunctionData)
     curve.function_data.proportional_term = 0.0
     new_curve = curve.to_input_output()
     assert isinstance(new_curve, InputOutputCurve)
@@ -81,7 +107,7 @@ def test_average_rate_conversion():
 
 def test_incremental_conversion():
     # Linear function data
-    curve = IncrementalCurve(
+    curve: IncrementalCurve = IncrementalCurve(
         function_data=LinearFunctionData(proportional_term=1.0, constant_term=1.0),
         initial_input=None,
     )
@@ -93,6 +119,7 @@ def test_incremental_conversion():
     assert isinstance(new_curve.function_data, QuadraticFunctionData)
     assert new_curve.function_data.quadratic_term == 0.5
 
+    assert isinstance(curve.function_data, LinearFunctionData)
     curve.function_data.proportional_term = 0.0
     new_curve = curve.to_input_output()
     assert isinstance(new_curve, InputOutputCurve)
@@ -153,3 +180,18 @@ def test_value_curve_serialization(tmp_path):
         == v2.value_curve.function_data.proportional_term
     )
     assert v1.value_curve.function_data.constant_term == v2.value_curve.function_data.constant_term
+
+
+def test_value_curve_types():
+    # Invalid function data for InputOutputCurve
+    with pytest.raises(ValidationError):
+        _ = InputOutputCurve(function_data=PiecewiseStepData(x_coords=[0, 1, 2], y_coords=[0, 1]))
+
+    # Invalid function data for IncrementalCurve
+    with pytest.raises(ValidationError):
+        _ = IncrementalCurve(
+            initial_input=0,
+            function_data=QuadraticFunctionData(
+                constant_term=0, proportional_term=10, quadratic_term=10
+            ),
+        )

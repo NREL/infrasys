@@ -519,6 +519,14 @@ class TimeSeriesMetadataStore:
         )
         return text is not None
 
+    def unique_uuids_by_type(self, time_series_type: str):
+        query = (
+            f"SELECT DISTINCT time_series_uuid from {self.TABLE_NAME} where time_series_type = ?"
+        )
+        params = (time_series_type,)
+        uuid_strings = self.sql(query, params)
+        return [UUID(ustr[0]) for ustr in uuid_strings]
+
 
 @dataclass
 class TimeSeriesCounts:

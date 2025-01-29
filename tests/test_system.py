@@ -31,6 +31,7 @@ def test_system():
     gen = SimpleGenerator(name="test-gen", active_power=1.0, rating=1.0, bus=bus, available=True)
     subsystem = SimpleSubsystem(name="test-subsystem", generators=[gen])
     system.add_components(geo, bus, gen, subsystem)
+    assert system.add_components() is None  # type: ignore
 
     gen2 = system.get_component(SimpleGenerator, "test-gen")
     assert gen2 is gen
@@ -141,6 +142,63 @@ def test_get_components_multiple_types():
     assert len(selected_components) == 2  # 1 SimpleGenerator + 1 RenewableGenerator
 
 
+def test_component_associations(tmp_path):
+    system = SimpleSystem()
+    for i in range(3):
+        geo = Location(x=i, y=i + 1)
+        bus = SimpleBus(name=f"bus{i}", voltage=1.1, coordinates=geo)
+        gen1 = SimpleGenerator(
+            name=f"gen{i}a", active_power=1.0, rating=1.0, bus=bus, available=True
+        )
+        gen2 = SimpleGenerator(
+            name=f"gen{i}b", active_power=1.0, rating=1.0, bus=bus, available=True
+        )
+        subsystem = SimpleSubsystem(name=f"test-subsystem{i}", generators=[gen1, gen2])
+        system.add_components(geo, bus, gen1, gen2, subsystem)
+
+    def check_attached_components(my_sys):
+        for i in range(3):
+            bus = my_sys.get_component(SimpleBus, f"bus{i}")
+            gen1 = my_sys.get_component(SimpleGenerator, f"gen{i}a")
+            gen2 = my_sys.get_component(SimpleGenerator, f"gen{i}b")
+            attached = my_sys.list_parent_components(bus, component_type=SimpleGenerator)
+            assert len(attached) == 2
+            labels = {gen1.label, gen2.label}
+            for component in attached:
+                assert component.label in labels
+                attached_subsystems = my_sys.list_parent_components(component)
+                assert len(attached_subsystems) == 1
+                assert attached_subsystems[0].name == f"test-subsystem{i}"
+                assert not my_sys.list_parent_components(attached_subsystems[0])
+                assert my_sys.list_child_components(component) == [bus]
+                assert my_sys.list_child_components(component, component_type=SimpleBus) == [bus]
+
+            for component in (bus, gen1, gen2):
+                with pytest.raises(ISOperationNotAllowed):
+                    my_sys.remove_component(component)
+
+    check_attached_components(system)
+    system._component_mgr._associations.clear()
+    for component in system.iter_all_components():
+        assert not system.list_parent_components(component)
+
+    system.rebuild_component_associations()
+    check_attached_components(system)
+
+    save_dir = tmp_path / "test_system"
+    system.save(save_dir)
+    system2 = SimpleSystem.from_json(save_dir / "system.json")
+    check_attached_components(system2)
+
+    bus = system2.get_component(SimpleBus, "bus1")
+    with pytest.raises(ISOperationNotAllowed):
+        system2.remove_component(bus)
+    system2.remove_component(bus, force=True)
+    gen = system2.get_component(SimpleGenerator, "gen1a")
+    with pytest.raises(ISNotStored):
+        system2.get_component(SimpleBus, gen.bus.name)
+
+
 def test_time_series_attach_from_array():
     system = SimpleSystem()
     bus = SimpleBus(name="test-bus", voltage=1.1)
@@ -156,7 +214,7 @@ def test_time_series_attach_from_array():
     system.add_time_series(ts, gen1, gen2)
     assert system.has_time_series(gen1, variable_name=variable_name)
     assert system.has_time_series(gen2, variable_name=variable_name)
-    assert system.get_time_series(gen1, variable_name=variable_name).data == ts.data
+    assert np.array_equal(system.get_time_series(gen1, variable_name=variable_name).data, ts.data)
 
 
 def test_time_series():
@@ -174,7 +232,7 @@ def test_time_series():
     ts = SingleTimeSeries.from_time_array(data, variable_name, time_array)
     with pytest.raises(ValueError, match="The first argument must"):
         # Test a common mistake.
-        system.add_time_series(gen1, ts)
+        system.add_time_series(gen1, ts)  # type: ignore
 
     system.add_time_series(ts, gen1, gen2)
     assert system.has_time_series(gen1, variable_name=variable_name)
@@ -189,10 +247,10 @@ def test_time_series():
 
 
 @pytest.mark.parametrize(
-    "params", list(itertools.product([True, False], [True, False], [True, False]))
+    "in_memory,use_quantity,sql_json",
+    list(itertools.product([True, False], [True, False], [True, False])),
 )
-def test_time_series_retrieval(params):
-    in_memory, use_quantity, sql_json = params
+def test_time_series_retrieval(in_memory, use_quantity, sql_json):
     try:
         if not sql_json:
             os.environ["__INFRASYS_NON_JSON_SQLITE__"] = "1"
@@ -207,7 +265,7 @@ def test_time_series_retrieval(params):
         data = (
             [ActivePower(np.random.rand(length), "watts") for _ in range(4)]
             if use_quantity
-            else [np.random.rand(length) for _ in range(4)]
+            else [np.random.rand(length) for _ in range(4)]  # type: ignore
         )
         variable_name = "active_power"
         ts1 = SingleTimeSeries.from_time_array(data[0], variable_name, time_array)
@@ -230,29 +288,33 @@ def test_time_series_retrieval(params):
         for metadata in system.list_time_series_metadata(gen, scenario="high"):
             assert metadata.user_attributes["scenario"] == "high"
 
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="high", model_year="2030"
+        assert all(
+            np.equal(
+                system.get_time_series(
+                    gen, variable_name, scenario="high", model_year="2030"
+                ).data,
+                ts1.data,
             )
-            == ts1
         )
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="high", model_year="2035"
+        assert all(
+            np.equal(
+                system.get_time_series(
+                    gen, variable_name, scenario="high", model_year="2035"
+                ).data,
+                ts2.data,
             )
-            == ts2
         )
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="low", model_year="2030"
+        assert all(
+            np.equal(
+                system.get_time_series(gen, variable_name, scenario="low", model_year="2030").data,
+                ts3.data,
             )
-            == ts3
         )
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="low", model_year="2035"
+        assert all(
+            np.equal(
+                system.get_time_series(gen, variable_name, scenario="low", model_year="2035").data,
+                ts4.data,
             )
-            == ts4
         )
 
         with pytest.raises(ISAlreadyAttached):
@@ -264,12 +326,6 @@ def test_time_series_retrieval(params):
             gen, variable_name=variable_name, scenario="high", model_year="2030"
         )
         assert not system.has_time_series(gen, variable_name=variable_name, model_year="2036")
-        assert (
-            system.get_time_series(
-                gen, variable_name=variable_name, scenario="high", model_year="2030"
-            )
-            == ts1
-        )
         with pytest.raises(ISOperationNotAllowed):
             system.get_time_series(gen, variable_name=variable_name, scenario="high")
         with pytest.raises(ISNotStored):
@@ -379,22 +435,22 @@ def test_time_series_slices(in_memory):
     first_timestamp = start
     second_timestamp = start + resolution
     last_timestamp = start + (length - 1) * resolution
-    assert len(system.time_series.get(gen, variable_name=variable_name).data) == length
-    assert len(system.time_series.get(gen, variable_name=variable_name, length=10).data) == 10
+    ts_tmp = system.time_series.get(gen, variable_name=variable_name)
+    assert isinstance(ts_tmp, SingleTimeSeries)
+    assert len(ts_tmp.data) == length
+    ts_tmp = system.time_series.get(gen, variable_name=variable_name, length=10)
+    assert isinstance(ts_tmp, SingleTimeSeries)
+    assert len(ts_tmp.data) == 10
     ts2 = system.time_series.get(
         gen, variable_name=variable_name, start_time=second_timestamp, length=5
     )
+    assert isinstance(ts2, SingleTimeSeries)
     assert len(ts2.data) == 5
     assert ts2.data.tolist() == data[1:6]
 
-    assert (
-        len(
-            system.time_series.get(
-                gen, variable_name=variable_name, start_time=second_timestamp
-            ).data
-        )
-        == len(data) - 1
-    )
+    ts_tmp = system.time_series.get(gen, variable_name=variable_name, start_time=second_timestamp)
+    assert isinstance(ts_tmp, SingleTimeSeries)
+    assert len(ts_tmp.data) == len(data) - 1
 
     with pytest.raises(ISConflictingArguments, match="is less than"):
         system.time_series.get(
@@ -453,16 +509,19 @@ def test_deepcopy_component(simple_system_with_time_series: SimpleSystem):
     assert gen2.bus is not gen1.bus
 
 
-@pytest.mark.parametrize("in_memory", [True, False])
-def test_remove_component(in_memory):
+@pytest.mark.parametrize("inputs", [(True, False), (True, False)])
+def test_remove_component(inputs):
+    in_memory, cascade_down = inputs
     system = SimpleSystem(
         name="test-system",
         auto_add_composed_components=True,
         time_series_in_memory=in_memory,
     )
     gen1 = SimpleGenerator.example()
+    bus = gen1.bus
     system.add_components(gen1)
     gen2 = system.copy_component(gen1, name="gen2", attach=True)
+    assert gen2.bus is bus
     variable_name = "active_power"
     length = 8784
     data = range(length)
@@ -471,11 +530,13 @@ def test_remove_component(in_memory):
     ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     system.add_time_series(ts, gen1, gen2)
 
-    system.remove_component_by_name(type(gen1), gen1.name)
+    system.remove_component_by_name(type(gen1), gen1.name, cascade_down=cascade_down)
+    assert system.has_component(bus)
     assert not system.has_time_series(gen1)
     assert system.has_time_series(gen2)
 
-    system.remove_component_by_uuid(gen2.uuid)
+    system.remove_component_by_uuid(gen2.uuid, cascade_down=cascade_down)
+    assert system.has_component(bus) != cascade_down
     assert not system.has_time_series(gen2)
 
     with pytest.raises(ISNotStored):

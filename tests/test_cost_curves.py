@@ -1,4 +1,4 @@
-from infrasys.cost_curves import CostCurve, FuelCurve
+from infrasys.cost_curves import CostCurve, FuelCurve, ProductionVariableCostCurve, UnitSystem
 from infrasys.function_data import LinearFunctionData
 from infrasys.value_curves import InputOutputCurve
 from infrasys import Component
@@ -9,19 +9,30 @@ class CurveComponent(Component):
     cost_curve: CostCurve
 
 
+class NestedCostCurve(ProductionVariableCostCurve):
+    variable: CostCurve | FuelCurve | None = None
+
+
+class TestComponentWithProductionCost(Component):
+    cost: NestedCostCurve | None = None
+
+
 def test_cost_curve():
     # Cost curve
     cost_curve = CostCurve(
         value_curve=InputOutputCurve(
             function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0)
         ),
-        vom_units=InputOutputCurve(
-            function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
+        vom_cost=InputOutputCurve(
+            function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0),
         ),
+        power_units=UnitSystem.NATURAL_UNITS,
     )
 
+    assert isinstance(cost_curve.value_curve.function_data, LinearFunctionData)
     assert cost_curve.value_curve.function_data.proportional_term == 1.0
-    assert cost_curve.vom_units.function_data.proportional_term == 2.0
+    assert isinstance(cost_curve.vom_cost.function_data, LinearFunctionData)
+    assert cost_curve.vom_cost.function_data.proportional_term == 2.0
 
 
 def test_fuel_curve():
@@ -30,14 +41,17 @@ def test_fuel_curve():
         value_curve=InputOutputCurve(
             function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0)
         ),
-        vom_units=InputOutputCurve(
+        vom_cost=InputOutputCurve(
             function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
         ),
         fuel_cost=2.5,
+        power_units=UnitSystem.NATURAL_UNITS,
     )
 
+    assert isinstance(fuel_curve.value_curve.function_data, LinearFunctionData)
     assert fuel_curve.value_curve.function_data.proportional_term == 1.0
-    assert fuel_curve.vom_units.function_data.proportional_term == 2.0
+    assert isinstance(fuel_curve.vom_cost.function_data, LinearFunctionData)
+    assert fuel_curve.vom_cost.function_data.proportional_term == 2.0
     assert fuel_curve.fuel_cost == 2.5
 
 
@@ -48,9 +62,10 @@ def test_value_curve_custom_serialization():
             value_curve=InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0)
             ),
-            vom_units=InputOutputCurve(
+            vom_cost=InputOutputCurve(
                 function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
             ),
+            power_units=UnitSystem.NATURAL_UNITS,
         ),
     )
 
@@ -64,37 +79,26 @@ def test_value_curve_custom_serialization():
     assert model_dump["cost_curve"]["value_curve"]["function_data"]["proportional_term"] == 1.0
 
 
-def test_value_curve_serialization(tmp_path):
+def test_nested_value_curve_serialization(tmp_path):
     system = SimpleSystem(auto_add_composed_components=True)
-
-    v1 = CurveComponent(
-        name="test",
-        cost_curve=CostCurve(
+    gen_name = "thermal-gen"
+    gen_with_operation_cost = TestComponentWithProductionCost(
+        name=gen_name,
+        cost=NestedCostCurve(
+            power_units=UnitSystem.NATURAL_UNITS,
             value_curve=InputOutputCurve(
-                function_data=LinearFunctionData(proportional_term=1.0, constant_term=2.0)
-            ),
-            vom_units=InputOutputCurve(
-                function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
+                function_data=LinearFunctionData(proportional_term=0, constant_term=10)
             ),
         ),
     )
-    system.add_component(v1)
+
+    # Test serialization
+    system.add_component(gen_with_operation_cost)
     filename = tmp_path / "value_curve.json"
-
     system.to_json(filename, overwrite=True)
-    system2 = SimpleSystem.from_json(filename)
 
-    assert system2 is not None
-
-    v2 = system2.get_component(CurveComponent, "test")
-
-    assert v2 is not None
-    assert isinstance(v1.cost_curve.value_curve.function_data, LinearFunctionData)
-    assert (
-        v1.cost_curve.value_curve.function_data.proportional_term
-        == v2.cost_curve.value_curve.function_data.proportional_term
-    )
-    assert (
-        v1.cost_curve.value_curve.function_data.constant_term
-        == v2.cost_curve.value_curve.function_data.constant_term
-    )
+    # Test deserialization
+    deserialized_system = SimpleSystem.from_json(filename)
+    gen_deserialized = deserialized_system.get_component(TestComponentWithProductionCost, gen_name)
+    assert gen_deserialized is not None
+    assert gen_deserialized.cost == gen_with_operation_cost.cost

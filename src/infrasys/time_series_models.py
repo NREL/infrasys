@@ -4,12 +4,20 @@ import abc
 import importlib
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Literal, Optional, Type, TypeAlias, Union, Sequence
+from typing import (
+    Any,
+    Literal,
+    Optional,
+    Type,
+    TypeAlias,
+    Union,
+    Sequence,
+)
 from uuid import UUID
 
 import numpy as np
-import pyarrow as pa
 import pint
+from numpy.typing import NDArray
 from pydantic import (
     Field,
     WithJsonSchema,
@@ -20,8 +28,9 @@ from pydantic import (
 )
 from typing_extensions import Annotated
 
-from infrasys.base_quantity import BaseQuantity
-from infrasys.exceptions import ISConflictingArguments
+from infrasys.exceptions import (
+    ISConflictingArguments,
+)
 from infrasys.models import InfraSysBaseModelWithIdentifers, InfraSysBaseModel
 from infrasys.normalization import NormalizationModel
 
@@ -30,7 +39,7 @@ TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
 
 
-ISArray: TypeAlias = Sequence | pa.Array | np.ndarray | BaseQuantity
+ISArray: TypeAlias = Sequence | NDArray | pint.Quantity
 
 
 class TimeSeriesStorageType(str, Enum):
@@ -45,7 +54,6 @@ class TimeSeriesStorageType(str, Enum):
 class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Base class for all time series models"""
 
-    units: Optional[str] = None
     variable_name: str
     normalization: NormalizationModel = None
 
@@ -63,7 +71,7 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
 class SingleTimeSeries(TimeSeriesData):
     """Defines a time array with a single dimension of floats."""
 
-    data: pa.Array | pint.Quantity
+    data: NDArray | pint.Quantity
     resolution: timedelta
     initial_time: datetime
 
@@ -72,22 +80,36 @@ class SingleTimeSeries(TimeSeriesData):
         """Return the length of the data."""
         return len(self.data)
 
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, SingleTimeSeries):
+            raise NotImplementedError
+        is_equal = True
+        for field in self.model_fields_set:
+            if field == "data":
+                if not (self.data == other.data).all():
+                    is_equal = False
+                    break
+            else:
+                if not getattr(self, field) == getattr(other, field):
+                    is_equal = False
+                    break
+        return is_equal
+
     @field_validator("data", mode="before")
     @classmethod
-    def check_data(cls, data) -> pa.Array | BaseQuantity:  # Standarize what object we receive.
+    def check_data(cls, data) -> NDArray | pint.Quantity:  # Standarize what object we receive.
         """Check time series data."""
         if len(data) < 2:
             msg = f"SingleTimeSeries length must be at least 2: {len(data)}"
             raise ValueError(msg)
 
-        if isinstance(data, BaseQuantity):
-            if not isinstance(data.magnitude, pa.Array):
-                cls = type(data)
-                return cls(pa.array(data.magnitude), data.units)
+        if isinstance(data, pint.Quantity):
+            if not isinstance(data.magnitude, np.ndarray):
+                return type(data)(np.array(data.magnitude), units=data.units)
             return data
 
-        if not isinstance(data, pa.Array):
-            return pa.array(data)
+        if not isinstance(data, np.ndarray):
+            return np.array(data)
 
         return data
 
@@ -187,6 +209,12 @@ class SingleTimeSeries(TimeSeriesData):
     def get_time_series_metadata_type() -> Type:
         return SingleTimeSeriesMetadata
 
+    @property
+    def data_array(self) -> NDArray:
+        if isinstance(self.data, pint.Quantity):
+            return self.data.magnitude
+        return self.data
+
 
 class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
@@ -197,7 +225,7 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
 
 
 class QuantityMetadata(InfraSysBaseModel):
-    """Contains the metadata needed to de-serialize time series stored within a BaseQuantity."""
+    """Contains the metadata needed to de-serialize time series stored within a pint.Quantity."""
 
     module: str
     quantity_type: Annotated[Type, WithJsonSchema({"type": "string"})]
@@ -230,6 +258,7 @@ class TimeSeriesMetadata(InfraSysBaseModel, abc.ABC):
     user_attributes: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
+    # TODO: refactor to type_ to avoid overriding builtin?
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @property
@@ -264,7 +293,7 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
                 quantity_type=type(time_series.data),
                 units=str(time_series.data.units),
             )
-            if isinstance(time_series.data, BaseQuantity)
+            if isinstance(time_series.data, pint.Quantity)
             else None
         )
         return cls(

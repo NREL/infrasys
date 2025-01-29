@@ -8,11 +8,12 @@ from tempfile import mkdtemp
 from typing import Any, Optional
 from uuid import UUID
 
+import numpy as np
+from numpy.typing import NDArray
 import pyarrow as pa
 from loguru import logger
 
 from infrasys.exceptions import ISNotStored
-from infrasys.base_quantity import BaseQuantity
 from infrasys.time_series_models import (
     SingleTimeSeries,
     SingleTimeSeriesMetadata,
@@ -54,20 +55,25 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
     ) -> None:
-        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
-        if not fpath.exists():
-            if isinstance(time_series, SingleTimeSeries):
-                arrow_batch = self._convert_to_record_batch(time_series, metadata.variable_name)
-                with pa.OSFile(str(fpath), "wb") as sink:  # type: ignore
-                    with pa.ipc.new_file(sink, arrow_batch.schema) as writer:
-                        writer.write(arrow_batch)
-            else:
-                msg = f"Bug: need to implement add_time_series for {type(time_series)}"
-                raise NotImplementedError(msg)
-            logger.trace("Saving time series to {}", fpath)
-            logger.debug("Added {} to time series storage", time_series.summary)
+        if isinstance(time_series, SingleTimeSeries):
+            self.add_raw_single_time_series(metadata.time_series_uuid, time_series.data_array)
         else:
-            logger.debug("{} was already stored", time_series.summary)
+            msg = f"Bug: need to implement add_time_series for {type(time_series)}"
+            raise NotImplementedError(msg)
+
+    def add_raw_single_time_series(
+        self, time_series_uuid: UUID, time_series_data: NDArray
+    ) -> None:
+        fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
+        if not fpath.exists():
+            arrow_batch = self._convert_to_record_batch(time_series_data, str(time_series_uuid))
+            with pa.OSFile(str(fpath), "wb") as sink:  # type: ignore
+                with pa.ipc.new_file(sink, arrow_batch.schema) as writer:
+                    writer.write(arrow_batch)
+            logger.trace("Saving time series to {}", fpath)
+            logger.debug("Added {} to time series storage", time_series_uuid)
+        else:
+            logger.debug("{} was already stored", time_series_uuid)
 
     def get_time_series(
         self,
@@ -110,23 +116,45 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             base_ts = pa.ipc.open_file(source).get_record_batch(0)
             logger.trace("Reading time series from {}", fpath)
         index, length = metadata.get_range(start_time=start_time, length=length)
-        data = base_ts[metadata.variable_name][index : index + length]
+        columns = base_ts.column_names
+        if len(columns) != 1:
+            msg = f"Bug: expected a single column: {columns=}"
+            raise Exception(msg)
+        # This should be equal to metadata.time_series_uuid in versions
+        # v0.2.1 or later. Earlier versions used the time series variable name.
+        column = columns[0]
+        data = base_ts[column][index : index + length]
         if metadata.quantity_metadata is not None:
-            data = metadata.quantity_metadata.quantity_type(data, metadata.quantity_metadata.units)
+            np_array = metadata.quantity_metadata.quantity_type(
+                data, metadata.quantity_metadata.units
+            )
+        else:
+            np_array = np.array(data)
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
             variable_name=metadata.variable_name,
             resolution=metadata.resolution,
             initial_time=start_time or metadata.initial_time,
-            data=data,
+            data=np_array,
             normalization=metadata.normalization,
         )
 
-    def _convert_to_record_batch(self, array: SingleTimeSeries, variable_name: str):
+    def get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
+        fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
+        with pa.OSFile(str(fpath), "r") as source:
+            base_ts = pa.ipc.open_file(source).get_record_batch(0)
+            logger.trace("Reading time series from {}", fpath)
+        columns = base_ts.column_names
+        if len(columns) != 1:
+            msg = f"Bug: expected a single column: {columns=}"
+            raise Exception(msg)
+        column = columns[0]
+        return base_ts[column].to_numpy()
+
+    def _convert_to_record_batch(self, time_series_array: NDArray, column: str) -> pa.RecordBatch:
         """Create record batch to save array to disk."""
-        pa_array = array.data.magnitude if isinstance(array.data, BaseQuantity) else array.data
-        assert isinstance(pa_array, pa.Array)
-        schema = pa.schema([pa.field(variable_name, pa_array.type)])
+        pa_array = pa.array(time_series_array)
+        schema = pa.schema([pa.field(column, pa_array.type)])
         return pa.record_batch([pa_array], schema=schema)
 
 

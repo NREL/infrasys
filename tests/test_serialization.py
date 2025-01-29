@@ -4,7 +4,6 @@ import os
 from datetime import datetime, timedelta
 
 import numpy as np
-import pyarrow as pa
 import pytest
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
@@ -98,7 +97,7 @@ def test_serialize_time_series(tmp_path, time_series_in_memory):
         system2.remove_time_series(gen1b, variable_name=variable_name)
 
     ts2 = system.get_time_series(gen1b, variable_name=variable_name)
-    assert ts2.data == ts.data
+    assert np.array_equal(ts2.data, ts.data)
 
     system3 = SimpleSystem.from_json(filename, time_series_read_only=False)
     assert system3.get_time_series_directory() != SimpleSystem._make_time_series_directory(
@@ -121,6 +120,7 @@ def test_serialize_quantity(tmp_path, distance):
     system = SimpleSystem()
     gen = SimpleGenerator.example()
     component = ComponentWithPintQuantity(name="test", distance=distance)
+    assert gen.bus.coordinates is not None
     system.add_components(gen.bus.coordinates, gen.bus, gen, component)
     sys_file = tmp_path / "system.json"
     system.to_json(sys_file)
@@ -156,9 +156,8 @@ def test_with_time_series_quantity(tmp_path):
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == initial_time
-    assert isinstance(ts2.data.magnitude, pa.Array)
-    assert ts2.data[-1].as_py() == length - 1
-    assert ts2.data.magnitude == pa.array(range(length))
+    assert isinstance(ts2.data.magnitude, np.ndarray)
+    assert np.array_equal(ts2.data.magnitude, np.array(range(length)))
 
 
 @pytest.mark.parametrize("in_memory", [True, False])

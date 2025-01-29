@@ -18,11 +18,15 @@ class ISFileExists(ISBaseException):
 
 
 class ISConflictingArguments(ISBaseException):
-    """Raised if the arguments are conflict."""
+    """Raised if the arguments conflict."""
 
 
 class ISConflictingSystem(ISBaseException):
     """Raised if the system has conflicting values."""
+
+
+class ISInvalidParameter(ISBaseException):
+    """Raised if a parameter is invalid."""
 
 
 class ISNotStored(ISBaseException):

@@ -1,8 +1,9 @@
 """Test related to arrow storage module."""
+
 from datetime import datetime, timedelta
 
 import pytest
-import pyarrow as pa
+import numpy as np
 
 from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower
@@ -21,8 +22,8 @@ def test_single_time_series_attributes():
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == start
-    assert isinstance(ts.data, pa.Array)
-    assert ts.data[-1].as_py() == length - 1
+    assert isinstance(ts.data, np.ndarray)
+    assert ts.data[-1] == length - 1
 
 
 def test_from_array_construction():
@@ -37,8 +38,8 @@ def test_from_array_construction():
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == start
-    assert isinstance(ts.data, pa.Array)
-    assert ts.data[-1].as_py() == length - 1
+    assert isinstance(ts.data, np.ndarray)
+    assert ts.data[-1] == length - 1
 
 
 def test_invalid_sequence_length():
@@ -65,8 +66,8 @@ def test_from_time_array_constructor():
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == initial_time
-    assert isinstance(ts.data, pa.Array)
-    assert ts.data[-1].as_py() == length - 1
+    assert isinstance(ts.data, np.ndarray)
+    assert ts.data[-1] == length - 1
 
 
 def test_with_quantity():
@@ -82,8 +83,8 @@ def test_with_quantity():
     assert ts.length == length
     assert ts.resolution == resolution
     assert ts.initial_time == initial_time
-    assert isinstance(ts.data.magnitude, pa.Array)
-    assert ts.data[-1].as_py() == length - 1
+    assert isinstance(ts.data, ActivePower)
+    assert ts.data[-1].magnitude == length - 1
 
 
 def test_normalization():
@@ -99,4 +100,4 @@ def test_normalization():
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == len(data)
     for i, val in enumerate(ts.data):
-        assert val.as_py() == data[i] / max_val
+        assert val == data[i] / max_val

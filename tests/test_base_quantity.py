@@ -1,7 +1,10 @@
+import os
+from infrasys.system import System
 from pydantic import ValidationError
 from infrasys.base_quantity import ureg, BaseQuantity
 from infrasys.component import Component
 from infrasys.quantities import ActivePower, Time, Voltage
+from pint import Quantity
 from pint.errors import DimensionalityError
 import pytest
 import numpy as np
@@ -16,7 +19,7 @@ def test_base_quantity():
 
     unit = distance_quantity(100, "meter")
     assert isinstance(unit, BaseQuantity)
-
+    assert isinstance(unit, Quantity)
     # Check that we can not assign units that are not-related.
     with pytest.raises(DimensionalityError):
         _ = distance_quantity(100, "kWh")
@@ -75,7 +78,7 @@ def test_base_unit_validation():
     with pytest.raises(ValidationError):
         BaseQuantityComponent(name="test", voltage=Voltage(test_magnitude, "meter"))
 
-    test_component = BaseQuantityComponent(name="test", voltage=[0, 1])
+    test_component = BaseQuantityComponent(name="test", voltage=Voltage([0, 1], units="volt"))
     assert type(test_component.voltage) is Voltage
     assert test_component.voltage.magnitude.tolist() == [0, 1]
     assert test_component.voltage.units == test_unit
@@ -90,7 +93,7 @@ def test_different_validate(input_unit):
 
 
 def test_custom_serialization():
-    component = BaseQuantityComponent(name="test", voltage=10.0)
+    component = BaseQuantityComponent(name="test", voltage=Voltage(10.0, units="volt"))
 
     model_dump = component.model_dump(mode="json")
 
@@ -101,3 +104,14 @@ def test_custom_serialization():
 
     model_dump = component.model_dump(mode="json", context={"magnitude_only": True})
     assert model_dump["voltage"] == 10.0
+
+
+def test_system_save_with_pint_quantity(tmp_path):
+    component = BaseQuantityComponent(name="test", voltage=Voltage(np.float32(10.0), units="volt"))
+    system = System()
+    system.add_component(component)
+    custom_folder = "my_system"
+
+    fpath = tmp_path / custom_folder / "test_system.json"
+    system.to_json(fpath)
+    assert os.path.exists(fpath), f"Folder {fpath} was not created successfully"

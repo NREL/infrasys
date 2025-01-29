@@ -1,11 +1,14 @@
 """Defines models for cost functions"""
 
-from infrasys import Component
-from typing_extensions import Annotated
+from typing import List, NamedTuple
+
+import numpy as np
+from numpy.typing import NDArray
 from pydantic import Field, model_validator
 from pydantic.functional_validators import AfterValidator
-from typing import NamedTuple, List
-import numpy as np
+from typing_extensions import Annotated
+
+from infrasys.models import InfraSysBaseModel
 
 
 class XYCoords(NamedTuple):
@@ -15,10 +18,10 @@ class XYCoords(NamedTuple):
     y: float
 
 
-class FunctionData(Component):
+class FunctionData(InfraSysBaseModel):
     """BaseClass of FunctionData"""
 
-    name: Annotated[str, Field(frozen=True)] = ""
+    units: str | None = None
 
 
 class LinearFunctionData(FunctionData):
@@ -32,7 +35,8 @@ class LinearFunctionData(FunctionData):
     """
 
     proportional_term: Annotated[
-        float, Field(description="the proportional term in the represented function.")
+        float,
+        Field(description="the proportional term in the represented function."),
     ]
     constant_term: Annotated[
         float, Field(description="the constant term in the represented function.")
@@ -184,7 +188,7 @@ class PiecewiseStepData(FunctionData):
         return self
 
 
-def get_x_lengths(x_coords: List[float]) -> List[float]:
+def get_x_lengths(x_coords: List[float]) -> NDArray[np.float64]:
     return np.subtract(x_coords[1:], x_coords[:-1])
 
 
