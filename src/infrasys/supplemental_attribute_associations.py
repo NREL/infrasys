@@ -2,41 +2,15 @@
 
 import sqlite3
 import itertools
-import abc
-import json
+from uuid import UUID
+
 from loguru import logger
 
 from infrasys import Component
-from infrasys.models import InfraSysBaseModel
 from infrasys.supplemental_attribute import SupplementalAttribute
-from infrasys.time_series_metadata_store import (
-    _does_sqlite_support_json,
-    _compute_user_attribute_hash,
-    _raise_if_unsupported_sql_operation,
-    _make_user_attribute_filter,
-    _make_user_attribute_hash_filter,
-    _do_attributes_match,
-)
-from infrasys.serialization import (
-    deserialize_value,
-    SerializedTypeMetadata,
-)
 from infrasys.utils.sqlite import execute
-from typing import Any, Optional
-from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed, ISNotStored
-
-
-class SupplementalAttributeAssociations(InfraSysBaseModel, abc.ABC):
-    """Defines associations between system components and supplemental attributes"""
-
-    attribute: SupplementalAttribute
-    component: Component
-    user_attributes: dict[str, Any] = {}
-
-    # @property
-    # def label(self) -> str:
-    #    """Return the variable_name of the time series array with its type."""
-    #    return f"{self.type}.{self.variable_name}"
+from typing import Any, Optional, Sequence
+from infrasys.exceptions import ISAlreadyAttached
 
 
 class SupplementalAttributeAssociationsStore:
@@ -48,18 +22,7 @@ class SupplementalAttributeAssociationsStore:
         self._con = con
         if initialize:
             self._create_association_table()
-        self._supports_sqlite_json = _does_sqlite_support_json()
-        if not self._supports_sqlite_json:
-            # This is true on Ubuntu 22.04, which is used by GitHub runners as of March 2024.
-            # It is non-trivial to upgrade SQLite on those platforms.
-            # There is code in this file to preserve behavior with less than optimal performance
-            # in some cases. We can remove it when we're confident that users and runners have
-            # newer SQLite versions.
-            logger.debug(
-                "SQLite version {} does not support JSON queries, and so time series queries may "
-                "have degraded performance.",
-                sqlite3.sqlite_version,
-            )
+        self._create_indexes()
 
     def _create_association_table(self):
         schema = [
@@ -68,24 +31,27 @@ class SupplementalAttributeAssociationsStore:
             "attribute_type TEXT",
             "component_uuid TEXT",
             "component_type TEXT",
-            "user_attributes_hash TEXT",
         ]
         schema_text = ",".join(schema)
         cur = self._con.cursor()
         execute(cur, f"CREATE TABLE {self.TABLE_NAME}({schema_text})")
-        self._create_indexes(cur)
         self._con.commit()
         logger.debug("Created in-memory time series metadata table")
 
-    def _create_indexes(self, cur) -> None:
+    def _create_indexes(self) -> None:
+        cur = self._con.cursor()
         execute(
             cur,
-            f"CREATE INDEX by_cu_ct_sau_hash ON {self.TABLE_NAME} "
-            f"(component_uuid, component_type, attribute_type, user_attributes_hash)",
+            f"CREATE INDEX IF NOT EXISTS by_attribute ON {self.TABLE_NAME} "
+            f"(attribute_uuid, component_uuid, component_type)",
         )
-        execute(cur, f"CREATE INDEX by_component ON {self.TABLE_NAME} (attribute_uuid)")
+        execute(
+            cur,
+            f"CREATE INDEX IF NOT EXISTS by_component ON {self.TABLE_NAME} "
+            f"(component_uuid, attribute_uuid, attribute_type)",
+        )
 
-    def add(self, association: SupplementalAttributeAssociations) -> None:
+    def add(self, component: Component, attribute: SupplementalAttribute) -> None:
         """Add association to the database.
 
         Raises
@@ -93,44 +59,36 @@ class SupplementalAttributeAssociationsStore:
         ISAlreadyAttached
             Raised if the time series metadata already stored.
         """
-
-        attribute_hash = _compute_user_attribute_hash(association.user_attributes)
-        where_clause, params = self._make_where_clause(
-            association.component,
-            association.attribute,
-            **association.user_attributes,
-        )
+        query = f"""
+            SELECT id FROM {self.TABLE_NAME}
+            WHERE attribute_uuid = ? AND component_uuid = ?
+            LIMIT 1
+        """
+        params = (str(attribute.uuid), str(component.uuid))
         cur = self._con.cursor()
-
-        query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
         res = execute(cur, query, params=params).fetchone()
-        if res[0] > 0:
-            msg = f"attributes with {association=} is already stored."
+        if res:
+            msg = f"An association with {component=} {attribute=} is already stored."
             raise ISAlreadyAttached(msg)
 
-        # Check this later
-        print(association.component.uuid)
-        rows = [
-            (
-                None,
-                str(association.attribute.uuid),
-                str(type(association.attribute)),
-                str(association.component.uuid),
-                str(type(association.component)),
-                attribute_hash,
-            )
-        ]
+        row = (
+            None,
+            str(attribute.uuid),
+            type(attribute).__name__,
+            str(component.uuid),
+            type(component).__name__,
+        )
 
-        self._insert_rows(rows)
+        placeholder = ",".join(itertools.repeat("?", len(row)))
+        query = f"INSERT INTO {self.TABLE_NAME} VALUES ({placeholder})"
+        execute(cur, query, params=row)
+        self._con.commit()
 
-    def get_association(
+    def has_association_by_component_attribute(
         self,
         component: Component,
         attribute: SupplementalAttribute,
-        # variable_name: Optional[str] = None,
-        # time_series_type: Optional[str] = None,
-        **user_attributes,
-    ) -> SupplementalAttributeAssociations:
+    ) -> bool:
         """Return the associations matching the inputs.
 
         Raises
@@ -138,143 +96,172 @@ class SupplementalAttributeAssociationsStore:
         ISOperationNotAllowed
             Raised if more than one metadata instance matches the inputs.
         """
-
-        association_list = self.list_association(
-            component,
-            attribute,
-            # variable_name=variable_name,
-            # time_series_type=time_series_type,
-            **user_attributes,
-        )
-        if not association_list:
-            msg = "No supplemental attribute matching the inputs is stored"
-            raise ISNotStored(msg)
-
-        if len(association_list) > 1:
-            msg = f"Found more than association matching inputs: {len(association_list)}"
-            raise ISOperationNotAllowed(msg)
-
-        return association_list[0]
-
-    def list_association(
-        self,
-        component: Component,
-        attribute: SupplementalAttribute,
-        # variable_name: Optional[str] = None,
-        # time_series_type: Optional[str] = None,
-        **user_attributes,
-    ) -> list[SupplementalAttributeAssociations]:
-        """Return a list of associations that match the query."""
-        if not self._supports_sqlite_json:
-            return [
-                x[1]
-                for x in self._list_association_no_sql_json(
-                    component,
-                    attribute
-                    # variable_name=variable_name,
-                    # time_series_type=time_series_type,
-                    **user_attributes,
-                )
-            ]
-
-        where_clause, params = self._make_where_clause(component, attribute)
-        query = f"SELECT metadata FROM {self.TABLE_NAME} WHERE {where_clause}"
-        cur = self._con.cursor()
-        rows = execute(cur, query, params=params).fetchall()
-        return [_deserialize_association(x[0]) for x in rows]
-
-    def _list_association_no_sql_json(
-        self,
-        component: Component,
-        attribute: SupplementalAttribute,
-        # variable_name: Optional[str] = None,
-        # time_series_type: Optional[str] = None,
-        **user_attributes,
-    ) -> list[tuple[int, SupplementalAttributeAssociations]]:
-        """Return a list of association that match the query.
-
-        Returns
-        -------
-        list[tuple[int, TimeSeriesMetadata]]
-            The first element of each tuple is the database id field that uniquely identifies the
-            row.
+        query = f"""
+            SELECT id FROM {self.TABLE_NAME}
+            WHERE attribute_uuid = ? AND component_uuid = ?
+            LIMIT 1
         """
-        where_clause, params = self._make_where_clause(component, attribute)
-        query = f"SELECT id, metadata FROM {self.TABLE_NAME} WHERE {where_clause}"
+        params = (str(attribute.uuid), str(component.uuid))
+        return self._has_rows(query, params)
+
+    def has_association_by_attribute(self, attribute: SupplementalAttribute) -> bool:
+        """Return true if there is at least one association matching the inputs."""
+        # Note: Unlike the other has_association methods, this is not covered by an index.
+        query = f"SELECT id FROM {self.TABLE_NAME} WHERE attribute_uuid = ?"
+        params = (str(attribute.uuid),)
+        return self._has_rows(query, params)
+
+    def has_association_by_component(self, component: Component) -> bool:
+        """Return true if there is at least one association matching the inputs."""
+        query = f"SELECT id FROM {self.TABLE_NAME} WHERE component_uuid = ?"
+        params = (str(component.uuid),)
+        return self._has_rows(query, params)
+
+    def has_association_by_component_attribute_type(
+        self, component: Component, attribute_type: str
+    ) -> bool:
+        query = f"""
+            SELECT attribute_uuid
+            FROM {self.TABLE_NAME}
+            WHERE component_uuid = ? AND attribute_type = ?
+            LIMIT 1
+        """
+        params = (str(component.uuid), attribute_type)
+        return self._has_rows(query, params)
+
+    def _has_rows(self, query: str, params: Sequence[Any]) -> bool:
         cur = self._con.cursor()
-        rows = execute(cur, query, params).fetchall()
+        res = execute(cur, query, params=params).fetchone()
+        return res[0] > 0
 
-        association_list = []
-        for row in rows:
-            association = _deserialize_association(row[1])
-            if _do_attributes_match(association.user_attributes, **user_attributes):
-                association_list.append((row[0], association))
-        return association_list
-
-    def _insert_rows(self, rows: list[tuple]) -> None:
+    def list_associated_component_uuids(self, attribute: SupplementalAttribute) -> list[UUID]:
+        """Return the component UUIDs associated with the attribute."""
+        query = f"""
+            SELECT component_uuid
+            FROM {self.TABLE_NAME}
+            WHERE attribute_uuid = ?
+        """
+        params = (str(attribute.uuid),)
         cur = self._con.cursor()
-        placeholder = ",".join(["?"] * len(rows[0]))
-        query = f"INSERT INTO {self.TABLE_NAME} VALUES({placeholder})"
-        try:
-            cur.executemany(query, rows)
-        finally:
-            self._con.commit()
+        rows = execute(cur, query, params=params)
+        return [UUID(x[0]) for x in rows]
 
-    def _make_where_clause(
+    def list_associated_supplemental_attribute_uuids(
+        self,
+        component: Component,
+        attribute_type: Optional[str] = None,
+    ) -> list[UUID]:
+        """Return the supplemental attribute UUIDs associated with the component and attribute type."""
+        # TODO: attribute_type must be concrete
+        if attribute_type is None:
+            where_clause = "component_uuid = ?"
+            params = (str(component.uuid),)
+        else:
+            where_clause = "attribute_type = ? AND component_uuid = ?"
+            params = (attribute_type, str(component.uuid))  # type: ignore
+        query = f"""
+            SELECT attribute_uuid
+            FROM {self.TABLE_NAME}
+            WHERE {where_clause}
+        """
+        cur = self._con.cursor()
+        rows = execute(cur, query, params=params)
+        return [UUID(x[0]) for x in rows]
+
+    def remove_association_by_attribute(
+        self,
+        attribute: SupplementalAttribute,
+    ) -> None:
+        """Remove all associations with the given attribute."""
+        where_clause = "WHERE attribute_uuid = ?"
+        params = (str(attribute.uuid),)
+        num_deleted = self._remove_associations(where_clause, params)
+        if num_deleted < 1:
+            msg = f"Bug: unexpected number of deletions: {num_deleted}. Should have been >= 1."
+            raise Exception(msg)
+
+    def remove_association(
         self,
         component: Component,
         attribute: SupplementalAttribute,
-        attribute_hash: Optional[str] = None,
-        **user_attributes: str,
-    ) -> tuple[str, list[str]]:
-        params: list[str] = []
-        component_str = self._make_components_str(params, component)
-        attribute_str = self._make_attribute_str(params, component)
-        print(component_str)
-        print(attribute_str)
-        if attribute_hash is None and user_attributes:
-            _raise_if_unsupported_sql_operation()
-            ua_hash_filter = _make_user_attribute_filter(user_attributes, params)
-            ua_str = f"AND {ua_hash_filter}"
-        else:
-            ua_str = ""
+    ) -> None:
+        """Remove the association between the attribute and component."""
+        where_clause = "WHERE attribute_uuid = ? AND component_uuid = ?"
+        params = (str(attribute.uuid), str(component.uuid))
+        num_deleted = self._remove_associations(where_clause, params)
+        if num_deleted != 1:
+            msg = f"Bug: unexpected number of deletions: {num_deleted}. Should have been 1."
+            raise Exception(msg)
 
-        if attribute_hash:
-            ua_hash_filter = _make_user_attribute_hash_filter(attribute_hash, params)
-            ua_hash = f"AND {ua_hash_filter}"
-        else:
-            ua_hash = ""
+    def remove_associations(self, attribute_type: str) -> None:
+        """Remove all associations of the given type."""
+        where_clause = "WHERE attribute_type = ?"
+        params = (attribute_type,)
+        num_deleted = self._remove_associations(where_clause, params)
+        logger.debug("Deleted %s supplemental attribute associations", num_deleted)
 
-        return f"({component_str}) {ua_str} {ua_hash}", params
+    def _remove_associations(self, where_clause: str, params: Sequence[Any]) -> int:
+        query = f"DELETE FROM {self.TABLE_NAME} {where_clause}"
+        cur = self._con.cursor()
+        execute(cur, query, params)
+        rows = execute(cur, "SELECT CHANGES() AS changes").fetchall()
+        assert len(rows) == 1, rows
+        row = rows[0]
+        logger.debug("Deleted %s rows from the time series metadata table", row[0])
+        self._con.commit()
+        return row[0]
 
-    def _make_components_str(self, params: list[str], *components: Component) -> str:
-        if not components:
-            msg = "At least one component must be passed."
-            raise ISOperationNotAllowed(msg)
+    def get_attribute_counts_by_type(self) -> list[dict[str, Any]]:
+        """Return a list of OrderedDict of stored attribute counts by type."""
+        query = f"""
+            SELECT
+                attribute_type
+                ,count(*) AS count
+            FROM {self.TABLE_NAME}
+            GROUP BY
+                attribute_type
+            ORDER BY
+                attribute_type
+        """
+        cur = self._con.cursor()
+        rows = execute(cur, query).fetchall()
+        return [{"type": x.attribute_type, "county": x.count} for x in rows]
 
-        or_clause = "OR ".join((itertools.repeat("component_uuid = ? ", len(components))))
+    # def get_attribute_summary_table(self) -> pd.DataFrame:
+    #    """Return a DataFrame with the number of supplemental attributes by type for components."""
+    #    query = f"""
+    #        SELECT
+    #            attribute_type
+    #            ,component_type
+    #            ,count(*) AS count
+    #        FROM {self.TABLE_NAME}
+    #        GROUP BY
+    #            attribute_type
+    #            ,component_type
+    #        ORDER BY
+    #            attribute_type
+    #            ,component_type
+    #    """
+    #    cur = self._con.cursor()
+    #    rows = execute(cur, query).fetchall()
+    #    breakpoint()
+    #    pass
+    #    #return DataFrame(_execute(associations, query))
 
-        for component in components:
-            params.append(str(component.uuid))
+    def get_num_attributes(self) -> int:
+        """Return the number of supplemental attributes."""
+        query = f"""
+            SELECT COUNT(DISTINCT attribute_uuid) AS count
+            FROM {self.TABLE_NAME}
+        """
+        cur = self._con.cursor()
+        return execute(cur, query)[0].count
 
-        return f"({or_clause})"
-
-    def _make_attribute_str(self, params: list[str], *components: SupplementalAttribute) -> str:
-        if not components:
-            msg = "At least one component must be passed."
-            raise ISOperationNotAllowed(msg)
-
-        or_clause = "OR ".join((itertools.repeat("component_uuid = ? ", len(components))))
-
-        for component in components:
-            params.append(str(component.uuid))
-
-        return f"({or_clause})"
-
-
-def _deserialize_association(text: str) -> SupplementalAttributeAssociations:
-    data = json.loads(text)
-    # TODO: Check the __association__ type
-    type_association = SerializedTypeMetadata(**data.pop("__association__"))
-    association = deserialize_value(data, type_association.fields)
-    return association
+    def get_num_components_with_attributes(self) -> int:
+        """Return the number of components with supplemental attributes."""
+        query = f"""
+            SELECT COUNT(DISTINCT component_uuid) AS count
+            FROM {self.TABLE_NAME}
+        """
+        cur = self._con.cursor()
+        return execute(cur, query)[0].count

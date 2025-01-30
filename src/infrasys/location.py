@@ -1,7 +1,8 @@
 """Defines models for geographic location."""
 
-from typing_extensions import Annotated
+from typing import Any
 
+from typing_extensions import Annotated
 from pydantic import Field
 
 from infrasys import Component
@@ -20,6 +21,14 @@ class Location(Component):
 class GeographicInfo(SupplementalAttribute):
     """Specifies geographic location as a dictionary."""
 
-    geojson: Annotated[
-        dict[str, float], Field(description="Dictionary of geographical information")
-    ]
+    geo_json: dict[str, Any] = Field(description="Dictionary of geographical information")
+
+    @classmethod
+    def example(cls) -> "GeographicInfo":
+        return cls(
+            geo_json={
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [125.6, 10.1]},
+                "properties": {"name": "Dinagat Islands"},
+            }
+        )

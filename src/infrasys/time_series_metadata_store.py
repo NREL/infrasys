@@ -388,10 +388,8 @@ class TimeSeriesMetadataStore:
         cur = self._con.cursor()
         placeholder = ",".join(["?"] * len(rows[0]))
         query = f"INSERT INTO {self.TABLE_NAME} VALUES({placeholder})"
-        try:
-            cur.executemany(query, rows)
-        finally:
-            self._con.commit()
+        cur.executemany(query, rows)
+        self._con.commit()
 
     def _make_components_str(
         self, params: list[str], *components: Component | SupplementalAttribute

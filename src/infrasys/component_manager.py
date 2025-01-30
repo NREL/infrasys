@@ -21,12 +21,10 @@ class ComponentManager:
 
     def __init__(
         self,
-        uuid: UUID,
         auto_add_composed_components: bool,
     ) -> None:
         self._components: dict[Type, dict[str | None, list[Component]]] = {}
         self._components_by_uuid: dict[UUID, Component] = {}
-        self._uuid = uuid
         self._auto_add_composed_components = auto_add_composed_components
         self._associations = ComponentAssociations()
 

@@ -32,12 +32,18 @@ from infrasys.serialization import (
     SerializedType,
     TYPE_METADATA,
 )
+from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
-from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData, TimeSeriesMetadata
+from infrasys.time_series_models import (
+    SingleTimeSeries,
+    TimeSeriesData,
+    TimeSeriesMetadata,
+)
 from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
 from infrasys.utils.sqlite import backup, create_in_memory_db, restore
 
 T = TypeVar("T", bound="Component")
+U = TypeVar("U", bound="SupplementalAttribute")
 
 
 class System:
@@ -89,14 +95,15 @@ class System:
         self._uuid = uuid or uuid4()
         self._name = name
         self._description = description
-        self._component_mgr = ComponentManager(self._uuid, auto_add_composed_components)
+        self._component_mgr = ComponentManager(auto_add_composed_components)
         self._con = con or create_in_memory_db()
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
         self._time_series_mgr = time_series_manager or TimeSeriesManager(
             self._con, **time_series_kwargs
         )
-        # TODO: Come back to add support for serialization and deserialization
-        # self._supplemental_attr_mgr = supplemental_attribute_manager or SupplementalAttributeManager(self._con)
+        self._supplemental_attr_mgr = (
+            supplemental_attribute_manager or SupplementalAttributeManager(self._con)
+        )
 
         self._data_format_version: Optional[str] = None
         # Note to devs: if you add new fields, add support in to_json/from_json as appropriate.
@@ -153,6 +160,10 @@ class System:
             "uuid": str(self.uuid),
             "data_format_version": self.data_format_version,
             "components": [x.model_dump_custom() for x in self._component_mgr.iter_all()],
+            # TODO: deserialization does not read these
+            "supplemental_attributes": [
+                x.model_dump_custom() for x in self._supplemental_attr_mgr.iter_all()
+            ],
             "time_series": {
                 # Note: parent directory is stripped. De-serialization will find it from the
                 # parent of the JSON file.
@@ -284,10 +295,12 @@ class System:
         time_series_manager = TimeSeriesManager.deserialize(
             con, data["time_series"], ts_path, **ts_kwargs
         )
+        supplemental_attribute_manager = SupplementalAttributeManager(con, initialize=False)
         system = cls(
             name=system_data.get("name"),
             description=system_data.get("description"),
             con=con,
+            supplemental_attribute_manager=supplemental_attribute_manager,
             time_series_manager=time_series_manager,
             uuid=UUID(system_data["uuid"]),
             **kwargs,
@@ -423,6 +436,35 @@ class System:
         add_component
         """
         return self._component_mgr.add(*components, **kwargs)
+
+    def add_supplemental_attribute(
+        self, component: Component, attribute: SupplementalAttribute
+    ) -> None:
+        """Attach a supplemental attribute to a component. The attribute will get added to the
+        system if it is not already stored.
+
+        Parameters
+        ----------
+        component
+            Existing component
+        attribute
+            Supplemental attribute to attach to the component
+
+        Raises
+        ------
+        ISAlreadyAttached
+            Raised if the component and attribute are already attached.
+
+        Examples
+        --------
+        >>> bus = Bus.example()
+        >>> system.add_component(bus)
+        >>> geo_json = GeographicInfo.example()
+        >>> system.add_supplemental_attribute(bus, geo_json)
+        """
+        return self._supplemental_attr_mgr.add(component, attribute)
+
+    # TODO DT: add replace_component_uuid to SA associations
 
     def change_component_uuid(self, component: Component) -> None:
         """Change the component UUID. This is required if you copy a component and attach it to
@@ -564,7 +606,7 @@ class System:
         return self._component_mgr.get_by_uuid(uuid)
 
     def get_components(
-        self, *component_type: Type[T], filter_func: Callable | None = None
+        self, *component_types: Type[T], filter_func: Callable | None = None
     ) -> Iterable[T]:
         """Return the components with the passed type(s) and that optionally match filter_func.
 
@@ -592,7 +634,7 @@ class System:
         >>> for component in system.get_components(SimpleGenerator, SimpleBus)
         print(component.label)
         """
-        return self._component_mgr.iter(*component_type, filter_func=filter_func)
+        return self._component_mgr.iter(*component_types, filter_func=filter_func)
 
     def get_component_types(self) -> Iterable[Type[Component]]:
         """Return an iterable of all component types stored in the system.
@@ -603,6 +645,35 @@ class System:
         print(component_type)
         """
         return self._component_mgr.get_types()
+
+    def get_components_with_supplemental_attribute(
+        self,
+        attribute: SupplementalAttribute,
+    ) -> list[Component]:
+        """Return all components attached to the given supplemental attribute."""
+        return [
+            self._component_mgr.get_by_uuid(x)
+            for x in self._supplemental_attr_mgr.get_component_uuids_with_attribute(attribute)
+        ]
+
+    def get_supplemental_attributes_with_component(
+        self,
+        component: Component,
+        attribute_type: Optional[SupplementalAttribute] = None,
+    ) -> list[SupplementalAttribute]:
+        """Return all supplemental attributes attached to the given component and optionally,
+        with the given attribute type."""
+        return self._supplemental_attr_mgr.get_attributes_with_component(
+            component, attribute_type=attribute_type
+        )
+
+    def get_supplemental_attribute_by_uuid(self, uuid: UUID) -> SupplementalAttribute:
+        """Return the supplemental attribute with the given UUID."""
+        return self._supplemental_attr_mgr.get_by_uuid(uuid)
+
+    # TODO: filter_func
+    def get_supplemental_attributes(self, *attribute_types: Type[U]) -> Iterable[U]:
+        return self._supplemental_attr_mgr.iter(*attribute_types)
 
     def has_component(self, component) -> bool:
         """Return True if the component is attached."""
@@ -781,6 +852,15 @@ class System:
         """
         component = self.get_component_by_uuid(uuid)
         return self.remove_component(component, cascade_down=cascade_down, force=force)
+
+    def remove_supplemental_attribute(self, attribute: SupplementalAttribute) -> None:
+        """Remove the supplemental attribute from the system."""
+        return self._supplemental_attr_mgr.remove(attribute)
+
+    # TODO
+    # def remove_supplemental_attributes(self, attribute_type: Type[U]) -> None:
+    #     """Remove all supplemental attributes of the given type from the system."""
+    #     #return self._supplemental_attr_mgr.remove_attributes(attribute_type)
 
     def update_components(
         self,
