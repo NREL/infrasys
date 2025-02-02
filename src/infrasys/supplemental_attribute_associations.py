@@ -151,8 +151,9 @@ class SupplementalAttributeAssociationsStore:
         component: Component,
         attribute_type: Optional[str] = None,
     ) -> list[UUID]:
-        """Return the supplemental attribute UUIDs associated with the component and attribute type."""
-        # TODO: attribute_type must be concrete
+        """Return the supplemental attribute UUIDs associated with the component and attribute
+        type.
+        """
         if attribute_type is None:
             where_clause = "component_uuid = ?"
             params = (str(component.uuid),)
@@ -227,6 +228,9 @@ class SupplementalAttributeAssociationsStore:
         rows = execute(cur, query).fetchall()
         return [{"type": x.attribute_type, "county": x.count} for x in rows]
 
+    # TODO: This could be useful if we want to display a table to users. We don't yet
+    # directly depend on Pandas. We could add that dependency or use some other table display.
+    # This was copied from InfrastructureSystems.jl.
     # def get_attribute_summary_table(self) -> pd.DataFrame:
     #    """Return a DataFrame with the number of supplemental attributes by type for components."""
     #    query = f"""
@@ -244,8 +248,6 @@ class SupplementalAttributeAssociationsStore:
     #    """
     #    cur = self._con.cursor()
     #    rows = execute(cur, query).fetchall()
-    #    breakpoint()
-    #    pass
     #    #return DataFrame(_execute(associations, query))
 
     def get_num_attributes(self) -> int:

@@ -88,8 +88,8 @@ def test_get_components(simple_system: SimpleSystem):
 
     assert len(list(system.list_components_by_name(RenewableGenerator, "renewable-gen"))) == 5
 
-    gen = all_components[0]
-    assert system.get_component_by_uuid(gen.uuid) is gen
+    generator = all_components[0]
+    assert system.get_component_by_uuid(generator.uuid) is generator
     with pytest.raises(ISNotStored):
         system.get_component_by_uuid(uuid4())
 

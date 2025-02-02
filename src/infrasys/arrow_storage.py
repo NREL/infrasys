@@ -141,7 +141,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
 
     def get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
-        with pa.OSFile(str(fpath), "r") as source:
+        with pa.OSFile(str(fpath), "r") as source:  # type: ignore
             base_ts = pa.ipc.open_file(source).get_record_batch(0)
             logger.trace("Reading time series from {}", fpath)
         columns = base_ts.column_names

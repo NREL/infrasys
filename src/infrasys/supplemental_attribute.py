@@ -10,6 +10,9 @@ class SupplementalAttribute(InfraSysBaseModelWithIdentifers):
     Has a many-to-many relationship with components and can have time series attached.
     """
 
+    def check_supplemental_attribute_addition(self) -> None:
+        """Perform checks on the supplemental attribute before adding it to a system."""
+
     def model_dump_custom(self, *args, **kwargs) -> dict[str, Any]:
         """Custom serialization for this package"""
         return serialize_value(self, *args, **kwargs)

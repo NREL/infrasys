@@ -227,8 +227,8 @@ class ComponentManager:
                         subcomponent[i] = sub_component_.label
             yield data
 
-    def remove(self, component: Component, cascade_down: bool = True, force: bool = False) -> Any:
-        """Remove the component from the system and return it.
+    def remove(self, component: Component, cascade_down: bool = True, force: bool = False) -> None:
+        """Remove the component from the system.
 
         Notes
         -----
@@ -320,6 +320,8 @@ class ComponentManager:
 
     def change_uuid(self, component: Component) -> None:
         """Change the component UUID."""
+        # TODO: would need to change the component UUID in time series and
+        # supplemental attribute association tables.
         msg = "change_component_uuid"
         raise NotImplementedError(msg)
 
