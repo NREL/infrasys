@@ -100,6 +100,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             ts_data = metadata.quantity_metadata.quantity_type(
                 ts_data, metadata.quantity_metadata.units
             )
+        assert ts_data is not None
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
             variable_name=metadata.variable_name,

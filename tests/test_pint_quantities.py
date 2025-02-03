@@ -43,7 +43,7 @@ def test_pydantic_pint_validation():
 
     # Pass wrong type
     with pytest.raises(ValidationError):
-        _ = PintQuantityStrict(name="test", voltage={10: 2})
+        _ = PintQuantityStrict(name="test", voltage={10: 2})  # type: ignore
 
 
 def test_compatibility_with_base_quantity():
@@ -57,13 +57,13 @@ def test_compatibility_with_base_quantity():
 
 def test_pydantic_pint_arguments():
     # Single float should work
-    component = PintQuantityNoStrict(name="TestComponent", voltage=10.0)
+    component = PintQuantityNoStrict(name="TestComponent", voltage=10.0)  # type: ignore
     assert isinstance(component.voltage, Quantity)
     assert component.voltage.magnitude == 10.0
     assert component.voltage.units == "volt"
 
     with pytest.raises(ValidationError):
-        _ = PintQuantityStrictDictPositive(name="TestComponent", voltage=-10)
+        _ = PintQuantityStrictDictPositive(name="TestComponent", voltage=-10)  # type: ignore
 
 
 def test_serialization():

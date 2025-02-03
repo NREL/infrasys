@@ -84,18 +84,12 @@ class SupplementalAttributeAssociationsStore:
         execute(cur, query, params=row)
         self._con.commit()
 
-    def has_association_by_component_attribute(
+    def has_association_by_component_and_attribute(
         self,
         component: Component,
         attribute: SupplementalAttribute,
     ) -> bool:
-        """Return the associations matching the inputs.
-
-        Raises
-        ------
-        ISOperationNotAllowed
-            Raised if more than one metadata instance matches the inputs.
-        """
+        """Return True if the component and supplemental attribute have an association."""
         query = f"""
             SELECT id FROM {self.TABLE_NAME}
             WHERE attribute_uuid = ? AND component_uuid = ?
@@ -112,14 +106,17 @@ class SupplementalAttributeAssociationsStore:
         return self._has_rows(query, params)
 
     def has_association_by_component(self, component: Component) -> bool:
-        """Return true if there is at least one association matching the inputs."""
+        """Return True if there is at least one association with the component."""
         query = f"SELECT id FROM {self.TABLE_NAME} WHERE component_uuid = ?"
         params = (str(component.uuid),)
         return self._has_rows(query, params)
 
-    def has_association_by_component_attribute_type(
+    def has_association_by_component_and_attribute_type(
         self, component: Component, attribute_type: str
     ) -> bool:
+        """Return True if the component has an association with a supplemental attribute of the
+        given type.
+        """
         query = f"""
             SELECT attribute_uuid
             FROM {self.TABLE_NAME}
@@ -132,7 +129,7 @@ class SupplementalAttributeAssociationsStore:
     def _has_rows(self, query: str, params: Sequence[Any]) -> bool:
         cur = self._con.cursor()
         res = execute(cur, query, params=params).fetchone()
-        return res[0] > 0
+        return res is not None
 
     def list_associated_component_uuids(self, attribute: SupplementalAttribute) -> list[UUID]:
         """Return the component UUIDs associated with the attribute."""
@@ -151,8 +148,9 @@ class SupplementalAttributeAssociationsStore:
         component: Component,
         attribute_type: Optional[str] = None,
     ) -> list[UUID]:
-        """Return the supplemental attribute UUIDs associated with the component and attribute type."""
-        # TODO: attribute_type must be concrete
+        """Return the supplemental attribute UUIDs associated with the component and attribute
+        type.
+        """
         if attribute_type is None:
             where_clause = "component_uuid = ?"
             params = (str(component.uuid),)
@@ -171,12 +169,13 @@ class SupplementalAttributeAssociationsStore:
     def remove_association_by_attribute(
         self,
         attribute: SupplementalAttribute,
+        must_exist=True,
     ) -> None:
         """Remove all associations with the given attribute."""
         where_clause = "WHERE attribute_uuid = ?"
         params = (str(attribute.uuid),)
         num_deleted = self._remove_associations(where_clause, params)
-        if num_deleted < 1:
+        if must_exist and num_deleted < 1:
             msg = f"Bug: unexpected number of deletions: {num_deleted}. Should have been >= 1."
             raise Exception(msg)
 
@@ -193,12 +192,13 @@ class SupplementalAttributeAssociationsStore:
             msg = f"Bug: unexpected number of deletions: {num_deleted}. Should have been 1."
             raise Exception(msg)
 
-    def remove_associations(self, attribute_type: str) -> None:
-        """Remove all associations of the given type."""
-        where_clause = "WHERE attribute_type = ?"
-        params = (attribute_type,)
-        num_deleted = self._remove_associations(where_clause, params)
-        logger.debug("Deleted %s supplemental attribute associations", num_deleted)
+    # This functionality, copied from Sienna, could be added if needed.
+    # def remove_associations(self, attribute_type: str) -> None:
+    #    """Remove all associations of the given type."""
+    #    where_clause = "WHERE attribute_type = ?"
+    #    params = (attribute_type,)
+    #    num_deleted = self._remove_associations(where_clause, params)
+    #    logger.debug("Deleted %s supplemental attribute associations", num_deleted)
 
     def _remove_associations(self, where_clause: str, params: Sequence[Any]) -> int:
         query = f"DELETE FROM {self.TABLE_NAME} {where_clause}"
@@ -212,7 +212,7 @@ class SupplementalAttributeAssociationsStore:
         return row[0]
 
     def get_attribute_counts_by_type(self) -> list[dict[str, Any]]:
-        """Return a list of OrderedDict of stored attribute counts by type."""
+        """Return a list of dicts of stored attribute counts by type."""
         query = f"""
             SELECT
                 attribute_type
@@ -225,8 +225,11 @@ class SupplementalAttributeAssociationsStore:
         """
         cur = self._con.cursor()
         rows = execute(cur, query).fetchall()
-        return [{"type": x.attribute_type, "county": x.count} for x in rows]
+        return [{"type": x[0], "count": x[1]} for x in rows]
 
+    # TODO: This could be useful if we want to display a table to users. We don't yet
+    # directly depend on Pandas. We could add that dependency or use some other table display.
+    # This was copied from InfrastructureSystems.jl.
     # def get_attribute_summary_table(self) -> pd.DataFrame:
     #    """Return a DataFrame with the number of supplemental attributes by type for components."""
     #    query = f"""
@@ -244,8 +247,6 @@ class SupplementalAttributeAssociationsStore:
     #    """
     #    cur = self._con.cursor()
     #    rows = execute(cur, query).fetchall()
-    #    breakpoint()
-    #    pass
     #    #return DataFrame(_execute(associations, query))
 
     def get_num_attributes(self) -> int:
@@ -255,7 +256,7 @@ class SupplementalAttributeAssociationsStore:
             FROM {self.TABLE_NAME}
         """
         cur = self._con.cursor()
-        return execute(cur, query)[0].count
+        return execute(cur, query).fetchone()[0]
 
     def get_num_components_with_attributes(self) -> int:
         """Return the number of components with supplemental attributes."""
@@ -264,4 +265,4 @@ class SupplementalAttributeAssociationsStore:
             FROM {self.TABLE_NAME}
         """
         cur = self._con.cursor()
-        return execute(cur, query)[0].count
+        return execute(cur, query).fetchone()[0]
