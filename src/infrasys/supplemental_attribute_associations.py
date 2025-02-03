@@ -1,7 +1,8 @@
 """Stores supplemental attribute associations in SQLite database"""
 
-import sqlite3
 import itertools
+import sqlite3
+from typing import Any, Optional, Sequence
 from uuid import UUID
 
 from loguru import logger
@@ -9,14 +10,15 @@ from loguru import logger
 from infrasys import Component
 from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.utils.sqlite import execute
-from typing import Any, Optional, Sequence
 from infrasys.exceptions import ISAlreadyAttached
+
+TABLE_NAME = "supplemental_attribute_associations"
 
 
 class SupplementalAttributeAssociationsStore:
     """Stores supplemental attribute associations in a SQLite database."""
 
-    TABLE_NAME = "supplemental_attribute_associations"
+    TABLE_NAME = TABLE_NAME
 
     def __init__(self, con: sqlite3.Connection, initialize: bool = True):
         self._con = con
@@ -51,6 +53,11 @@ class SupplementalAttributeAssociationsStore:
             f"(component_uuid, attribute_uuid, attribute_type)",
         )
 
+    _ADD_ASSOCIATION_QUERY = f"""
+        SELECT id FROM {TABLE_NAME}
+        WHERE attribute_uuid = ? AND component_uuid = ?
+        LIMIT 1
+    """
     def add(self, component: Component, attribute: SupplementalAttribute) -> None:
         """Add association to the database.
 
@@ -59,14 +66,9 @@ class SupplementalAttributeAssociationsStore:
         ISAlreadyAttached
             Raised if the time series metadata already stored.
         """
-        query = f"""
-            SELECT id FROM {self.TABLE_NAME}
-            WHERE attribute_uuid = ? AND component_uuid = ?
-            LIMIT 1
-        """
         params = (str(attribute.uuid), str(component.uuid))
         cur = self._con.cursor()
-        res = execute(cur, query, params=params).fetchone()
+        res = execute(cur, self._ADD_ASSOCIATION_QUERY, params=params).fetchone()
         if res:
             msg = f"An association with {component=} {attribute=} is already stored."
             raise ISAlreadyAttached(msg)
@@ -84,65 +86,75 @@ class SupplementalAttributeAssociationsStore:
         execute(cur, query, params=row)
         self._con.commit()
 
+    _HAS_ASSOCIATION_BY_COMPONENT_AND_ATTRIBUTE_QUERY = f"""
+        SELECT id FROM {TABLE_NAME}
+        WHERE attribute_uuid = ? AND component_uuid = ?
+        LIMIT 1
+    """
     def has_association_by_component_and_attribute(
         self,
         component: Component,
         attribute: SupplementalAttribute,
     ) -> bool:
         """Return True if the component and supplemental attribute have an association."""
-        query = f"""
-            SELECT id FROM {self.TABLE_NAME}
-            WHERE attribute_uuid = ? AND component_uuid = ?
-            LIMIT 1
-        """
         params = (str(attribute.uuid), str(component.uuid))
-        return self._has_rows(query, params)
+        return self._has_rows(self._HAS_ASSOCIATION_BY_COMPONENT_AND_ATTRIBUTE_QUERY, params)
 
+    _HAS_ASSOCIATION_BY_ATTRIBUTE_QUERY = f"SELECT id FROM {TABLE_NAME} WHERE attribute_uuid = ?"
     def has_association_by_attribute(self, attribute: SupplementalAttribute) -> bool:
         """Return true if there is at least one association matching the inputs."""
         # Note: Unlike the other has_association methods, this is not covered by an index.
-        query = f"SELECT id FROM {self.TABLE_NAME} WHERE attribute_uuid = ?"
         params = (str(attribute.uuid),)
-        return self._has_rows(query, params)
+        return self._has_rows(self._HAS_ASSOCIATION_BY_ATTRIBUTE_QUERY, params)
 
+    _HAS_ASSOCIATION_BY_COMPONENT_QUERY = f"SELECT id FROM {TABLE_NAME} WHERE component_uuid = ?"
     def has_association_by_component(self, component: Component) -> bool:
         """Return True if there is at least one association with the component."""
-        query = f"SELECT id FROM {self.TABLE_NAME} WHERE component_uuid = ?"
         params = (str(component.uuid),)
-        return self._has_rows(query, params)
+        return self._has_rows(self._HAS_ASSOCIATION_BY_COMPONENT_QUERY, params)
 
+    _HAS_ASSOCIATION_BY_COMPONENT_AND_ATTRIBUTE_TYPE_QUERY = f"""
+        SELECT attribute_uuid
+        FROM {TABLE_NAME}
+        WHERE component_uuid = ? AND attribute_type = ?
+        LIMIT 1
+    """
     def has_association_by_component_and_attribute_type(
         self, component: Component, attribute_type: str
     ) -> bool:
         """Return True if the component has an association with a supplemental attribute of the
         given type.
         """
-        query = f"""
-            SELECT attribute_uuid
-            FROM {self.TABLE_NAME}
-            WHERE component_uuid = ? AND attribute_type = ?
-            LIMIT 1
-        """
         params = (str(component.uuid), attribute_type)
-        return self._has_rows(query, params)
+        return self._has_rows(self._HAS_ASSOCIATION_BY_COMPONENT_AND_ATTRIBUTE_TYPE_QUERY, params)
 
     def _has_rows(self, query: str, params: Sequence[Any]) -> bool:
         cur = self._con.cursor()
         res = execute(cur, query, params=params).fetchone()
         return res is not None
 
+    _LIST_ASSOCIATED_COMPONENT_UUIDS_QUERY = f"""
+        SELECT component_uuid
+        FROM {TABLE_NAME}
+        WHERE attribute_uuid = ?
+    """
     def list_associated_component_uuids(self, attribute: SupplementalAttribute) -> list[UUID]:
         """Return the component UUIDs associated with the attribute."""
-        query = f"""
-            SELECT component_uuid
-            FROM {self.TABLE_NAME}
-            WHERE attribute_uuid = ?
-        """
         params = (str(attribute.uuid),)
         cur = self._con.cursor()
-        rows = execute(cur, query, params=params)
+        rows = execute(cur, self._LIST_ASSOCIATED_COMPONENT_UUIDS_QUERY, params=params)
         return [UUID(x[0]) for x in rows]
 
+    _LIST_ASSOCIATED_SUPPLEMENTAL_ATTRIBUTE_UUIDS_QUERY1 = f"""
+        SELECT attribute_uuid
+        FROM {TABLE_NAME}
+        WHERE component_uuid = ?
+    """
+    _LIST_ASSOCIATED_SUPPLEMENTAL_ATTRIBUTE_UUIDS_QUERY2 = f"""
+        SELECT attribute_uuid
+        FROM {TABLE_NAME}
+        WHERE attribute_type = ? AND component_uuid = ?
+    """
     def list_associated_supplemental_attribute_uuids(
         self,
         component: Component,
@@ -152,16 +164,11 @@ class SupplementalAttributeAssociationsStore:
         type.
         """
         if attribute_type is None:
-            where_clause = "component_uuid = ?"
+            query = self._LIST_ASSOCIATED_SUPPLEMENTAL_ATTRIBUTE_UUIDS_QUERY1
             params = (str(component.uuid),)
         else:
-            where_clause = "attribute_type = ? AND component_uuid = ?"
+            query = self._LIST_ASSOCIATED_SUPPLEMENTAL_ATTRIBUTE_UUIDS_QUERY2
             params = (attribute_type, str(component.uuid))  # type: ignore
-        query = f"""
-            SELECT attribute_uuid
-            FROM {self.TABLE_NAME}
-            WHERE {where_clause}
-        """
         cur = self._con.cursor()
         rows = execute(cur, query, params=params)
         return [UUID(x[0]) for x in rows]
@@ -211,20 +218,20 @@ class SupplementalAttributeAssociationsStore:
         self._con.commit()
         return row[0]
 
+    _GET_ATTRIBUTE_COUNTS_BY_TYPE_QUERY = f"""
+        SELECT
+            attribute_type
+            ,count(*) AS count
+        FROM {TABLE_NAME}
+        GROUP BY
+            attribute_type
+        ORDER BY
+            attribute_type
+    """
     def get_attribute_counts_by_type(self) -> list[dict[str, Any]]:
         """Return a list of dicts of stored attribute counts by type."""
-        query = f"""
-            SELECT
-                attribute_type
-                ,count(*) AS count
-            FROM {self.TABLE_NAME}
-            GROUP BY
-                attribute_type
-            ORDER BY
-                attribute_type
-        """
         cur = self._con.cursor()
-        rows = execute(cur, query).fetchall()
+        rows = execute(cur, self._GET_ATTRIBUTE_COUNTS_BY_TYPE_QUERY).fetchall()
         return [{"type": x[0], "count": x[1]} for x in rows]
 
     # TODO: This could be useful if we want to display a table to users. We don't yet
@@ -249,20 +256,20 @@ class SupplementalAttributeAssociationsStore:
     #    rows = execute(cur, query).fetchall()
     #    #return DataFrame(_execute(associations, query))
 
+    _GET_NUM_ATTRIBUTES_QUERY = f"""
+            SELECT COUNT(DISTINCT attribute_uuid) AS count
+            FROM {TABLE_NAME}
+        """
     def get_num_attributes(self) -> int:
         """Return the number of supplemental attributes."""
-        query = f"""
-            SELECT COUNT(DISTINCT attribute_uuid) AS count
-            FROM {self.TABLE_NAME}
-        """
         cur = self._con.cursor()
-        return execute(cur, query).fetchone()[0]
+        return execute(cur, self._GET_NUM_ATTRIBUTES_QUERY).fetchone()[0]
 
+    _GET_NUM_COMPONENTS_WITH_ATTRIBUTES_QUERY = f"""
+        SELECT COUNT(DISTINCT component_uuid) AS count
+        FROM {TABLE_NAME}
+    """
     def get_num_components_with_attributes(self) -> int:
         """Return the number of components with supplemental attributes."""
-        query = f"""
-            SELECT COUNT(DISTINCT component_uuid) AS count
-            FROM {self.TABLE_NAME}
-        """
         cur = self._con.cursor()
-        return execute(cur, query).fetchone()[0]
+        return execute(cur, self._GET_NUM_COMPONENTS_WITH_ATTRIBUTES_QUERY).fetchone()[0]
