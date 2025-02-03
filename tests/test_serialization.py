@@ -58,7 +58,7 @@ def test_serialization(tmp_path):
     system.to_json(filename, overwrite=True)
     system2 = SimpleSystem.from_json(filename)
     for key, val in system.__dict__.items():
-        if key not in ("_component_mgr", "_time_series_mgr", "_con"):
+        if key not in ("_component_mgr", "_supplemental_attr_mgr", "_time_series_mgr", "_con"):
             assert getattr(system2, key) == val
 
     components2 = list(system2.iter_all_components())
@@ -128,7 +128,7 @@ def test_serialize_quantity(tmp_path, distance):
     c1 = system.get_component(ComponentWithPintQuantity, "test")
     c2 = system2.get_component(ComponentWithPintQuantity, "test")
     if isinstance(c1.distance.magnitude, np.ndarray):
-        assert (c2.distance == c1.distance).all()
+        assert (c2.distance == c1.distance).all()  # type: ignore
     else:
         assert c2.distance == c1.distance
 

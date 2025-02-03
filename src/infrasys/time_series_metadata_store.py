@@ -13,6 +13,7 @@ from loguru import logger
 
 from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed, ISNotStored
 from infrasys import Component
+from infrasys.supplemental_attribute_manager import SupplementalAttribute
 from infrasys.serialization import (
     deserialize_value,
     serialize_value,
@@ -83,7 +84,7 @@ class TimeSeriesMetadataStore:
     def add(
         self,
         metadata: TimeSeriesMetadata,
-        *components: Component,
+        *owners: Component | SupplementalAttribute,
     ) -> None:
         """Add metadata to the store.
 
@@ -94,14 +95,20 @@ class TimeSeriesMetadataStore:
         """
         attribute_hash = _compute_user_attribute_hash(metadata.user_attributes)
         where_clause, params = self._make_where_clause(
-            components,
+            owners,
             metadata.variable_name,
             metadata.type,
             attribute_hash=attribute_hash,
             **metadata.user_attributes,
         )
-        cur = self._con.cursor()
+        for owner in owners:
+            if isinstance(owner, SupplementalAttribute):
+                # This restriction can be removed when we migrate the database schema to be
+                # equivalent with Sienna.
+                msg = "Adding time series to a supplemental attribute is not supported yet"
+                raise ISOperationNotAllowed(msg)
 
+        cur = self._con.cursor()
         query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
         res = execute(cur, query, params=params).fetchone()
         if res[0] > 0:
@@ -116,12 +123,12 @@ class TimeSeriesMetadataStore:
                 str(metadata.initial_time),
                 str(metadata.resolution),
                 metadata.variable_name,
-                str(component.uuid),
-                component.__class__.__name__,
+                str(owner.uuid),
+                owner.__class__.__name__,
                 attribute_hash,
                 json.dumps(serialize_value(metadata)),
             )
-            for component in components
+            for owner in owners
         ]
         self._insert_rows(rows)
 
@@ -161,7 +168,7 @@ class TimeSeriesMetadataStore:
 
     def get_metadata(
         self,
-        component: Component,
+        component: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
@@ -205,7 +212,7 @@ class TimeSeriesMetadataStore:
 
     def has_time_series_metadata(
         self,
-        component: Component,
+        component: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes: Any,
@@ -256,7 +263,7 @@ class TimeSeriesMetadataStore:
 
     def list_metadata(
         self,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
@@ -283,7 +290,7 @@ class TimeSeriesMetadataStore:
 
     def _list_metadata_no_sql_json(
         self,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
@@ -310,7 +317,7 @@ class TimeSeriesMetadataStore:
 
     def list_rows(
         self,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         columns=None,
@@ -335,7 +342,7 @@ class TimeSeriesMetadataStore:
 
     def remove(
         self,
-        *components: Component,
+        *components: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
@@ -388,33 +395,33 @@ class TimeSeriesMetadataStore:
         cur = self._con.cursor()
         placeholder = ",".join(["?"] * len(rows[0]))
         query = f"INSERT INTO {self.TABLE_NAME} VALUES({placeholder})"
-        try:
-            cur.executemany(query, rows)
-        finally:
-            self._con.commit()
+        cur.executemany(query, rows)
+        self._con.commit()
 
-    def _make_components_str(self, params: list[str], *components: Component) -> str:
-        if not components:
+    def _make_components_str(
+        self, params: list[str], *owners: Component | SupplementalAttribute
+    ) -> str:
+        if not owners:
             msg = "At least one component must be passed."
             raise ISOperationNotAllowed(msg)
 
-        or_clause = "OR ".join((itertools.repeat("component_uuid = ? ", len(components))))
+        or_clause = "OR ".join((itertools.repeat("component_uuid = ? ", len(owners))))
 
-        for component in components:
-            params.append(str(component.uuid))
+        for owner in owners:
+            params.append(str(owner.uuid))
 
         return f"({or_clause})"
 
     def _make_where_clause(
         self,
-        components: tuple[Component, ...],
+        owners: tuple[Component | SupplementalAttribute, ...],
         variable_name: Optional[str],
         time_series_type: Optional[str],
         attribute_hash: Optional[str] = None,
         **user_attributes: str,
     ) -> tuple[str, list[str]]:
         params: list[str] = []
-        component_str = self._make_components_str(params, *components)
+        component_str = self._make_components_str(params, *owners)
 
         if variable_name is None:
             var_str = ""
@@ -445,7 +452,7 @@ class TimeSeriesMetadataStore:
 
     def _try_time_series_metadata_by_full_params(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str,
         time_series_type: str,
         column: str,
@@ -454,7 +461,7 @@ class TimeSeriesMetadataStore:
         assert variable_name is not None
         assert time_series_type is not None
         where_clause, params = self._make_where_clause(
-            (component,),
+            (owner,),
             variable_name,
             time_series_type,
             attribute_hash=_compute_user_attribute_hash(user_attributes),
@@ -470,7 +477,7 @@ class TimeSeriesMetadataStore:
 
     def _try_get_time_series_metadata_by_full_params(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str,
         time_series_type: str,
         **user_attributes: str,
@@ -483,7 +490,7 @@ class TimeSeriesMetadataStore:
         parse the JSON values.
         """
         rows = self._try_time_series_metadata_by_full_params(
-            component,
+            owner,
             variable_name,
             time_series_type,
             "metadata",
@@ -500,7 +507,7 @@ class TimeSeriesMetadataStore:
 
     def _try_has_time_series_metadata_by_full_params(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str,
         time_series_type: str,
         **user_attributes: str,
@@ -509,7 +516,7 @@ class TimeSeriesMetadataStore:
         _try_get_time_series_metadata_by_full_params for more information.
         """
         text = self._try_time_series_metadata_by_full_params(
-            component,
+            owner,
             variable_name,
             time_series_type,
             "id",

@@ -258,7 +258,6 @@ class TimeSeriesMetadata(InfraSysBaseModel, abc.ABC):
     user_attributes: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
-    # TODO: refactor to type_ to avoid overriding builtin?
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @property
