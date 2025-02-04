@@ -40,15 +40,17 @@ class SupplementalAttributeManager:
             msg = "component can only be None when deserialization_in_progress"
             raise Exception(msg)
 
-        self.raise_if_attached(attribute)
-        if not deserialization_in_progress:
+        already_attached = self.has_attribute(attribute)
+        if not deserialization_in_progress and not already_attached:
             attribute.check_supplemental_attribute_addition()
 
-        attr_type = type(attribute)
-        if attr_type not in self._attributes:
-            self._attributes[attr_type] = {}
+        if not already_attached:
+            attr_type = type(attribute)
+            if attr_type not in self._attributes:
+                self._attributes[attr_type] = {}
 
-        self._attributes[attr_type][attribute.uuid] = attribute
+            self._attributes[attr_type][attribute.uuid] = attribute
+
         if component is not None:
             self._associations.add(component, attribute)
 
@@ -93,6 +95,11 @@ class SupplementalAttributeManager:
             if filter_func is None or filter_func(attr):  # type: ignore
                 attrs.append(attr)
         return attrs  # type: ignore
+
+    def has_attribute(self, attribute: SupplementalAttribute) -> bool:
+        if type(attribute) not in self._attributes:
+            return False
+        return attribute.uuid in self._attributes[type(attribute)]
 
     def has_association(self, component: Component, attribute: SupplementalAttribute) -> bool:
         """Return True if the component and supplemental attribute have an association."""

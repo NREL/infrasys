@@ -111,3 +111,15 @@ def test_supplemental_attribute_removals():
         system.remove_supplemental_attribute(attr1)
     with pytest.raises(ISNotStored):
         system.remove_supplemental_attribute_from_component(bus, attr1)
+
+
+def test_one_attribute_many_components():
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
+    gen2 = SimpleGenerator(name="gen2", active_power=1.0, rating=1.0, bus=bus, available=True)
+    attr1 = GeographicInfo.example()
+    system = SimpleSystem(auto_add_composed_components=True)
+    system.add_component(gen)
+    system.add_component(gen2)
+    system.add_supplemental_attribute(gen, attr1)
+    system.add_supplemental_attribute(gen2, attr1)
