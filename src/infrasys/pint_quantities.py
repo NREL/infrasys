@@ -136,11 +136,7 @@ class PydanticPintQuantity:
         of Pydantic models, as it allows control over the serialization format
         (e.g., JSON-compatible representation).
         """
-        if info is not None:
-            mode = info.mode
-        else:
-            mode = self.ser_mode
-
+        mode = info.mode if info is not None else self.ser_mode
         if mode == "dict":
             return {
                 "magnitude": value.magnitude,

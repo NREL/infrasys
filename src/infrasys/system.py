@@ -7,7 +7,7 @@ from operator import itemgetter
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Optional, Type, TypeVar
+from typing import Any, Callable, Generator, Iterable, Optional, Type, TypeVar
 from uuid import UUID, uuid4
 
 from loguru import logger
@@ -17,6 +17,7 @@ from rich.table import Table
 from infrasys.exceptions import (
     ISFileExists,
     ISConflictingArguments,
+    ISOperationNotAllowed,
 )
 from infrasys.models import make_label
 from infrasys.component import (
@@ -32,11 +33,18 @@ from infrasys.serialization import (
     SerializedType,
     TYPE_METADATA,
 )
+from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
-from infrasys.time_series_models import SingleTimeSeries, TimeSeriesData, TimeSeriesMetadata
+from infrasys.time_series_models import (
+    SingleTimeSeries,
+    TimeSeriesData,
+    TimeSeriesMetadata,
+)
+from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
 from infrasys.utils.sqlite import backup, create_in_memory_db, restore
 
 T = TypeVar("T", bound="Component")
+U = TypeVar("U", bound="SupplementalAttribute")
 
 
 class System:
@@ -51,6 +59,7 @@ class System:
         auto_add_composed_components: bool = False,
         con: Optional[sqlite3.Connection] = None,
         time_series_manager: Optional[TimeSeriesManager] = None,
+        supplemental_attribute_manager: Optional[SupplementalAttributeManager] = None,
         uuid: Optional[UUID] = None,
         **kwargs: Any,
     ) -> None:
@@ -87,12 +96,16 @@ class System:
         self._uuid = uuid or uuid4()
         self._name = name
         self._description = description
-        self._component_mgr = ComponentManager(self._uuid, auto_add_composed_components)
+        self._component_mgr = ComponentManager(auto_add_composed_components)
         self._con = con or create_in_memory_db()
         time_series_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
         self._time_series_mgr = time_series_manager or TimeSeriesManager(
             self._con, **time_series_kwargs
         )
+        self._supplemental_attr_mgr = (
+            supplemental_attribute_manager or SupplementalAttributeManager(self._con)
+        )
+
         self._data_format_version: Optional[str] = None
         # Note to devs: if you add new fields, add support in to_json/from_json as appropriate.
 
@@ -148,6 +161,9 @@ class System:
             "uuid": str(self.uuid),
             "data_format_version": self.data_format_version,
             "components": [x.model_dump_custom() for x in self._component_mgr.iter_all()],
+            "supplemental_attributes": [
+                x.model_dump_custom() for x in self._supplemental_attr_mgr.iter_all()
+            ],
             "time_series": {
                 # Note: parent directory is stripped. De-serialization will find it from the
                 # parent of the JSON file.
@@ -279,10 +295,12 @@ class System:
         time_series_manager = TimeSeriesManager.deserialize(
             con, data["time_series"], ts_path, **ts_kwargs
         )
+        supplemental_attribute_manager = SupplementalAttributeManager(con, initialize=False)
         system = cls(
             name=system_data.get("name"),
             description=system_data.get("description"),
             con=con,
+            supplemental_attribute_manager=supplemental_attribute_manager,
             time_series_manager=time_series_manager,
             uuid=UUID(system_data["uuid"]),
             **kwargs,
@@ -303,6 +321,7 @@ class System:
                 )
         system.deserialize_system_attributes(system_data)
         system._deserialize_components(system_data["components"])
+        system._deserialize_supplemental_attributes(system_data["supplemental_attributes"])
         logger.info("Deserialized system {}", system.label)
         return system
 
@@ -419,9 +438,35 @@ class System:
         """
         return self._component_mgr.add(*components, **kwargs)
 
+    def add_supplemental_attribute(
+        self, component: Component, attribute: SupplementalAttribute
+    ) -> None:
+        """Attach a supplemental attribute to a component. The attribute will get added to the
+        system if it is not already stored.
+
+        Parameters
+        ----------
+        component
+            Existing component
+        attribute
+            Supplemental attribute to attach to the component
+
+        Raises
+        ------
+        ISAlreadyAttached
+            Raised if the component and attribute are already attached.
+
+        Examples
+        --------
+        >>> bus = Bus.example()
+        >>> system.add_component(bus)
+        >>> geo_json = GeographicInfo.example()
+        >>> system.add_supplemental_attribute(bus, geo_json)
+        """
+        return self._supplemental_attr_mgr.add(component, attribute)
+
     def change_component_uuid(self, component: Component) -> None:
-        """Change the component UUID. This is required if you copy a component and attach it to
-        the same system.
+        """Change the component UUID.
 
         Parameters
         ----------
@@ -559,7 +604,7 @@ class System:
         return self._component_mgr.get_by_uuid(uuid)
 
     def get_components(
-        self, *component_type: Type[T], filter_func: Callable | None = None
+        self, *component_types: Type[T], filter_func: Callable | None = None
     ) -> Iterable[T]:
         """Return the components with the passed type(s) and that optionally match filter_func.
 
@@ -587,7 +632,7 @@ class System:
         >>> for component in system.get_components(SimpleGenerator, SimpleBus)
         print(component.label)
         """
-        return self._component_mgr.iter(*component_type, filter_func=filter_func)
+        return self._component_mgr.iter(*component_types, filter_func=filter_func)
 
     def get_component_types(self) -> Iterable[Type[Component]]:
         """Return an iterable of all component types stored in the system.
@@ -598,6 +643,83 @@ class System:
         print(component_type)
         """
         return self._component_mgr.get_types()
+
+    def get_components_with_supplemental_attribute(
+        self,
+        attribute: SupplementalAttribute,
+    ) -> list[Component]:
+        """Return all components attached to the given supplemental attribute."""
+        return [
+            self._component_mgr.get_by_uuid(x)
+            for x in self._supplemental_attr_mgr.get_component_uuids_with_attribute(attribute)
+        ]
+
+    def get_supplemental_attributes_with_component(
+        self,
+        component: Component,
+        supplemental_attribute_type: Optional[Type[U]] = None,
+        filter_func: Optional[Callable[[U], bool]] = None,
+    ) -> list[U]:
+        """Return all supplemental attributes attached to the given component and optionally,
+        with the given attribute type."""
+        if (
+            supplemental_attribute_type is not None
+            and supplemental_attribute_type.__subclasses__()
+        ):
+            msg = (
+                "get_supplemental_attributes_with_component does not support supplemental_attribute_type as "
+                "an abstract class"
+            )
+            raise ISOperationNotAllowed(msg)
+
+        return self._supplemental_attr_mgr.get_attributes_with_component(
+            component,
+            attribute_type=supplemental_attribute_type,
+            filter_func=filter_func,
+        )
+
+    def get_supplemental_attribute_by_uuid(self, uuid: UUID) -> SupplementalAttribute:
+        """Return the supplemental attribute with the given UUID."""
+        return self._supplemental_attr_mgr.get_by_uuid(uuid)
+
+    def get_supplemental_attributes(
+        self,
+        *supplemental_attribute_types: Type[U],
+        filter_func: Optional[Callable[[U], bool]] = None,
+    ) -> Generator[Any, None, None]:
+        return self._supplemental_attr_mgr.iter(
+            *supplemental_attribute_types, filter_func=filter_func
+        )
+
+    def get_supplemental_attribute_counts_by_type(self) -> list[dict[str, Any]]:
+        """Return a list of dicts of stored supplemental attribute counts by type."""
+        return self._supplemental_attr_mgr.get_attribute_counts_by_type()
+
+    def get_num_supplemental_attributes(self) -> int:
+        """Return the number of supplemental attributes stored in the system."""
+        return self._supplemental_attr_mgr.get_num_attributes()
+
+    def get_num_components_with_supplemental_attributes(self) -> int:
+        """Return the number of supplemental attributes stored in the system."""
+        return self._supplemental_attr_mgr.get_num_components_with_attributes()
+
+    def has_supplemental_attribute(
+        self,
+        component: Component,
+        supplemental_attribute_type: Optional[Type[SupplementalAttribute]] = None,
+    ) -> bool:
+        """Return True if the component has a supplemental attribute, optionally of the given
+        type.
+        """
+        return self._supplemental_attr_mgr.has_association_by_type(
+            component, attribute_type=supplemental_attribute_type
+        )
+
+    def has_supplemental_attribute_association(
+        self, component: Component, supplemental_attribute: SupplementalAttribute
+    ) -> bool:
+        """Return True if the component and supplemental attribute have an association."""
+        return self._supplemental_attr_mgr.has_association(component, supplemental_attribute)
 
     def has_component(self, component) -> bool:
         """Return True if the component is attached."""
@@ -682,8 +804,8 @@ class System:
 
     def remove_component(
         self, component: Component, cascade_down: bool = True, force: bool = False
-    ) -> Any:
-        """Remove the component from the system and return it.
+    ) -> None:
+        """Remove the component from the system.
 
         Parameters
         ----------
@@ -717,7 +839,7 @@ class System:
                     variable_name=metadata.variable_name,
                     **metadata.user_attributes,
                 )
-        component = self._component_mgr.remove(component, cascade_down=cascade_down, force=force)
+        self._component_mgr.remove(component, cascade_down=cascade_down, force=force)
 
     def remove_component_by_name(
         self,
@@ -725,8 +847,8 @@ class System:
         name: str,
         cascade_down: bool = True,
         force: bool = False,
-    ) -> Any:
-        """Remove the component with component_type and name from the system and return it.
+    ) -> None:
+        """Remove the component with component_type and name from the system.
 
         Parameters
         ----------
@@ -753,8 +875,8 @@ class System:
 
     def remove_component_by_uuid(
         self, uuid: UUID, cascade_down: bool = True, force: bool = False
-    ) -> Any:
-        """Remove the component with uuid from the system and return it.
+    ) -> None:
+        """Remove the component with uuid from the system.
 
         Parameters
         ----------
@@ -776,6 +898,29 @@ class System:
         """
         component = self.get_component_by_uuid(uuid)
         return self.remove_component(component, cascade_down=cascade_down, force=force)
+
+    def remove_supplemental_attribute(self, attribute: SupplementalAttribute) -> None:
+        """Remove the supplemental attribute from the system."""
+        self._supplemental_attr_mgr.raise_if_not_attached(attribute)
+        if self.has_time_series(attribute):
+            for metadata in self._time_series_mgr.list_time_series_metadata(attribute):
+                self.remove_time_series(
+                    attribute,
+                    time_series_type=metadata.get_time_series_data_type(),
+                    variable_name=metadata.variable_name,
+                    **metadata.user_attributes,
+                )
+        return self._supplemental_attr_mgr.remove(attribute)
+
+    def remove_supplemental_attribute_from_component(
+        self,
+        component: Component,
+        attribute: SupplementalAttribute,
+    ) -> None:
+        """Remove the association between the component and supplemental attribute.
+        If the attribute is not attached to any other components, remove it from the system.
+        """
+        self._supplemental_attr_mgr.remove_attribute_from_component(component, attribute)
 
     def update_components(
         self,
@@ -804,17 +949,17 @@ class System:
     def add_time_series(
         self,
         time_series: TimeSeriesData,
-        *components: Component,
+        *owners: Component | SupplementalAttribute,
         **user_attributes: Any,
     ) -> None:
-        """Store a time series array for one or more components.
+        """Store a time series array for one or more components or supplemental attributes.
 
         Parameters
         ----------
         time_series : TimeSeriesData
             Time series data to store.
-        components : Component
-            Add the time series to all of these components.
+        owners : Component | SupplementalAttribute
+            Add the time series to all of these components or supplemental attributes.
         user_attributes : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
 
@@ -822,7 +967,7 @@ class System:
         ------
         ISAlreadyAttached
             Raised if the variable name and user attributes match any time series already
-            attached to one of the components.
+            attached to one of the owners.
         ISOperationNotAllowed
             Raised if the manager was created in read-only mode.
 
@@ -838,12 +983,12 @@ class System:
         )
         >>> system.add_time_series(ts, gen1, gen2)
         """
-        return self._time_series_mgr.add(time_series, *components, **user_attributes)
+        return self._time_series_mgr.add(time_series, *owners, **user_attributes)
 
     def copy_time_series(
         self,
-        dst: Component,
-        src: Component,
+        dst: Component | SupplementalAttribute,
+        src: Component | SupplementalAttribute,
         name_mapping: dict[str, str] | None = None,
     ) -> None:
         """Copy all time series from src to dst.
@@ -932,7 +1077,7 @@ class System:
 
     def has_time_series(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes: str,
@@ -951,7 +1096,7 @@ class System:
             Optional, search for time series with these attributes.
         """
         return self.time_series.has_time_series(
-            component,
+            owner,
             variable_name=variable_name,
             time_series_type=time_series_type,
             **user_attributes,
@@ -1033,17 +1178,18 @@ class System:
 
     def remove_time_series(
         self,
-        *components: Component,
+        *owners: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes: Any,
     ) -> None:
-        """Remove all time series arrays attached to the components matching the inputs.
+        """Remove all time series arrays attached to the components or supplemental attributes
+        matching the inputs.
 
         Parameters
         ----------
-        components : Component
-            Affected components
+        owners
+            Affected components or supplemental attributes
         variable_name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
@@ -1064,7 +1210,7 @@ class System:
         >>> system.remove_time_series(gen1, "active_power")
         """
         return self._time_series_mgr.remove(
-            *components,
+            *owners,
             variable_name=variable_name,
             time_series_type=time_series_type,
             **user_attributes,
@@ -1316,6 +1462,19 @@ class System:
             else:
                 return None
         return deserialized_components
+
+    def _deserialize_supplemental_attributes(
+        self, supplemental_attributes: list[dict[str, Any]]
+    ) -> None:
+        """Deserialize supplemental_attributes from dictionaries and add them to the system."""
+        cached_types = CachedTypeHelper()
+        for sa_dict in supplemental_attributes:
+            metadata = SerializedTypeMetadata(**sa_dict[TYPE_METADATA])
+            supplemental_attribute_type = cached_types.get_type(metadata.fields)
+            values = {x: y for x, y in sa_dict.items() if x != TYPE_METADATA}
+            attr = supplemental_attribute_type(**values)
+            self._supplemental_attr_mgr.add(None, attr, deserialization_in_progress=True)
+            cached_types.add_deserialized_type(supplemental_attribute_type)
 
     @staticmethod
     def _make_time_series_directory(filename: Path) -> Path:

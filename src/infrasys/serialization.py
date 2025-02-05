@@ -67,6 +67,10 @@ class CachedTypeHelper:
         self._observed_types: dict[tuple[str, str], Type] = {}
         self._deserialized_types: set[Type] = set()
 
+    def add_deserialized_type(self, deserialized_type: Type[Any]) -> None:
+        """Add type that has been deserialized."""
+        self._deserialized_types.add(deserialized_type)
+
     def add_deserialized_types(self, types: set[Type]) -> None:
         """Add types that have been deserialized."""
         self._deserialized_types.update(types)

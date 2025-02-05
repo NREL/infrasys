@@ -11,6 +11,7 @@ from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys import Component
 from infrasys.exceptions import ISInvalidParameter, ISOperationNotAllowed
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
+from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_metadata_store import TimeSeriesMetadataStore
 from infrasys.time_series_models import (
     SingleTimeSeries,
@@ -76,17 +77,17 @@ class TimeSeriesManager:
     def add(
         self,
         time_series: TimeSeriesData,
-        *components: Component,
+        *owners: Component | SupplementalAttribute,
         **user_attributes: Any,
     ) -> None:
-        """Store a time series array for one or more components.
+        """Store a time series array for one or more components or supplemental attributes.
 
         Parameters
         ----------
         time_series : TimeSeriesData
             Time series data to store.
-        components : Component
-            Add the time series to all of these components.
+        owners : Component | SupplementalAttribute
+            Add the time series to all of these components or supplemental attributes.
         user_attributes : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
 
@@ -94,13 +95,13 @@ class TimeSeriesManager:
         ------
         ISAlreadyAttached
             Raised if the variable name and user attributes match any time series already
-            attached to one of the components.
+            attached to one of the components or supplemental attributes.
         ISOperationNotAllowed
             Raised if the manager was created in read-only mode.
         """
         self._handle_read_only()
-        if not components:
-            msg = "add_time_series requires at least one component"
+        if not owners:
+            msg = "add_time_series requires at least one component or supplemental attribute"
             raise ISOperationNotAllowed(msg)
 
         ts_type = type(time_series)
@@ -110,14 +111,15 @@ class TimeSeriesManager:
         metadata_type = ts_type.get_time_series_metadata_type()
         metadata = metadata_type.from_data(time_series, **user_attributes)
 
-        if not self._metadata_store.has_time_series(time_series.uuid):
+        data_is_stored = self._metadata_store.has_time_series(time_series.uuid)
+        # Call this first because it could raise an exception.
+        self._metadata_store.add(metadata, *owners)
+        if not data_is_stored:
             self._storage.add_time_series(metadata, time_series)
-
-        self._metadata_store.add(metadata, *components)
 
     def get(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
@@ -139,7 +141,7 @@ class TimeSeriesManager:
         list_time_series
         """
         metadata = self._metadata_store.get_metadata(
-            component,
+            owner,
             variable_name=variable_name,
             time_series_type=time_series_type.__name__,
             **user_attributes,
@@ -148,14 +150,16 @@ class TimeSeriesManager:
 
     def has_time_series(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes,
     ) -> bool:
-        """Return True if the component has time series matching the inputs."""
+        """Return True if the component or supplemental atttribute has time series matching the
+        inputs.
+        """
         return self._metadata_store.has_time_series_metadata(
-            component,
+            owner,
             variable_name=variable_name,
             time_series_type=time_series_type.__name__,
             **user_attributes,
@@ -163,7 +167,7 @@ class TimeSeriesManager:
 
     def list_time_series(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
@@ -172,7 +176,7 @@ class TimeSeriesManager:
     ) -> list[TimeSeriesData]:
         """Return all time series that match the inputs."""
         metadata = self.list_time_series_metadata(
-            component,
+            owner,
             variable_name=variable_name,
             time_series_type=time_series_type,
             **user_attributes,
@@ -181,14 +185,14 @@ class TimeSeriesManager:
 
     def list_time_series_metadata(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes: Any,
     ) -> list[TimeSeriesMetadata]:
         """Return all time series metadata that match the inputs."""
         return self._metadata_store.list_metadata(
-            component,
+            owner,
             variable_name=variable_name,
             time_series_type=time_series_type.__name__,
             **user_attributes,
@@ -196,7 +200,7 @@ class TimeSeriesManager:
 
     def remove(
         self,
-        *components: Component,
+        *owners: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **user_attributes: Any,
@@ -212,7 +216,7 @@ class TimeSeriesManager:
         """
         self._handle_read_only()
         time_series_uuids = self._metadata_store.remove(
-            *components,
+            *owners,
             variable_name=variable_name,
             time_series_type=time_series_type.__name__,
             **user_attributes,
@@ -224,18 +228,18 @@ class TimeSeriesManager:
 
     def copy(
         self,
-        dst: Component,
-        src: Component,
+        dst: Component | SupplementalAttribute,
+        src: Component | SupplementalAttribute,
         name_mapping: dict[str, str] | None = None,
     ) -> None:
         """Copy all time series from src to dst.
 
         Parameters
         ----------
-        dst : Component
-            Destination component
-        src : Component
-            Source component
+        dst
+            Destination component or supplemental attribute
+        src
+            Source component or supplemental attribute
         name_mapping : dict[str, str]
             Optionally map src names to different dst names.
             If provided and src has a time_series with a name not present in name_mapping, that
