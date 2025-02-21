@@ -33,7 +33,11 @@ class ComponentAssociations:
         execute(cur, f"CREATE TABLE {self.TABLE_NAME}({schema_text})")
         execute(
             cur,
-            f"CREATE INDEX by_c_uuid ON {self.TABLE_NAME}(component_uuid, attached_component_uuid)",
+            f"CREATE INDEX by_c_uuid ON {self.TABLE_NAME}(component_uuid)",
+        )
+        execute(
+            cur,
+            f"CREATE INDEX by_a_uuid ON {self.TABLE_NAME}(attached_component_uuid)",
         )
         self._con.commit()
         logger.debug("Created in-memory component associations table")
