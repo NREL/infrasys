@@ -1,5 +1,6 @@
 """Defines a System"""
 
+from contextlib import contextmanager
 import json
 import shutil
 import sqlite3
@@ -36,8 +37,10 @@ from infrasys.serialization import (
 from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import (
+    DatabaseConnection,
     SingleTimeSeries,
     TimeSeriesData,
+    TimeSeriesKey,
     TimeSeriesMetadata,
 )
 from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
@@ -83,10 +86,11 @@ class System:
             manager.
         kwargs : Any
             Configures time series behaviors:
-              - time_series_in_memory: Defaults to true.
-              - time_series_read_only: Disables add/remove of time series, defaults to false.
-              - time_series_directory: Location to store time series file, defaults to the system's
-                tmp directory.
+              - time_series_storage_type: Defaults to TimeSeriesStorageType.ARROW.
+              - time_series_read_only: Disables add/remove of time series, defaults to False.
+              - time_series_directory: Location to store time series files, defaults to the system's
+                tmp directory. Use an alternate location if the space in that directory is limited,
+                such as on a compute node with no local storage.
 
         Examples
         --------
@@ -155,7 +159,7 @@ class System:
         filename.parent.mkdir(exist_ok=True)
         time_series_dir = filename.parent / (filename.stem + "_time_series")
         time_series_dir.mkdir(exist_ok=True)
-        system_data = {
+        system_data: dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "uuid": str(self.uuid),
@@ -184,12 +188,13 @@ class System:
                 msg = "data contains the key 'system'"
                 raise ISConflictingArguments(msg)
             data["system"] = system_data
+
+        backup(self._con, time_series_dir / self.DB_FILENAME)
+        self._time_series_mgr.serialize(system_data["time_series"], time_series_dir)
+
         with open(filename, "w", encoding="utf-8") as f_out:
             json.dump(data, f_out, indent=indent)
             logger.info("Wrote system data to {}", filename)
-
-        backup(self._con, time_series_dir / self.DB_FILENAME)
-        self._time_series_mgr.serialize(time_series_dir)
 
     @classmethod
     def from_json(
@@ -285,6 +290,10 @@ class System:
         """
         system_data = data if "system" not in data else data["system"]
         ts_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
+        if "time_series_storage_type" in kwargs:
+            logger.warning("Ignoring keyword 'time_series_storage_type.' Use existing setting.")
+            kwargs.pop("time_series_storage_type")
+
         ts_path = (
             time_series_parent_dir
             if isinstance(time_series_parent_dir, Path)
@@ -950,8 +959,9 @@ class System:
         self,
         time_series: TimeSeriesData,
         *owners: Component | SupplementalAttribute,
+        connection: DatabaseConnection | None = None,
         **user_attributes: Any,
-    ) -> None:
+    ) -> TimeSeriesKey:
         """Store a time series array for one or more components or supplemental attributes.
 
         Parameters
@@ -962,6 +972,11 @@ class System:
             Add the time series to all of these components or supplemental attributes.
         user_attributes : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
+
+        Returns
+        -------
+        TimeSeriesKey
+            Returns a key that can be used to retrieve the time series.
 
         Raises
         ------
@@ -983,7 +998,12 @@ class System:
         )
         >>> system.add_time_series(ts, gen1, gen2)
         """
-        return self._time_series_mgr.add(time_series, *owners, **user_attributes)
+        return self._time_series_mgr.add(
+            time_series,
+            *owners,
+            connection=connection,
+            **user_attributes,
+        )
 
     def copy_time_series(
         self,
@@ -1019,11 +1039,12 @@ class System:
 
     def get_time_series(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
+        connection: DatabaseConnection | None = None,
         **user_attributes: str,
     ) -> Any:
         """Return a time series array.
@@ -1042,6 +1063,8 @@ class System:
             If not None, take a slice of the time series with this length.
         user_attributes : str
             Optional, search for time series with these attributes.
+        connection
+            Optional, connection returned by :meth:`open_time_series_store`
 
         Raises
         ------
@@ -1067,13 +1090,20 @@ class System:
         list_time_series
         """
         return self._time_series_mgr.get(
-            component,
+            owner,
             variable_name=variable_name,
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
+            connection=connection,
             **user_attributes,
         )
+
+    def get_time_series_by_key(
+        self, owner: Component | SupplementalAttribute, key: TimeSeriesKey
+    ) -> Any:
+        """Return a time series array by key."""
+        return self._time_series_mgr.get_by_key(owner, key)
 
     def has_time_series(
         self,
@@ -1140,6 +1170,39 @@ class System:
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
+            **user_attributes,
+        )
+
+    def list_time_series_keys(
+        self,
+        owner: Component | SupplementalAttribute,
+        variable_name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **user_attributes: Any,
+    ) -> list[TimeSeriesKey]:
+        """Return all time series keys that match the inputs.
+
+        Parameters
+        ----------
+        owner : Component
+            Component to which the time series must be attached.
+        variable_name : str | None
+            Optional, search for time series with this name.
+        time_series_type : Type[TimeSeriesData]
+            Optional, search for time series with this type.
+        user_attributes : str
+            Optional, search for time series with these attributes.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> for key in system.list_time_series_keys(gen1):
+        ...     time_series = system.get_time_series_by_key(gen1, key)
+        """
+        return self.time_series.list_time_series_keys(
+            owner,
+            variable_name=variable_name,
+            time_series_type=time_series_type,
             **user_attributes,
         )
 
@@ -1216,6 +1279,27 @@ class System:
             **user_attributes,
         )
 
+    @contextmanager
+    def open_time_series_store(self) -> Generator[DatabaseConnection, None, None]:
+        """Open a connection to the time series store. This can improve performance when
+        reading or writing many time series arrays for specific backends (chronify and HDF5).
+        It will also rollback any changes if an exception is raised.
+
+        Returns
+        -------
+        Any
+            An opaque object specific to the type of store being used. The object should be
+            passed to all add_time_series/get_time_series methods.
+
+        Examples
+        --------
+        >>> with system.open_time_series_store() as conn:
+        ...     system.add_time_series(ts1, gen1, connection=conn)
+        ...     system.add_time_series(ts2, gen1, connection=conn)
+        """
+        with self._time_series_mgr.open_time_series_store() as conn:
+            yield conn
+
     def serialize_system_attributes(self) -> dict[str, Any]:
         """Allows subclasses to serialize attributes at the root level."""
         return {}
@@ -1251,7 +1335,7 @@ class System:
         **kwargs:
             The same keys as TIME_SERIES_KWARGS in time_series_manager.py
             {
-                "time_series_in_memory": bool = False,
+                "time_series_storage_type": TimeSeriesStorageType = TimeSeriesStorageType.ARROW,
                 "time_series_read_only": bool = False,
                 "time_series_directory": Path | None = None,
             }
@@ -1271,14 +1355,9 @@ class System:
         >>> system.add_time_series(load_data, generator)
 
         # Convert the storage to in_memory
-        >>> kwargs = {"time_series_in_memory": True}
-        >>> system.convert_storage(**kwargs)
-
-        # Check the time series storage type
-        >>> isinstance(system._time_series_mgr._storage, InMemoryTimeSeriesStorage)
-        True
+        >>> system.convert_storage(time_series_storage_type=TimeSeriesStorageType.MEMORY)
         """
-        return self._time_series_mgr.convert_storage(**kwargs)
+        self._time_series_mgr.convert_storage(**kwargs)
 
     @property
     def _components(self) -> ComponentManager:

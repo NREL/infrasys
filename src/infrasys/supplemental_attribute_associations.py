@@ -58,6 +58,7 @@ class SupplementalAttributeAssociationsStore:
         WHERE attribute_uuid = ? AND component_uuid = ?
         LIMIT 1
     """
+
     def add(self, component: Component, attribute: SupplementalAttribute) -> None:
         """Add association to the database.
 
@@ -91,6 +92,7 @@ class SupplementalAttributeAssociationsStore:
         WHERE attribute_uuid = ? AND component_uuid = ?
         LIMIT 1
     """
+
     def has_association_by_component_and_attribute(
         self,
         component: Component,
@@ -101,6 +103,7 @@ class SupplementalAttributeAssociationsStore:
         return self._has_rows(self._HAS_ASSOCIATION_BY_COMPONENT_AND_ATTRIBUTE_QUERY, params)
 
     _HAS_ASSOCIATION_BY_ATTRIBUTE_QUERY = f"SELECT id FROM {TABLE_NAME} WHERE attribute_uuid = ?"
+
     def has_association_by_attribute(self, attribute: SupplementalAttribute) -> bool:
         """Return true if there is at least one association matching the inputs."""
         # Note: Unlike the other has_association methods, this is not covered by an index.
@@ -108,6 +111,7 @@ class SupplementalAttributeAssociationsStore:
         return self._has_rows(self._HAS_ASSOCIATION_BY_ATTRIBUTE_QUERY, params)
 
     _HAS_ASSOCIATION_BY_COMPONENT_QUERY = f"SELECT id FROM {TABLE_NAME} WHERE component_uuid = ?"
+
     def has_association_by_component(self, component: Component) -> bool:
         """Return True if there is at least one association with the component."""
         params = (str(component.uuid),)
@@ -119,6 +123,7 @@ class SupplementalAttributeAssociationsStore:
         WHERE component_uuid = ? AND attribute_type = ?
         LIMIT 1
     """
+
     def has_association_by_component_and_attribute_type(
         self, component: Component, attribute_type: str
     ) -> bool:
@@ -138,6 +143,7 @@ class SupplementalAttributeAssociationsStore:
         FROM {TABLE_NAME}
         WHERE attribute_uuid = ?
     """
+
     def list_associated_component_uuids(self, attribute: SupplementalAttribute) -> list[UUID]:
         """Return the component UUIDs associated with the attribute."""
         params = (str(attribute.uuid),)
@@ -155,6 +161,7 @@ class SupplementalAttributeAssociationsStore:
         FROM {TABLE_NAME}
         WHERE attribute_type = ? AND component_uuid = ?
     """
+
     def list_associated_supplemental_attribute_uuids(
         self,
         component: Component,
@@ -228,6 +235,7 @@ class SupplementalAttributeAssociationsStore:
         ORDER BY
             attribute_type
     """
+
     def get_attribute_counts_by_type(self) -> list[dict[str, Any]]:
         """Return a list of dicts of stored attribute counts by type."""
         cur = self._con.cursor()
@@ -260,6 +268,7 @@ class SupplementalAttributeAssociationsStore:
             SELECT COUNT(DISTINCT attribute_uuid) AS count
             FROM {TABLE_NAME}
         """
+
     def get_num_attributes(self) -> int:
         """Return the number of supplemental attributes."""
         cur = self._con.cursor()
@@ -269,6 +278,7 @@ class SupplementalAttributeAssociationsStore:
         SELECT COUNT(DISTINCT component_uuid) AS count
         FROM {TABLE_NAME}
     """
+
     def get_num_components_with_attributes(self) -> int:
         """Return the number of components with supplemental attributes."""
         cur = self._con.cursor()
