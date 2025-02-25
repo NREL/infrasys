@@ -3,7 +3,7 @@
 import abc
 import importlib
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from typing import (
     Any,
     Literal,
@@ -16,6 +16,7 @@ from typing import (
 from uuid import UUID
 
 import numpy as np
+import pandas as pd
 import pint
 from numpy.typing import NDArray
 from pydantic import (
@@ -42,12 +43,13 @@ VALUE_COLUMN = "value"
 ISArray: TypeAlias = Sequence | NDArray | pint.Quantity
 
 
-class TimeSeriesStorageType(str, Enum):
+class TimeSeriesStorageType(StrEnum):
     """Defines the possible storage types for time series."""
 
+    MEMORY = "memory"
+    ARROW = "arrow"
+    CHRONIFY = "chronify"
     HDF5 = "hdf5"
-    IN_MEMORY = "in_memory"
-    FILE = "arrow"
     PARQUET = "parquet"
 
 
@@ -204,6 +206,12 @@ class SingleTimeSeries(TimeSeriesData):
             resolution,
             normalization=normalization,
         )
+
+    def make_timestamps(self) -> NDArray:
+        """Return the timestamps as a numpy array."""
+        return pd.date_range(
+            start=self.initial_time, periods=len(self.data), freq=self.resolution
+        ).values
 
     @staticmethod
     def get_time_series_metadata_type() -> Type:

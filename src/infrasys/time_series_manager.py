@@ -17,13 +17,23 @@ from infrasys.time_series_models import (
     SingleTimeSeries,
     TimeSeriesData,
     TimeSeriesMetadata,
+    TimeSeriesStorageType,
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
+try:
+    from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
+
+    is_chronify_installed = True
+except ImportError:
+    is_chronify_installed = False
+
+
 TIME_SERIES_KWARGS = {
-    "time_series_in_memory": False,
     "time_series_read_only": False,
     "time_series_directory": None,
+    "time_series_storage_type": TimeSeriesStorageType.ARROW,
+    "chronify_engine_name": "duckdb",
 }
 
 
@@ -41,28 +51,51 @@ class TimeSeriesManager:
         initialize: bool = True,
         **kwargs,
     ) -> None:
+        self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
         self._storage = storage or self.create_new_storage(**kwargs)
-        self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
 
         # TODO: create parsing mechanism? CSV, CSV + JSON
 
     @staticmethod
     def create_new_storage(permanent: bool = False, **kwargs):
-        base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
-
-        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
-            return InMemoryTimeSeriesStorage()
-        else:
-            if permanent:
-                if base_directory is None:
-                    msg = "Can't convert to perminant storage without a base directory"
-                    raise ISInvalidParameter(msg)
-                return ArrowTimeSeriesStorage.create_with_permanent_directory(
-                    directory=base_directory
+        base_directory: Path | None = _process_time_series_kwarg(
+            "time_series_directory", **kwargs
+        )
+        storage_type = _process_time_series_kwarg("time_series_storage_type", **kwargs)
+        match storage_type:
+            case TimeSeriesStorageType.ARROW:
+                if permanent:
+                    if base_directory is None:
+                        msg = "Can't convert to permanent storage without a base directory"
+                        raise ISInvalidParameter(msg)
+                    return ArrowTimeSeriesStorage.create_with_permanent_directory(
+                        directory=base_directory
+                    )
+                return ArrowTimeSeriesStorage.create_with_temp_directory(
+                    base_directory=base_directory
                 )
-
-            return ArrowTimeSeriesStorage.create_with_temp_directory(base_directory=base_directory)
+            case TimeSeriesStorageType.CHRONIFY:
+                if not is_chronify_installed:
+                    msg = (
+                        "chronify is not installed. Please choose a different time series storage "
+                        'option or install chronify with `pip install "infrasys[chronify]"`.'
+                    )
+                    raise ImportError(msg)
+                return ChronifyTimeSeriesStorage.create_with_temp_directory(
+                    base_directory=base_directory,
+                    engine_name=_process_time_series_kwarg(
+                        "chronify_engine_name", **kwargs
+                    ),
+                    read_only=_process_time_series_kwarg(
+                        "time_series_read_only", **kwargs
+                    ),
+                )
+            case TimeSeriesStorageType.MEMORY:
+                return InMemoryTimeSeriesStorage()
+            case _:
+                msg = f"{storage_type=}"
+                raise NotImplementedError(msg)
 
     @property
     def metadata_store(self) -> TimeSeriesMetadataStore:
@@ -78,6 +111,7 @@ class TimeSeriesManager:
         self,
         time_series: TimeSeriesData,
         *owners: Component | SupplementalAttribute,
+        connection: Any = None,
         **user_attributes: Any,
     ) -> None:
         """Store a time series array for one or more components or supplemental attributes.
@@ -115,7 +149,7 @@ class TimeSeriesManager:
         # Call this first because it could raise an exception.
         self._metadata_store.add(metadata, *owners)
         if not data_is_stored:
-            self._storage.add_time_series(metadata, time_series)
+            self._storage.add_time_series(metadata, time_series, connection=connection)
 
     def get(
         self,
@@ -124,6 +158,7 @@ class TimeSeriesManager:
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
+        connection: Any = None,
         **user_attributes,
     ) -> TimeSeriesData:
         """Return a time series array.
@@ -146,7 +181,9 @@ class TimeSeriesManager:
             time_series_type=time_series_type.__name__,
             **user_attributes,
         )
-        return self._get_by_metadata(metadata, start_time=start_time, length=length)
+        return self._get_by_metadata(
+            metadata, start_time=start_time, length=length, connection=connection
+        )
 
     def has_time_series(
         self,
@@ -172,6 +209,7 @@ class TimeSeriesManager:
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
+        connection: Any = None,
         **user_attributes: Any,
     ) -> list[TimeSeriesData]:
         """Return all time series that match the inputs."""
@@ -181,7 +219,12 @@ class TimeSeriesManager:
             time_series_type=time_series_type,
             **user_attributes,
         )
-        return [self._get_by_metadata(x, start_time=start_time, length=length) for x in metadata]
+        return [
+            self._get_by_metadata(
+                x, start_time=start_time, length=length, connection=connection
+            )
+            for x in metadata
+        ]
 
     def list_time_series_metadata(
         self,
@@ -203,6 +246,7 @@ class TimeSeriesManager:
         *owners: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        connection: Any = None,
         **user_attributes: Any,
     ):
         """Remove all time series arrays matching the inputs.
@@ -223,7 +267,7 @@ class TimeSeriesManager:
         )
         missing_uuids = self._metadata_store.list_missing_time_series(time_series_uuids)
         for uuid in missing_uuids:
-            self._storage.remove_time_series(uuid)
+            self._storage.remove_time_series(uuid, connection=connection)
             logger.info("Removed time series {}.{}", time_series_type, variable_name)
 
     def copy(
@@ -258,16 +302,20 @@ class TimeSeriesManager:
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
+        connection: Any = None,
     ) -> TimeSeriesData:
         return self._storage.get_time_series(
             metadata,
             start_time=start_time,
             length=length,
+            connection=connection,
         )
 
-    def serialize(self, dst: Path | str, src: Optional[Path | str] = None) -> None:
+    def serialize(
+        self, data: dict[str, Any], dst: Path | str, src: Optional[Path | str] = None
+    ) -> None:
         """Serialize the time series data to dst."""
-        self._storage.serialize(dst, src)
+        self._storage.serialize(data, dst, src=src)
 
     @classmethod
     def deserialize(
@@ -280,20 +328,73 @@ class TimeSeriesManager:
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
+        if (
+            _process_time_series_kwarg("time_series_storage_type", **kwargs)
+            == TimeSeriesStorageType.MEMORY
+        ):
+            msg = "De-serialization does not support in-memory time series storage."
+            raise ISOperationNotAllowed(msg)
+
+        dst_time_series_directory = _process_time_series_kwarg(
+            "time_series_directory", **kwargs
+        )
+        if (
+            dst_time_series_directory is not None
+            and not Path(dst_time_series_directory).exists()
+        ):
+            msg = f"time_series_directory={dst_time_series_directory} does not exist"
+            raise FileNotFoundError(msg)
+        read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
         time_series_dir = Path(parent_dir) / data["directory"]
+        storage: TimeSeriesStorageBase
 
-        if _process_time_series_kwarg("time_series_read_only", **kwargs):
-            storage = ArrowTimeSeriesStorage.create_with_permanent_directory(time_series_dir)
-        else:
-            storage = ArrowTimeSeriesStorage.create_with_temp_directory()
-            storage.serialize(src=time_series_dir, dst=storage.get_time_series_directory())
+        match data["time_series_storage_type"]:
+            case TimeSeriesStorageType.CHRONIFY:
+                if not is_chronify_installed:
+                    msg = (
+                        "This system used chronify to manage time series data but the package is "
+                        'not installed. Please install it with `pip install "infrasys[chronify]"`.'
+                    )
+                    raise ImportError(msg)
+                if read_only:
+                    storage = ChronifyTimeSeriesStorage.from_file(
+                        data,
+                        read_only=True,
+                    )
+                else:
+                    storage = ChronifyTimeSeriesStorage.from_file_to_tmp_file(
+                        data,
+                        dst_dir=dst_time_series_directory,
+                        read_only=read_only,
+                    )
+            case TimeSeriesStorageType.ARROW:
+                if read_only:
+                    storage = ArrowTimeSeriesStorage.create_with_permanent_directory(
+                        time_series_dir
+                    )
+                else:
+                    storage = ArrowTimeSeriesStorage.create_with_temp_directory(
+                        base_directory=dst_time_series_directory
+                    )
+                    storage.serialize(
+                        {}, storage.get_time_series_directory(), src=time_series_dir
+                    )
+            case _:
+                msg = data["time_series_storage_type"]
+                raise NotImplementedError(msg)
 
-        cls_instance = cls(con, storage=storage, initialize=False, **kwargs)
+        mgr = cls(con, storage=storage, initialize=False, **kwargs)
+        if (
+            "time_series_storage_type" in kwargs
+            and _process_time_series_kwarg("time_series_storage_type", **kwargs)
+            != data["time_series_storage_type"]
+        ):
+            mgr.convert_storage(**kwargs)
+        return mgr
 
-        if _process_time_series_kwarg("time_series_in_memory", **kwargs):
-            cls_instance.convert_storage(**kwargs)
-
-        return cls_instance
+    def open_time_series_store(self, mode: str = "r") -> Any:
+        """Open a connection to the time series store."""
+        return self._storage.open_time_series_store(mode=mode)
 
     def _handle_read_only(self) -> None:
         if self._read_only:

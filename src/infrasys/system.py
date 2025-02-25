@@ -83,10 +83,12 @@ class System:
             manager.
         kwargs : Any
             Configures time series behaviors:
-              - time_series_in_memory: Defaults to true.
-              - time_series_read_only: Disables add/remove of time series, defaults to false.
-              - time_series_directory: Location to store time series file, defaults to the system's
-                tmp directory.
+              - time_series_storage_type: Defaults to TimeSeriesStorageType.ARROW.
+              - time_series_read_only: Disables add/remove of time series, defaults to False.
+              - time_series_directory: Location to store time series files, defaults to the system's
+                tmp directory. Use an alternate location if the space in that directory is limited,
+                such as on a compute node with no local storage.
+              - chronify_engine_name: Database engine to use with chronify, defaults to "duckdb".
 
         Examples
         --------
@@ -155,7 +157,7 @@ class System:
         filename.parent.mkdir(exist_ok=True)
         time_series_dir = filename.parent / (filename.stem + "_time_series")
         time_series_dir.mkdir(exist_ok=True)
-        system_data = {
+        system_data: dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "uuid": str(self.uuid),
@@ -184,12 +186,13 @@ class System:
                 msg = "data contains the key 'system'"
                 raise ISConflictingArguments(msg)
             data["system"] = system_data
+
+        backup(self._con, time_series_dir / self.DB_FILENAME)
+        self._time_series_mgr.serialize(system_data["time_series"], time_series_dir)
+
         with open(filename, "w", encoding="utf-8") as f_out:
             json.dump(data, f_out, indent=indent)
             logger.info("Wrote system data to {}", filename)
-
-        backup(self._con, time_series_dir / self.DB_FILENAME)
-        self._time_series_mgr.serialize(time_series_dir)
 
     @classmethod
     def from_json(
@@ -285,6 +288,10 @@ class System:
         """
         system_data = data if "system" not in data else data["system"]
         ts_kwargs = {k: v for k, v in kwargs.items() if k in TIME_SERIES_KWARGS}
+        if "time_series_storage_type" in kwargs:
+            logger.warning("Ignoring keyword 'time_series_storage_type.' Use existing setting.")
+            kwargs.pop("time_series_storage_type")
+
         ts_path = (
             time_series_parent_dir
             if isinstance(time_series_parent_dir, Path)
@@ -950,6 +957,7 @@ class System:
         self,
         time_series: TimeSeriesData,
         *owners: Component | SupplementalAttribute,
+        connection: Any = None,
         **user_attributes: Any,
     ) -> None:
         """Store a time series array for one or more components or supplemental attributes.
@@ -983,7 +991,9 @@ class System:
         )
         >>> system.add_time_series(ts, gen1, gen2)
         """
-        return self._time_series_mgr.add(time_series, *owners, **user_attributes)
+        return self._time_series_mgr.add(
+            time_series, *owners, connection=connection, **user_attributes
+        )
 
     def copy_time_series(
         self,
@@ -1024,6 +1034,7 @@ class System:
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
+        connection: Any = None,
         **user_attributes: str,
     ) -> Any:
         """Return a time series array.
@@ -1042,6 +1053,8 @@ class System:
             If not None, take a slice of the time series with this length.
         user_attributes : str
             Optional, search for time series with these attributes.
+        connection
+            Optional, connection returned by :meth:`open_time_series_store`
 
         Raises
         ------
@@ -1072,6 +1085,7 @@ class System:
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
+            connection=connection,
             **user_attributes,
         )
 
@@ -1216,6 +1230,24 @@ class System:
             **user_attributes,
         )
 
+    def open_time_series_store(self, mode: str = "r") -> Any:
+        """Open a connection to the time series store. This can improve performance when
+        reading or writing many time series arrays for specific backends (chronify and HDF5).
+
+        Returns
+        -------
+        Any
+            An opaque object specific to the type of store being used. The object should be
+            passed to all add_time_series/get_time_series methods.
+
+        Examples
+        --------
+        >>> with system.open_time_series_store() as conn:
+            system.add_time_series(ts1, gen1, connection=conn)
+            system.add_time_series(ts2, gen1, connection=conn)
+        """
+        return self._time_series_mgr.open_time_series_store(mode=mode)
+
     def serialize_system_attributes(self) -> dict[str, Any]:
         """Allows subclasses to serialize attributes at the root level."""
         return {}
@@ -1251,7 +1283,7 @@ class System:
         **kwargs:
             The same keys as TIME_SERIES_KWARGS in time_series_manager.py
             {
-                "time_series_in_memory": bool = False,
+                "time_series_storage_type": TimeSeriesStorageType = TimeSeriesStorageType.ARROW,
                 "time_series_read_only": bool = False,
                 "time_series_directory": Path | None = None,
             }
@@ -1271,12 +1303,7 @@ class System:
         >>> system.add_time_series(load_data, generator)
 
         # Convert the storage to in_memory
-        >>> kwargs = {"time_series_in_memory": True}
-        >>> system.convert_storage(**kwargs)
-
-        # Check the time series storage type
-        >>> isinstance(system._time_series_mgr._storage, InMemoryTimeSeriesStorage)
-        True
+        >>> system.convert_storage(time_series_storage_type=TimeSeriesStorageType.MEMORY)
         """
         return self._time_series_mgr.convert_storage(**kwargs)
 
