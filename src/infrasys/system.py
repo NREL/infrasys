@@ -1471,7 +1471,7 @@ class System:
         for sa_dict in supplemental_attributes:
             metadata = SerializedTypeMetadata(**sa_dict[TYPE_METADATA])
             supplemental_attribute_type = cached_types.get_type(metadata.fields)
-            values = {x: y for x, y in sa_dict.items() if x != TYPE_METADATA}
+            values = self._deserialize_fields(sa_dict, cached_types)
             attr = supplemental_attribute_type(**values)
             self._supplemental_attr_mgr.add(None, attr, deserialization_in_progress=True)
             cached_types.add_deserialized_type(supplemental_attribute_type)

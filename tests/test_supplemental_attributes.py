@@ -1,11 +1,19 @@
 import pytest
+
 from infrasys import GeographicInfo, SupplementalAttribute
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
+from infrasys.quantities import Energy
+from infrasys.system import System
+
 from .models.simple_system import (
-    SimpleSystem,
     SimpleBus,
     SimpleGenerator,
+    SimpleSystem,
 )
+
+
+class Attribute(SupplementalAttribute):
+    energy: Energy
 
 
 def test_supplemental_attribute_manager(tmp_path):
@@ -123,3 +131,18 @@ def test_one_attribute_many_components():
     system.add_component(gen2)
     system.add_supplemental_attribute(gen, attr1)
     system.add_supplemental_attribute(gen2, attr1)
+
+
+def test_attribute_with_basequantity(tmp_path):
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
+    attr1 = Attribute(energy=Energy(10.0, "kWh"))
+    system = SimpleSystem(auto_add_composed_components=True)
+    system.add_component(gen)
+    system.add_supplemental_attribute(gen, attr1)
+    system.to_json(tmp_path / "test.json")
+    system2 = System.from_json(tmp_path / "test.json")
+
+    gen2 = system2.get_component(SimpleGenerator, "gen1")
+    attr2: Attribute = system.get_supplemental_attributes_with_component(gen2)[0]
+    assert attr1 == attr2
