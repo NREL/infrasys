@@ -348,7 +348,9 @@ class TimeSeriesManager:
         time_series_dir = Path(parent_dir) / data["directory"]
         storage: TimeSeriesStorageBase
 
-        match data["time_series_storage_type"]:
+        # This term was introduced in v0.3.0. Maintain compatibility with old serialized files.
+        ts_type = data.get("time_series_storage_type", TimeSeriesStorageType.ARROW)
+        match ts_type:
             case TimeSeriesStorageType.CHRONIFY:
                 if not is_chronify_installed:
                     msg = (
@@ -380,14 +382,13 @@ class TimeSeriesManager:
                         {}, storage.get_time_series_directory(), src=time_series_dir
                     )
             case _:
-                msg = data["time_series_storage_type"]
+                msg = f"time_series_storage_type={ts_type} is not supported"
                 raise NotImplementedError(msg)
 
         mgr = cls(con, storage=storage, initialize=False, **kwargs)
         if (
             "time_series_storage_type" in kwargs
-            and _process_time_series_kwarg("time_series_storage_type", **kwargs)
-            != data["time_series_storage_type"]
+            and _process_time_series_kwarg("time_series_storage_type", **kwargs) != ts_type
         ):
             mgr.convert_storage(**kwargs)
         return mgr
