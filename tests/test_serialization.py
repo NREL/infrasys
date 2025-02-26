@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import random
 import os
 from datetime import datetime, timedelta
@@ -241,3 +242,9 @@ def test_system_save(tmp_path, simple_system_with_time_series):
     assert not os.path.exists(fpath), f"Original folder {fpath} was not deleted sucessfully."
     zip_fpath = f"{fpath}.zip"
     assert os.path.exists(zip_fpath), f"Zip file {zip_fpath} does not exists"
+
+
+def test_legacy_format():
+    # This file was save from v0.2.1 with test_with_time_series_quantity.
+    # Ensure that we can deserialize it.
+    SimpleSystem.from_json(Path("tests/data/legacy_system.json"))
