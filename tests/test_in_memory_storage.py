@@ -1,5 +1,5 @@
 from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
-from infrasys.time_series_models import SingleTimeSeries
+from infrasys.time_series_models import SingleTimeSeries, TimeSeriesStorageType
 from infrasys.exceptions import ISAlreadyAttached
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
@@ -19,8 +19,18 @@ def get_data_and_uuids(system):
 @pytest.mark.parametrize(
     "original_kwargs,new_kwargs,original_stype,new_stype",
     [
-        ({"time_series_in_memory": True}, {}, InMemoryTimeSeriesStorage, ArrowTimeSeriesStorage),
-        ({}, {"time_series_in_memory": True}, ArrowTimeSeriesStorage, InMemoryTimeSeriesStorage),
+        (
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            {},
+            InMemoryTimeSeriesStorage,
+            ArrowTimeSeriesStorage,
+        ),
+        (
+            {},
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            ArrowTimeSeriesStorage,
+            InMemoryTimeSeriesStorage,
+        ),
     ],
 )
 def test_memory_convert_storage_time_series(

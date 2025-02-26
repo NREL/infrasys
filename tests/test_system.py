@@ -6,6 +6,8 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
+from infrasys.arrow_storage import ArrowTimeSeriesStorage
+from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
 from infrasys.exceptions import (
     ISAlreadyAttached,
     ISNotStored,
@@ -14,6 +16,7 @@ from infrasys.exceptions import (
 )
 from infrasys import Component, Location, SingleTimeSeries
 from infrasys.quantities import ActivePower
+from infrasys.time_series_models import TimeSeriesStorageType
 from .models.simple_system import (
     GeneratorBase,
     SimpleSystem,
@@ -246,15 +249,22 @@ def test_time_series():
     assert not system.has_time_series(gen2, variable_name=variable_name)
 
 
-@pytest.mark.parametrize(
-    "in_memory,use_quantity,sql_json",
-    list(itertools.product([True, False], [True, False], [True, False])),
+TS_STORAGE_OPTIONS = (
+    TimeSeriesStorageType.ARROW,
+    TimeSeriesStorageType.CHRONIFY,
+    TimeSeriesStorageType.MEMORY,
 )
-def test_time_series_retrieval(in_memory, use_quantity, sql_json):
+
+
+@pytest.mark.parametrize(
+    "storage_type,use_quantity,sql_json",
+    list(itertools.product(TS_STORAGE_OPTIONS, [True, False], [True, False])),
+)
+def test_time_series_retrieval(storage_type, use_quantity, sql_json):
     try:
         if not sql_json:
             os.environ["__INFRASYS_NON_JSON_SQLITE__"] = "1"
-        system = SimpleSystem(time_series_in_memory=in_memory)
+        system = SimpleSystem(time_series_storage_type=storage_type)
         bus = SimpleBus(name="test-bus", voltage=1.1)
         gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
         system.add_components(bus, gen)
@@ -340,6 +350,30 @@ def test_time_series_retrieval(in_memory, use_quantity, sql_json):
         os.environ.pop("__INFRASYS_NON_JSON_SQLITE__", None)
 
 
+@pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
+def test_open_time_series_store(storage_type: TimeSeriesStorageType):
+    system = SimpleSystem(time_series_storage_type=storage_type)
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen)
+
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    timestamps = [initial_time + timedelta(hours=i) for i in range(length)]
+    time_series_arrays: list[SingleTimeSeries] = []
+    with system.open_time_series_store(mode="r+") as conn:
+        for i in range(5):
+            ts = SingleTimeSeries.from_time_array(np.random.rand(length), f"ts{i}", timestamps)
+            system.add_time_series(ts, gen)
+            time_series_arrays.append(ts)
+    with system.open_time_series_store(mode="r") as conn:
+        for i in range(5):
+            ts = system.get_time_series(gen, variable_name=f"ts{i}", connection=conn)
+            assert np.array_equal(
+                system.get_time_series(gen, f"ts{i}").data, time_series_arrays[i].data
+            )
+
+
 def test_time_series_removal():
     system = SimpleSystem()
     bus = SimpleBus(name="test-bus", voltage=1.1)
@@ -415,12 +449,12 @@ def test_serialize_time_series_from_array(tmp_path):
     assert ts2.data.tolist() == list(data)
 
 
-@pytest.mark.parametrize("in_memory", [True, False])
-def test_time_series_slices(in_memory):
+@pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
+def test_time_series_slices(storage_type):
     system = SimpleSystem(
         name="test-system",
         auto_add_composed_components=True,
-        time_series_in_memory=in_memory,
+        time_series_storage_type=storage_type,
     )
     gen = SimpleGenerator.example()
     system.add_components(gen)
@@ -509,13 +543,13 @@ def test_deepcopy_component(simple_system_with_time_series: SimpleSystem):
     assert gen2.bus is not gen1.bus
 
 
-@pytest.mark.parametrize("inputs", [(True, False), (True, False)])
+@pytest.mark.parametrize("inputs", list(itertools.product(TS_STORAGE_OPTIONS, [True, False])))
 def test_remove_component(inputs):
-    in_memory, cascade_down = inputs
+    storage_type, cascade_down = inputs
     system = SimpleSystem(
         name="test-system",
         auto_add_composed_components=True,
-        time_series_in_memory=in_memory,
+        time_series_storage_type=storage_type,
     )
     gen1 = SimpleGenerator.example()
     bus = gen1.bus
@@ -700,3 +734,27 @@ def test_system_counts():
 
 def test_system_printing(simple_system_with_time_series):
     simple_system_with_time_series.info()
+
+
+def test_convert_chronify_to_arrow(tmp_path):
+    system = SimpleSystem(time_series_storage_type=TimeSeriesStorageType.CHRONIFY)
+    assert isinstance(system.time_series.storage, ChronifyTimeSeriesStorage)
+    assert system.time_series.storage.get_database_url()
+    assert system.time_series.storage.get_engine_name() == "duckdb"
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen)
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    timestamps = [initial_time + timedelta(hours=i) for i in range(length)]
+    ts = SingleTimeSeries.from_time_array(np.random.rand(length), "test_ts", timestamps)
+    system.add_time_series(ts, gen)
+    filename = tmp_path / "system.json"
+    system.to_json(filename)
+    system2 = SimpleSystem.from_json(
+        filename, time_series_storage_type=TimeSeriesStorageType.ARROW
+    )
+    assert isinstance(system2.time_series.storage, ArrowTimeSeriesStorage)
+    gen2 = system2.get_component(SimpleGenerator, "gen")
+    ts2 = system2.get_time_series(gen2, "test_ts")
+    assert np.array_equal(ts.data, ts2.data)
