@@ -17,6 +17,8 @@ from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
     SingleTimeSeries,
     SingleTimeSeriesMetadata,
+    NonSequentialTimeSeries,
+    NonSequentialTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
@@ -30,6 +32,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
 
     def __init__(self, directory: Path) -> None:
         self._ts_directory = directory
+        self._ts_metadata: str | None = None
 
     @classmethod
     def create_with_temp_directory(
@@ -55,18 +58,31 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
     ) -> None:
-        if isinstance(time_series, SingleTimeSeries):
-            self.add_raw_single_time_series(metadata.time_series_uuid, time_series.data_array)
+        if isinstance(time_series, (SingleTimeSeries, NonSequentialTimeSeries)):
+            ts_data = (
+                time_series.data_array
+                if isinstance(time_series, SingleTimeSeries)
+                else (time_series.data_array, time_series.timestamps_array)
+            )
+            self.add_raw_time_series(metadata.time_series_uuid, ts_data)
         else:
             msg = f"Bug: need to implement add_time_series for {type(time_series)}"
             raise NotImplementedError(msg)
 
-    def add_raw_single_time_series(
-        self, time_series_uuid: UUID, time_series_data: NDArray
+    def add_raw_time_series(
+        self, time_series_uuid: UUID, time_series_data: NDArray | tuple[NDArray, NDArray]
     ) -> None:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
         if not fpath.exists():
-            arrow_batch = self._convert_to_record_batch(time_series_data, str(time_series_uuid))
+            arrow_batch = (
+                self._convert_to_record_batch_single_time_series(
+                    time_series_data, str(time_series_uuid)
+                )
+                if isinstance(time_series_data, np.ndarray)
+                else self._convert_to_record_batch_nonsequential_time_series(
+                    time_series_data, str(time_series_uuid)
+                )
+            )
             with pa.OSFile(str(fpath), "wb") as sink:  # type: ignore
                 with pa.ipc.new_file(sink, arrow_batch.schema) as writer:
                     writer.write(arrow_batch)
@@ -85,7 +101,8 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             return self._get_single_time_series(
                 metadata=metadata, start_time=start_time, length=length
             )
-
+        elif isinstance(metadata, NonSequentialTimeSeriesMetadata):
+            return self._get_nonsequential_time_series(metadata=metadata)
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
@@ -139,7 +156,38 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             normalization=metadata.normalization,
         )
 
-    def get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
+    def _get_nonsequential_time_series(
+        self,
+        metadata: NonSequentialTimeSeriesMetadata,
+    ) -> NonSequentialTimeSeries:
+        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
+        with pa.memory_map(str(fpath), "r") as source:
+            base_ts = pa.ipc.open_file(source).get_record_batch(0)
+            logger.trace("Reading time series from {}", fpath)
+        columns = base_ts.column_names
+        if len(columns) != 1:
+            msg = f"Bug: expected a single column: {columns=}"
+            raise Exception(msg)
+        # This should be equal to metadata.time_series_uuid in versions
+        # v0.2.1 or later. Earlier versions used the time series variable name.
+        column = columns[0]
+        data, timestamps = base_ts[column].flatten()
+        if metadata.quantity_metadata is not None:
+            np_data_array = metadata.quantity_metadata.quantity_type(
+                data, metadata.quantity_metadata.units
+            )
+        else:
+            np_data_array = np.array(data)
+        np_time_array = np.array(timestamps).astype("O")  # convert to datetime object
+        return NonSequentialTimeSeries(
+            uuid=metadata.time_series_uuid,
+            variable_name=metadata.variable_name,
+            data=np_data_array,
+            timestamps=np_time_array,
+            normalization=metadata.normalization,
+        )
+
+    def get_raw_time_series(self, time_series_uuid: UUID) -> NDArray | tuple[NDArray, NDArray]:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
         with pa.OSFile(str(fpath), "r") as source:  # type: ignore
             base_ts = pa.ipc.open_file(source).get_record_batch(0)
@@ -149,13 +197,45 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"Bug: expected a single column: {columns=}"
             raise Exception(msg)
         column = columns[0]
-        return base_ts[column].to_numpy()
+        # NOTE: Abodh was not sure how to access the metadata here.
+        # So implemented a crude approach to identify NonSequentialTimeSeries
+        if not isinstance(base_ts[column], pa.StructArray):
+            return base_ts[column].to_numpy()
+        data, timestamps = base_ts[column].flatten()
+        np_data_array = np.array(data)
+        np_time_array = np.array(timestamps).astype("O")
+        return (np_data_array, np_time_array)
 
-    def _convert_to_record_batch(self, time_series_array: NDArray, column: str) -> pa.RecordBatch:
-        """Create record batch to save array to disk."""
+    def _convert_to_record_batch_single_time_series(
+        self, time_series_array: NDArray, column: str
+    ) -> pa.RecordBatch:
+        """Create record batch for SingleTimeSeries to save array to disk."""
         pa_array = pa.array(time_series_array)
         schema = pa.schema([pa.field(column, pa_array.type)])
         return pa.record_batch([pa_array], schema=schema)
+
+    def _convert_to_record_batch_nonsequential_time_series(
+        self, time_series_array: tuple[NDArray, NDArray], column: str
+    ) -> pa.RecordBatch:
+        """Create record batch for NonSequentialTimeSeries to save array to disk."""
+        data_array, timestamps_array = time_series_array
+        pa_data_array = pa.array(data_array)
+        pa_timestamps_array = pa.array(timestamps_array)
+        schema = pa.schema(
+            [
+                pa.field(
+                    column,
+                    pa.struct(
+                        [("data", pa_data_array.type), ("timestamp", pa_timestamps_array.type)]  # type: ignore
+                    ),
+                )
+            ]
+        )
+        struct_array = pa.array(
+            list(zip(data_array, timestamps_array)),
+            type=schema.field(column).type,  # type: ignore
+        )
+        return pa.record_batch([struct_array], schema=schema)
 
 
 def clean_tmp_folder(folder: Path | str) -> None:
