@@ -1242,12 +1242,13 @@ class System:
 
     # TODO: add delete methods that (1) don't raise if not found and (2) don't return anything?
 
-    def convert_storage(self, **kwargs) -> None:
+    def convert_storage(self, time_series_type: Type[TimeSeriesData], **kwargs) -> None:
         """
         Converts the time series storage medium.
 
         Parameters
         ----------
+        time_series_type: Type of time series data.
         **kwargs:
             The same keys as TIME_SERIES_KWARGS in time_series_manager.py
             {
@@ -1272,13 +1273,13 @@ class System:
 
         # Convert the storage to in_memory
         >>> kwargs = {"time_series_in_memory": True}
-        >>> system.convert_storage(**kwargs)
+        >>> system.convert_storage(time_series_type=SingleTimeSeries, **kwargs)
 
         # Check the time series storage type
         >>> isinstance(system._time_series_mgr._storage, InMemoryTimeSeriesStorage)
         True
         """
-        return self._time_series_mgr.convert_storage(**kwargs)
+        return self._time_series_mgr.convert_storage(time_series_type, **kwargs)
 
     @property
     def _components(self) -> ComponentManager:

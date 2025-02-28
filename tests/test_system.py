@@ -199,7 +199,7 @@ def test_component_associations(tmp_path):
         system2.get_component(SimpleBus, gen.bus.name)
 
 
-def test_time_series_attach_from_array():
+def test_single_time_series_attach_from_array():
     system = SimpleSystem()
     bus = SimpleBus(name="test-bus", voltage=1.1)
     gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
@@ -214,10 +214,15 @@ def test_time_series_attach_from_array():
     system.add_time_series(ts, gen1, gen2)
     assert system.has_time_series(gen1, variable_name=variable_name)
     assert system.has_time_series(gen2, variable_name=variable_name)
-    assert np.array_equal(system.get_time_series(gen1, variable_name=variable_name).data, ts.data)
+    assert np.array_equal(
+        system.get_time_series(
+            gen1, time_series_type=SingleTimeSeries, variable_name=variable_name
+        ).data,
+        ts.data,
+    )
 
 
-def test_time_series():
+def test_single_time_series():
     system = SimpleSystem()
     bus = SimpleBus(name="test-bus", voltage=1.1)
     gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)

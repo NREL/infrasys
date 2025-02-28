@@ -20,7 +20,11 @@ from infrasys.serialization import (
     SerializedTypeMetadata,
     TYPE_METADATA,
 )
-from infrasys.time_series_models import TimeSeriesMetadata
+from infrasys.time_series_models import (
+    TimeSeriesMetadata,
+    SingleTimeSeriesMetadataBase,
+    NonSequentialTimeSeriesMetadataBase,
+)
 from infrasys.utils.sqlite import execute
 
 
@@ -115,13 +119,22 @@ class TimeSeriesMetadataStore:
             msg = f"Time series with {metadata=} is already stored."
             raise ISAlreadyAttached(msg)
 
+        if isinstance(metadata, SingleTimeSeriesMetadataBase):
+            resolution = str(metadata.resolution)
+            initial_time = str(metadata.initial_time)
+        elif isinstance(metadata, NonSequentialTimeSeriesMetadataBase):
+            resolution = None
+            initial_time = None
+        else:
+            raise NotImplementedError
+
         rows = [
             (
                 None,  # auto-assigned by sqlite
                 str(metadata.time_series_uuid),
                 metadata.type,
-                str(metadata.initial_time),
-                str(metadata.resolution),
+                initial_time,
+                resolution,
                 metadata.variable_name,
                 str(owner.uuid),
                 owner.__class__.__name__,
