@@ -139,18 +139,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             normalization=metadata.normalization,
         )
 
-    def get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
-        fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
-        with pa.OSFile(str(fpath), "r") as source:  # type: ignore
-            base_ts = pa.ipc.open_file(source).get_record_batch(0)
-            logger.trace("Reading time series from {}", fpath)
-        columns = base_ts.column_names
-        if len(columns) != 1:
-            msg = f"Bug: expected a single column: {columns=}"
-            raise Exception(msg)
-        column = columns[0]
-        return base_ts[column].to_numpy()
-
     def _convert_to_record_batch(self, time_series_array: NDArray, column: str) -> pa.RecordBatch:
         """Create record batch to save array to disk."""
         pa_array = pa.array(time_series_array)

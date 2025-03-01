@@ -8,14 +8,6 @@ import numpy as np
 import pytest
 
 
-def get_data_and_uuids(system):
-    uuids = system._time_series_mgr.metadata_store.unique_uuids_by_type(SingleTimeSeries.__name__)
-    data = {
-        uuid: system._time_series_mgr._storage.get_raw_single_time_series(uuid) for uuid in uuids
-    }
-    return uuids, data
-
-
 @pytest.mark.parametrize(
     "original_kwargs,new_kwargs,original_stype,new_stype",
     [
@@ -46,14 +38,11 @@ def test_memory_convert_storage_time_series(
     with pytest.raises(ISAlreadyAttached):
         system.add_time_series(test_time_series_data, test_generator)
 
-    original_uuids, original_data = get_data_and_uuids(system)
-
     system.convert_storage(**new_kwargs)
 
-    assert isinstance(system._time_series_mgr._storage, new_stype)
-    new_uuids, new_data = get_data_and_uuids(system)
+    assert isinstance(system.time_series.storage, new_stype)
 
-    assert set(original_uuids) == set(new_uuids)
-
-    for uuid in new_uuids:
-        assert np.array_equal(original_data[uuid], new_data[uuid])
+    ts2 = system.get_time_series(
+        test_generator, time_series_type=SingleTimeSeries, variable_name="load"
+    )
+    assert np.array_equal(ts2.data_array, test_time_series_data.data_array)

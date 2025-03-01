@@ -308,9 +308,15 @@ class TimeSeriesManager:
         for time_series_uuid in self.metadata_store.unique_uuids_by_type(
             SingleTimeSeries.__name__
         ):
-            new_storage.add_raw_single_time_series(
-                time_series_uuid, self._storage.get_raw_single_time_series(time_series_uuid)
+            metadata = self.metadata_store.list_metadata_with_time_series_uuid(
+                time_series_uuid, limit=1
             )
+            if len(metadata) != 1:
+                msg = f"Expected 1 metadata for {time_series_uuid}, got {len(metadata)}"
+                raise Exception(msg)
+
+            time_series = self._storage.get_time_series(metadata[0])
+            new_storage.add_time_series(metadata[0], time_series)
 
         self._storage = new_storage
         return None
