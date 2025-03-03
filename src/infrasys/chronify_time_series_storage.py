@@ -2,25 +2,26 @@
 
 import atexit
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
+from functools import singledispatch
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Generator, Optional, Self
+from typing import Any, Generator, Self
 from uuid import UUID
 
 import pandas as pd
 import pint
 from chronify import DatetimeRange, Store, TableSchema
 from loguru import logger
-from numpy.typing import NDArray
 from sqlalchemy import Connection
 
-from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.id_manager import IDManager
 from infrasys.time_series_models import (
     SingleTimeSeries,
+    SingleTimeSeriesKey,
     SingleTimeSeriesMetadata,
     TimeSeriesData,
+    TimeSeriesKey,
     TimeSeriesMetadata,
     TimeSeriesStorageType,
 )
@@ -28,10 +29,11 @@ from infrasys.time_series_storage_base import TimeSeriesStorageBase
 from infrasys.utils.path_utils import delete_if_exists
 
 
+_SINGLE_TIME_SERIES_BASE_NAME = "single_time_series"
+
+
 class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
     """Stores time series in a chronfiy database."""
-
-    TABLE_NAME = "time_series"
 
     def __init__(
         self,
@@ -53,7 +55,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
     @classmethod
     def create_with_temp_directory(
         cls,
-        base_directory: Optional[Path] = None,
+        base_directory: Path | None = None,
         engine_name: str = "duckdb",
         read_only: bool = False,
     ) -> Self:
@@ -70,7 +72,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
     def from_file_to_tmp_file(
         cls,
         data: dict[str, Any],
-        dst_dir: Optional[Path] = None,
+        dst_dir: Path | None = None,
         read_only: bool = False,
     ) -> Self:
         """Construct ChronifyTimeSeriesStorage after copying from an existing database file."""
@@ -115,7 +117,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> None:
         if not isinstance(time_series, SingleTimeSeries):
             msg = f"Bug: need to implement add_time_series for {type(time_series)}"
@@ -127,32 +129,16 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
 
         db_id = self._id_manager.get_next_id()
         df = self._to_dataframe(time_series, db_id)
-        schema = self._make_table_schema(time_series)
-        self._store.ingest_table(df, schema, connection=connection)
+        schema = _make_table_schema(time_series, _get_table_name(time_series))
+        # There is no reason to run time checks because we are generating the timestamps
+        # from initial_time, resolution, and length, so they are guaranteed to be correct.
+        self._store.ingest_table(df, schema, connection=connection, skip_time_checks=False)
         self._uuid_lookup[time_series.uuid] = db_id
         logger.debug("Added {} to time series storage", time_series.summary)
 
-    def add_raw_single_time_series(
-        self, time_series_uuid: UUID, time_series_data: NDArray
-    ) -> None:
-        # This is problematic because chronify wants to store timestamps.
-        # Should we support a mode without timestamps?
-        msg = "ChronifyTimeSeriesStorage does not support add_raw_single_time_series"
-        raise ISOperationNotAllowed(msg)
-
-    @staticmethod
-    def _make_table_schema(time_series: SingleTimeSeries) -> TableSchema:
-        return TableSchema(
-            name=ChronifyTimeSeriesStorage.TABLE_NAME,
-            value_column="value",
-            time_array_id_columns=["id"],
-            time_config=DatetimeRange(
-                start=time_series.initial_time,
-                resolution=time_series.resolution,
-                length=len(time_series.data),
-                time_column="timestamp",
-            ),
-        )
+    def check_timestamps(self, key: TimeSeriesKey, connection: Connection | None = None) -> None:
+        table_name = _get_table_name(key)
+        self._store.check_timestamps(table_name, connection=connection)
 
     def get_engine_name(self) -> str:
         """Return the name of the underlying database engine."""
@@ -163,7 +149,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> Any:
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(
@@ -176,30 +162,12 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
-    def get_raw_single_time_series(
-        self, time_series_uuid: UUID, connection: Connection | None = None
-    ) -> NDArray:
-        db_id = self._get_db_id(time_series_uuid)
-        params = (db_id,)
-        query = f"""
-            SELECT value
-            FROM {self.TABLE_NAME}
-            WHERE id = ?
-            ORDER BY timestamp
-        """
-        df = self._store.read_query(
-            self.TABLE_NAME,
-            query,
-            params=params,
-            connection=connection,
-        )
-        return df["value"].values  # type: ignore
-
     def remove_time_series(
-        self, time_series_uuid: UUID, connection: Connection | None = None
+        self, metadata: TimeSeriesMetadata, connection: Connection | None = None
     ) -> None:
-        db_id = self._get_db_id(time_series_uuid)
-        self._store.delete_rows(self.TABLE_NAME, {"id": db_id}, connection=connection)
+        db_id = self._get_db_id(metadata.time_series_uuid)
+        table_name = _get_table_name(metadata)
+        self._store.delete_rows(table_name, {"id": db_id}, connection=connection)
 
     def serialize(
         self, data: dict[str, Any], dst: Path | str, src: Path | str | None = None
@@ -218,8 +186,9 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: SingleTimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> SingleTimeSeries:
+        table_name = _get_table_name(metadata)
         db_id = self._get_db_id(metadata.time_series_uuid)
         _, required_len = metadata.get_range(start_time=start_time, length=length)
         where_clauses = ["id = ?"]
@@ -231,13 +200,13 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         limit = "" if length is None else f" LIMIT {required_len}"
         query = f"""
             SELECT timestamp, value
-            FROM {self.TABLE_NAME}
+            FROM {table_name}
             WHERE {where_clause}
             ORDER BY timestamp
             {limit}
         """
         df = self._store.read_query(
-            self.TABLE_NAME,
+            table_name,
             query,
             params=tuple(params),
             connection=connection,
@@ -262,7 +231,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         )
 
     @contextmanager
-    def open_time_series_store(self, mode: str = "r") -> Generator[Connection, None, None]:
+    def open_time_series_store(self) -> Generator[Connection, None, None]:
         with self._store.engine.begin() as conn:
             yield conn
 
@@ -281,3 +250,73 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"Bug: time series {time_series_uuid} not stored"
             raise Exception(msg)
         return db_id
+
+
+@singledispatch
+def _get_table_name(time_series) -> str:
+    msg = f"Bug: {type(time_series)}"
+    raise NotImplementedError(msg)
+
+
+@_get_table_name.register(SingleTimeSeries)
+def _(time_series) -> str:
+    return _get_single_time_series_table_name(
+        time_series.initial_time, time_series.resolution, time_series.length
+    )
+
+
+@_get_table_name.register(SingleTimeSeriesMetadata)
+def _(metadata) -> str:
+    return _get_single_time_series_table_name(
+        metadata.initial_time, metadata.resolution, metadata.length
+    )
+
+
+@_get_table_name.register(SingleTimeSeriesKey)
+def _(key) -> str:
+    return _get_single_time_series_table_name(key.initial_time, key.resolution, key.length)
+
+
+def _get_single_time_series_table_name(
+    initial_time: datetime,
+    resolution: timedelta,
+    length: int,
+) -> str:
+    return "_".join(
+        (
+            _SINGLE_TIME_SERIES_BASE_NAME,
+            initial_time.isoformat().replace("-", "_").replace(":", "_"),
+            str(resolution.seconds),
+            str(length),
+        )
+    )
+
+
+@singledispatch
+def _get_table_base_name(time_series) -> str:
+    msg = "Bug: need to implement _get_table_base_name for {type(time_series)}"
+    raise NotImplementedError(msg)
+
+
+@_get_table_base_name.register(SingleTimeSeries)
+def _(time_series: SingleTimeSeries) -> str:
+    return _SINGLE_TIME_SERIES_BASE_NAME
+
+
+@singledispatch
+def _make_time_config(time_series: SingleTimeSeries) -> DatetimeRange:
+    return DatetimeRange(
+        start=time_series.initial_time,
+        resolution=time_series.resolution,
+        length=len(time_series.data),
+        time_column="timestamp",
+    )
+
+
+def _make_table_schema(time_series: SingleTimeSeries, table_name: str) -> TableSchema:
+    return TableSchema(
+        name=table_name,
+        value_column="value",
+        time_array_id_columns=["id"],
+        time_config=_make_time_config(time_series),
+    )

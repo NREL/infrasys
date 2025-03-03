@@ -1,5 +1,6 @@
 """Defines a System"""
 
+from contextlib import contextmanager
 import json
 import shutil
 import sqlite3
@@ -36,8 +37,10 @@ from infrasys.serialization import (
 from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import (
+    DatabaseConnection,
     SingleTimeSeries,
     TimeSeriesData,
+    TimeSeriesKey,
     TimeSeriesMetadata,
 )
 from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
@@ -957,9 +960,9 @@ class System:
         self,
         time_series: TimeSeriesData,
         *owners: Component | SupplementalAttribute,
-        connection: Any = None,
+        connection: DatabaseConnection | None = None,
         **user_attributes: Any,
-    ) -> None:
+    ) -> TimeSeriesKey:
         """Store a time series array for one or more components or supplemental attributes.
 
         Parameters
@@ -970,6 +973,11 @@ class System:
             Add the time series to all of these components or supplemental attributes.
         user_attributes : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
+
+        Returns
+        -------
+        TimeSeriesKey
+            Returns a key that can be used to retrieve the time series.
 
         Raises
         ------
@@ -992,7 +1000,10 @@ class System:
         >>> system.add_time_series(ts, gen1, gen2)
         """
         return self._time_series_mgr.add(
-            time_series, *owners, connection=connection, **user_attributes
+            time_series,
+            *owners,
+            connection=connection,
+            **user_attributes,
         )
 
     def copy_time_series(
@@ -1029,12 +1040,12 @@ class System:
 
     def get_time_series(
         self,
-        component: Component,
+        owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Any = None,
+        connection: DatabaseConnection | None = None,
         **user_attributes: str,
     ) -> Any:
         """Return a time series array.
@@ -1080,7 +1091,7 @@ class System:
         list_time_series
         """
         return self._time_series_mgr.get(
-            component,
+            owner,
             variable_name=variable_name,
             time_series_type=time_series_type,
             start_time=start_time,
@@ -1088,6 +1099,12 @@ class System:
             connection=connection,
             **user_attributes,
         )
+
+    def get_time_series_by_key(
+        self, owner: Component | SupplementalAttribute, key: TimeSeriesKey
+    ) -> Any:
+        """Return a time series array by key."""
+        return self._time_series_mgr.get_by_key(owner, key)
 
     def has_time_series(
         self,
@@ -1154,6 +1171,39 @@ class System:
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
+            **user_attributes,
+        )
+
+    def list_time_series_keys(
+        self,
+        owner: Component | SupplementalAttribute,
+        variable_name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **user_attributes: Any,
+    ) -> list[TimeSeriesKey]:
+        """Return all time series keys that match the inputs.
+
+        Parameters
+        ----------
+        owner : Component
+            Component to which the time series must be attached.
+        variable_name : str | None
+            Optional, search for time series with this name.
+        time_series_type : Type[TimeSeriesData]
+            Optional, search for time series with this type.
+        user_attributes : str
+            Optional, search for time series with these attributes.
+
+        Examples
+        --------
+        >>> gen1 = system.get_component(Generator, "gen1")
+        >>> for key in system.list_time_series_keys(gen1):
+        ...     time_series = system.get_time_series_by_key(gen1, key)
+        """
+        return self.time_series.list_time_series_keys(
+            owner,
+            variable_name=variable_name,
+            time_series_type=time_series_type,
             **user_attributes,
         )
 
@@ -1230,7 +1280,8 @@ class System:
             **user_attributes,
         )
 
-    def open_time_series_store(self, mode: str = "r") -> Any:
+    @contextmanager
+    def open_time_series_store(self) -> Generator[DatabaseConnection, None, None]:
         """Open a connection to the time series store. This can improve performance when
         reading or writing many time series arrays for specific backends (chronify and HDF5).
 
@@ -1246,7 +1297,8 @@ class System:
             system.add_time_series(ts1, gen1, connection=conn)
             system.add_time_series(ts2, gen1, connection=conn)
         """
-        return self._time_series_mgr.open_time_series_store(mode=mode)
+        with self._time_series_mgr.open_time_series_store() as conn:
+            yield conn
 
     def serialize_system_attributes(self) -> dict[str, Any]:
         """Allows subclasses to serialize attributes at the root level."""

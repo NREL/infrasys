@@ -28,9 +28,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
     """Stores time series in memory."""
 
     def __init__(self) -> None:
-        self._arrays: dict[UUID, DataStoreType] = (
-            {}
-        )  # Time series UUID, not metadata UUID
+        self._arrays: dict[UUID, DataStoreType] = {}  # Time series UUID, not metadata UUID
 
     def get_time_series_directory(self) -> None:
         return None
@@ -63,10 +61,10 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             return self._get_single_time_series(metadata, start_time, length)
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
 
-    def remove_time_series(self, uuid: UUID) -> None:
-        time_series = self._arrays.pop(uuid, None)
+    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+        time_series = self._arrays.pop(metadata.time_series_uuid, None)
         if time_series is None:
-            msg = f"No time series with {uuid} is stored"
+            msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
 
     def serialize(

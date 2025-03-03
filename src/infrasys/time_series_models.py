@@ -2,6 +2,7 @@
 
 import abc
 import importlib
+import sqlite3
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import (
@@ -377,3 +378,26 @@ TimeSeriesMetadataUnion = Annotated[
     Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata],
     Field(discriminator="type"),
 ]
+
+
+class TimeSeriesKey(InfraSysBaseModel):
+    """Base class for time series keys."""
+
+    variable_name: str
+    initial_time: datetime
+    resolution: timedelta
+    time_series_type: Type[SingleTimeSeries]
+    user_attributes: dict[str, Any] = {}
+
+
+class SingleTimeSeriesKey(TimeSeriesKey):
+    """Keys for SingleTimeSeries."""
+
+    length: int
+
+
+class DatabaseConnection(InfraSysBaseModel):
+    """Stores connections to the metadata and data databases during transactions."""
+
+    metadata_conn: sqlite3.Connection
+    data_conn: Any = None
