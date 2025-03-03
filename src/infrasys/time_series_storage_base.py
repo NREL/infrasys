@@ -3,7 +3,7 @@
 import abc
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional
 from uuid import UUID
 
 from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
@@ -15,14 +15,6 @@ class TimeSeriesStorageBase(abc.ABC):
     @abc.abstractmethod
     def add_time_series(self, metadata: TimeSeriesMetadata, time_series: TimeSeriesData) -> None:
         """Store a time series array."""
-
-    @abc.abstractmethod
-    def add_raw_single_time_series(self, time_series_uuid: UUID, time_series_data: Any) -> None:
-        """Store a time series array from raw data."""
-
-    @abc.abstractmethod
-    def get_raw_single_time_series(self, time_series_uuid: UUID) -> Any:
-        """Get the raw time series data for a given uuid."""
 
     @abc.abstractmethod
     def get_time_series_directory(self) -> Path | None:

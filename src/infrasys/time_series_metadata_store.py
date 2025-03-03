@@ -288,6 +288,25 @@ class TimeSeriesMetadataStore:
         rows = execute(cur, query, params=params).fetchall()
         return [_deserialize_time_series_metadata(x[0]) for x in rows]
 
+    def list_metadata_with_time_series_uuid(
+        self, time_series_uuid: UUID, limit: int | None = None
+    ) -> list[TimeSeriesMetadata]:
+        """Return metadata attached to the given time_series_uuid.
+
+        Parameters
+        ----------
+        time_series_uuid
+            The UUID of the time series.
+        limit
+            The maximum number of metadata to return. If None, all metadata are returned.
+        """
+        params = (str(time_series_uuid),)
+        limit_str = "" if limit is None else f"LIMIT {limit}"
+        query = f"SELECT metadata FROM {self.TABLE_NAME} WHERE time_series_uuid = ? {limit_str}"
+        cur = self._con.cursor()
+        rows = execute(cur, query, params=params).fetchall()
+        return [_deserialize_time_series_metadata(x[0]) for x in rows]
+
     def _list_metadata_no_sql_json(
         self,
         *components: Component | SupplementalAttribute,

@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from pathlib import Path
-import numpy as np
 from numpy.typing import NDArray
 from typing import Optional, TypeAlias
 from uuid import UUID
@@ -10,7 +9,7 @@ from uuid import UUID
 from loguru import logger
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 
-from infrasys.exceptions import ISNotStored, ISOperationNotAllowed
+from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
     SingleTimeSeries,
     SingleTimeSeriesMetadata,
@@ -43,15 +42,6 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"add_time_series not implemented for {type(time_series)}"
             raise NotImplementedError(msg)
 
-    def add_raw_single_time_series(
-        self, time_series_uuid: UUID, time_series_data: DataStoreType
-    ) -> None:
-        if time_series_uuid not in self._arrays:
-            self._arrays[time_series_uuid] = time_series_data
-            logger.debug("Added {} to store", time_series_uuid)
-        else:
-            logger.debug("{} was already stored", time_series_uuid)
-
     def get_time_series(
         self,
         metadata: TimeSeriesMetadata,
@@ -61,13 +51,6 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(metadata, start_time, length)
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
-
-    def get_raw_single_time_series(self, time_series_uuid: UUID) -> NDArray:
-        data_array = self._arrays[time_series_uuid]
-        if not isinstance(data_array, np.ndarray):
-            msg = f"Can't retrieve type: {type(data_array)} as single_time_series"
-            raise ISOperationNotAllowed(msg)
-        return data_array
 
     def remove_time_series(self, uuid: UUID) -> None:
         time_series = self._arrays.pop(uuid, None)
