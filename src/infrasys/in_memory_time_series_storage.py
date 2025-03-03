@@ -9,7 +9,6 @@ from typing import TypeAlias
 from uuid import UUID
 
 from loguru import logger
-from infrasys.arrow_storage import ArrowTimeSeriesStorage
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
@@ -17,7 +16,6 @@ from infrasys.time_series_models import (
     SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
-    TimeSeriesStorageType,
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
@@ -70,11 +68,8 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
     def serialize(
         self, data: dict[str, Any], dst: Path | str, src: Path | str | None = None
     ) -> None:
-        base_directory = dst if isinstance(dst, Path) else Path(dst)
-        storage = ArrowTimeSeriesStorage.create_with_permanent_directory(base_directory)
-        for ts_uuid, ts in self._arrays.items():
-            storage.add_raw_single_time_series(ts_uuid, ts)
-        data["time_series_storage_type"] = TimeSeriesStorageType.ARROW.value
+        msg = "Bug: InMemoryTimeSeriesStorage.serialize should never be called."
+        raise Exception(msg)
 
     def _get_single_time_series(
         self,

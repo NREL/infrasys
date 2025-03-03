@@ -58,14 +58,12 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         connection: Any = None,
     ) -> None:
         if isinstance(time_series, SingleTimeSeries):
-            self.add_raw_single_time_series(metadata.time_series_uuid, time_series.data_array)
+            self._add_single_time_series(metadata.time_series_uuid, time_series.data_array)
         else:
             msg = f"Bug: need to implement add_time_series for {type(time_series)}"
             raise NotImplementedError(msg)
 
-    def add_raw_single_time_series(
-        self, time_series_uuid: UUID, time_series_data: NDArray
-    ) -> None:
+    def _add_single_time_series(self, time_series_uuid: UUID, time_series_data: NDArray) -> None:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
         if not fpath.exists():
             arrow_batch = self._convert_to_record_batch(time_series_data, str(time_series_uuid))
@@ -108,8 +106,12 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         if src is None:
             src = self._ts_directory
         shutil.copytree(src, dst, dirs_exist_ok=True)
-        data["time_series_storage_type"] = TimeSeriesStorageType.ARROW.value
+        self.add_serialized_data(data)
         logger.info("Copied time series data to {}", dst)
+
+    @staticmethod
+    def add_serialized_data(data: dict[str, Any]) -> None:
+        data["time_series_storage_type"] = TimeSeriesStorageType.ARROW.value
 
     def _get_single_time_series(
         self,

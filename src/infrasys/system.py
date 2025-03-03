@@ -1357,7 +1357,7 @@ class System:
         # Convert the storage to in_memory
         >>> system.convert_storage(time_series_storage_type=TimeSeriesStorageType.MEMORY)
         """
-        return self._time_series_mgr.convert_storage(**kwargs)
+        self._time_series_mgr.convert_storage(**kwargs)
 
     @property
     def _components(self) -> ComponentManager:
