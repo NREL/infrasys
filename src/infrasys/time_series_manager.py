@@ -27,11 +27,19 @@ from infrasys.time_series_models import (
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
+try:
+    from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
+
+    is_chronify_installed = True
+except ImportError:
+    is_chronify_installed = False
+
 
 TIME_SERIES_KWARGS = {
     "time_series_read_only": False,
     "time_series_directory": None,
     "time_series_storage_type": TimeSeriesStorageType.ARROW,
+    "chronify_engine_name": "duckdb",
 }
 
 
@@ -71,6 +79,25 @@ class TimeSeriesManager:
                     return ArrowTimeSeriesStorage.create_with_permanent_directory(base_directory)
                 return ArrowTimeSeriesStorage.create_with_temp_directory(
                     base_directory=base_directory
+                )
+            case TimeSeriesStorageType.CHRONIFY:
+                if not is_chronify_installed:
+                    msg = (
+                        "chronify is not installed. Please choose a different time series storage "
+                        'option or install chronify with `pip install "infrasys[chronify]"`.'
+                    )
+                    raise ImportError(msg)
+                if permanent:
+                    assert base_directory is not None
+                    return ChronifyTimeSeriesStorage.create_with_permanent_directory(
+                        base_directory,
+                        engine_name=_process_time_series_kwarg("chronify_engine_name", **kwargs),
+                        read_only=_process_time_series_kwarg("time_series_read_only", **kwargs),
+                    )
+                return ChronifyTimeSeriesStorage.create_with_temp_directory(
+                    base_directory=base_directory,
+                    engine_name=_process_time_series_kwarg("chronify_engine_name", **kwargs),
+                    read_only=_process_time_series_kwarg("time_series_read_only", **kwargs),
                 )
             case TimeSeriesStorageType.MEMORY:
                 return InMemoryTimeSeriesStorage()
@@ -378,6 +405,24 @@ class TimeSeriesManager:
         # This term was introduced in v0.3.0. Maintain compatibility with old serialized files.
         ts_type = data.get("time_series_storage_type", TimeSeriesStorageType.ARROW)
         match ts_type:
+            case TimeSeriesStorageType.CHRONIFY:
+                if not is_chronify_installed:
+                    msg = (
+                        "This system used chronify to manage time series data but the package is "
+                        'not installed. Please install it with `pip install "infrasys[chronify]"`.'
+                    )
+                    raise ImportError(msg)
+                if read_only:
+                    storage = ChronifyTimeSeriesStorage.from_file(
+                        data,
+                        read_only=True,
+                    )
+                else:
+                    storage = ChronifyTimeSeriesStorage.from_file_to_tmp_file(
+                        data,
+                        dst_dir=dst_time_series_directory,
+                        read_only=read_only,
+                    )
             case TimeSeriesStorageType.ARROW:
                 if read_only:
                     storage = ArrowTimeSeriesStorage.create_with_permanent_directory(

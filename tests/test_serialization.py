@@ -26,6 +26,7 @@ from .models.simple_system import (
 
 TS_STORAGE_OPTIONS = (
     TimeSeriesStorageType.ARROW,
+    TimeSeriesStorageType.CHRONIFY,
     TimeSeriesStorageType.MEMORY,
 )
 
@@ -247,3 +248,25 @@ def test_legacy_format():
     # This file was save from v0.2.1 with test_with_time_series_quantity.
     # Ensure that we can deserialize it.
     SimpleSystem.from_json(Path("tests/data/legacy_system.json"))
+
+
+def test_convert_chronify_storage_permanent(tmp_path):
+    gen = SimpleGenerator.example()
+    system = SimpleSystem(
+        auto_add_composed_components=True, time_series_storage_type=TimeSeriesStorageType.ARROW
+    )
+    system.add_components(gen)
+    variable_name = "active_power"
+    length = 10
+    data = list(range(length))
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
+    system.add_time_series(ts, gen)
+    system.convert_storage(
+        time_series_storage_type=TimeSeriesStorageType.CHRONIFY,
+        time_series_directory=tmp_path,
+        in_place=False,
+        permanent=True,
+    )
+    assert (tmp_path / "time_series_data.db").exists()

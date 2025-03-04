@@ -29,17 +29,22 @@ classifiers = [
 dependencies = [
     "loguru~=0.7.2",
     "numpy >= 2, < 3",
+    "pandas >= 2, < 3",
     "pint~=0.23",
     "pyarrow~=19.0",
     "pydantic >= 2.7, < 3",
     "rich~=13.7.1",
 ]
 [project.optional-dependencies]
+chronify = [
+    "chronify ~= 0.2.2",
+]
 dev = [
     "autodoc_pydantic~=2.0",
     "furo",
     "mypy >=1.13, < 2",
     "myst_parser",
+    "pandas-stubs",
     "pre-commit",
     "pyarrow-stubs",
     "pytest",
