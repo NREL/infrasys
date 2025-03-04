@@ -2,12 +2,13 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
 from numpy.typing import NDArray
-from typing import Optional, TypeAlias
+from typing import TypeAlias
 from uuid import UUID
 
 from loguru import logger
-from infrasys.arrow_storage import ArrowTimeSeriesStorage
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
@@ -30,7 +31,12 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
     def get_time_series_directory(self) -> None:
         return None
 
-    def add_time_series(self, metadata: TimeSeriesMetadata, time_series: TimeSeriesData) -> None:
+    def add_time_series(
+        self,
+        metadata: TimeSeriesMetadata,
+        time_series: TimeSeriesData,
+        connection: Any = None,
+    ) -> None:
         if isinstance(time_series, SingleTimeSeries):
             if metadata.time_series_uuid not in self._arrays:
                 self._arrays[metadata.time_series_uuid] = time_series.data_array
@@ -47,22 +53,23 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
+        connection: Any = None,
     ) -> TimeSeriesData:
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(metadata, start_time, length)
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
 
-    def remove_time_series(self, uuid: UUID) -> None:
-        time_series = self._arrays.pop(uuid, None)
+    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+        time_series = self._arrays.pop(metadata.time_series_uuid, None)
         if time_series is None:
-            msg = f"No time series with {uuid} is stored"
+            msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
 
-    def serialize(self, dst: Path | str, _: Optional[Path | str] = None) -> None:
-        base_directory = dst if isinstance(dst, Path) else Path(dst)
-        storage = ArrowTimeSeriesStorage.create_with_permanent_directory(base_directory)
-        for ts_uuid, ts in self._arrays.items():
-            storage.add_raw_single_time_series(ts_uuid, ts)
+    def serialize(
+        self, data: dict[str, Any], dst: Path | str, src: Path | str | None = None
+    ) -> None:
+        msg = "Bug: InMemoryTimeSeriesStorage.serialize should never be called."
+        raise Exception(msg)
 
     def _get_single_time_series(
         self,

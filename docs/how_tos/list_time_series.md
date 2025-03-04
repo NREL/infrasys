@@ -3,61 +3,52 @@
 Suppose that you have added multiple time series arrays to your components using differing
 names and attributes. How can you see what is present?
 
-This example assumes that a system with two generators and time series data has been serialized
-to a file.
+This example uses a test module in the `infrasys` repository.
+
+The call to `system.add_time_series` returns a key. You can store those keys yourself or look them
+up later with `system.list_time_series_keys`. Here's how to do it.
 
 ```python
-from infrasys import Component, System
+from datetime import datetime, timedelta
 
-system = System.from_json("system.json")
-for component in system.get_components(Component):
-    for metadata in system.list_time_series_metadata(component):
-        print(f"{component.label}: {metadata.label} {metadata.user_attributes}")
+import numpy as np
 
-Generator.gen1: SingleTimeSeries.active_power {'scenario': 'high', 'model_year': '2030'}
-Generator.gen1: SingleTimeSeries.active_power {'scenario': 'high', 'model_year': '2035'}
-Generator.gen1: SingleTimeSeries.active_power {'scenario': 'low', 'model_year': '2030'}
-Generator.gen1: SingleTimeSeries.active_power {'scenario': 'low', 'model_year': '2035'}
-Generator.gen1: SingleTimeSeries.reactive_power {'scenario': 'high', 'model_year': '2030'}
-Generator.gen1: SingleTimeSeries.reactive_power {'scenario': 'high', 'model_year': '2035'}
-Generator.gen1: SingleTimeSeries.reactive_power {'scenario': 'low', 'model_year': '2030'}
-Generator.gen1: SingleTimeSeries.reactive_power {'scenario': 'low', 'model_year': '2035'}
-Generator.gen2: SingleTimeSeries.active_power {'scenario': 'high', 'model_year': '2030'}
-Generator.gen2: SingleTimeSeries.active_power {'scenario': 'high', 'model_year': '2035'}
-Generator.gen2: SingleTimeSeries.active_power {'scenario': 'low', 'model_year': '2030'}
-Generator.gen2: SingleTimeSeries.active_power {'scenario': 'low', 'model_year': '2035'}
-Generator.gen2: SingleTimeSeries.reactive_power {'scenario': 'high', 'model_year': '2030'}
-Generator.gen2: SingleTimeSeries.reactive_power {'scenario': 'high', 'model_year': '2035'}
-Generator.gen2: SingleTimeSeries.reactive_power {'scenario': 'low', 'model_year': '2030'}
-Generator.gen2: SingleTimeSeries.reactive_power {'scenario': 'low', 'model_year': '2035'}
+from infrasys import SingleTimeSeries
+from tests.models.simple_system import SimpleSystem, SimpleGenerator, SimpleBus
+
+system = SimpleSystem()
+bus = SimpleBus(name="test-bus", voltage=1.1)
+gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
+system.add_components(bus, gen)
+
+length = 10
+initial_time = datetime(year=2020, month=1, day=1)
+timestamps = [initial_time + timedelta(hours=i) for i in range(length)]
+variable_name = "active_power"
+ts1 = SingleTimeSeries.from_time_array(np.random.rand(length), variable_name, timestamps)
+ts2 = SingleTimeSeries.from_time_array(np.random.rand(length), variable_name, timestamps)
+key1 = system.add_time_series(ts1, gen, scenario="low")
+key2 = system.add_time_series(ts2, gen, scenario="high")
+
+# Use the keys directly.
+ts1_b = system.get_time_series_by_key(gen, key1)
+ts2_b = system.get_time_series_by_key(gen, key2)
+
+# Identify the keys later.
+for key in system.list_time_series_keys(gen):
+    print(f"{gen.label}: {key}")
+```
+```
+SimpleGenerator.gen: variable_name='active_power' initial_time=datetime.datetime(2020, 1, 1, 0, 0) resolution=datetime.timedelta(seconds=3600) time_series_type=<class 'infrasys.time_series_models.SingleTimeSeries'> user_attributes={'scenario': 'high'} length=10
+SimpleGenerator.gen: variable_name='active_power' initial_time=datetime.datetime(2020, 1, 1, 0, 0) resolution=datetime.timedelta(seconds=3600) time_series_type=<class 'infrasys.time_series_models.SingleTimeSeries'> user_attributes={'scenario': 'low'} length=10
 ```
 
-Now you can retrieve the exact instance you want.
+You can also retrieve time series by specifying the parameters as shown here:
 
 ```python
-system.time_series.get(gen1, variable_name="active_power", scenario="high", model_year="2035").data
-<pyarrow.lib.Int64Array object at 0x107a38d60>
-[
-  0,
-  1,
-  2,
-  3,
-  4,
-  5,
-  6,
-  7,
-  8,
-  9,
-  ...
-  8774,
-  8775,
-  8776,
-  8777,
-  8778,
-  8779,
-  8780,
-  8781,
-  8782,
-  8783
-]
+system.time_series.get(gen, variable_name="active_power", scenario="high")
+```
+```
+SingleTimeSeries(variable_name='active_power', normalization=None, data=array([0.29276233, 0.97400382, 0.76499075, 0.95080431, 0.61749027,
+       0.73899945, 0.57877704, 0.3411286 , 0.80701393, 0.53051773]), resolution=datetime.timedelta(seconds=3600), initial_time=datetime.datetime(2020, 1, 1, 0, 0), length=10)
 ```

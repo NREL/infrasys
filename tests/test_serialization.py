@@ -1,9 +1,12 @@
 import json
+from pathlib import Path
 import random
 import os
 from datetime import datetime, timedelta
 
 import numpy as np
+from numpy._typing import NDArray
+import pint
 import pytest
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
@@ -13,11 +16,17 @@ from infrasys.component import Component
 from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
+from infrasys.time_series_models import TimeSeriesStorageType
 from .models.simple_system import (
     SimpleSystem,
     SimpleBus,
     SimpleGenerator,
     SimpleSubsystem,
+)
+
+TS_STORAGE_OPTIONS = (
+    TimeSeriesStorageType.ARROW,
+    TimeSeriesStorageType.MEMORY,
 )
 
 
@@ -58,7 +67,12 @@ def test_serialization(tmp_path):
     system.to_json(filename, overwrite=True)
     system2 = SimpleSystem.from_json(filename)
     for key, val in system.__dict__.items():
-        if key not in ("_component_mgr", "_supplemental_attr_mgr", "_time_series_mgr", "_con"):
+        if key not in (
+            "_component_mgr",
+            "_supplemental_attr_mgr",
+            "_time_series_mgr",
+            "_con",
+        ):
             assert getattr(system2, key) == val
 
     components2 = list(system2.iter_all_components())
@@ -70,9 +84,9 @@ def test_serialization(tmp_path):
             assert getattr(component2, key) == val
 
 
-@pytest.mark.parametrize("time_series_in_memory", [True, False])
-def test_serialize_time_series(tmp_path, time_series_in_memory):
-    system = SimpleSystem(time_series_in_memory=time_series_in_memory)
+@pytest.mark.parametrize("time_series_storage_type", TS_STORAGE_OPTIONS)
+def test_serialize_time_series(tmp_path, time_series_storage_type):
+    system = SimpleSystem(time_series_storage_type=time_series_storage_type)
     bus = SimpleBus(name="test-bus", voltage=1.1)
     gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
     gen2 = SimpleGenerator(name="gen2", active_power=1.0, rating=1.0, bus=bus, available=True)
@@ -87,25 +101,38 @@ def test_serialize_time_series(tmp_path, time_series_in_memory):
     system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
     filename = tmp_path / "system.json"
     system.to_json(filename)
+    check_deserialize_with_read_write_time_series(filename)
+    check_deserialize_with_read_only_time_series(
+        filename, gen1.name, gen2.name, variable_name, ts.data
+    )
 
-    system2 = SimpleSystem.from_json(filename, time_series_read_only=True)
-    system2_ts_dir = system2.get_time_series_directory()
-    assert system2_ts_dir is not None
-    assert system2_ts_dir == SimpleSystem._make_time_series_directory(filename)
-    gen1b = system.get_component(SimpleGenerator, gen1.name)
+
+def check_deserialize_with_read_only_time_series(
+    filename,
+    gen1_name: str,
+    gen2_name: str,
+    variable_name: str,
+    expected_ts_data: NDArray | pint.Quantity,
+):
+    system = SimpleSystem.from_json(filename, time_series_read_only=True)
+    system_ts_dir = system.get_time_series_directory()
+    assert system_ts_dir is not None
+    assert system_ts_dir == SimpleSystem._make_time_series_directory(filename)
+    gen1b = system.get_component(SimpleGenerator, gen1_name)
     with pytest.raises(ISOperationNotAllowed):
-        system2.remove_time_series(gen1b, variable_name=variable_name)
+        system.remove_time_series(gen1b, variable_name=variable_name)
 
     ts2 = system.get_time_series(gen1b, variable_name=variable_name)
-    assert np.array_equal(ts2.data, ts.data)
+    assert np.array_equal(ts2.data, expected_ts_data)
 
+
+def check_deserialize_with_read_write_time_series(filename):
     system3 = SimpleSystem.from_json(filename, time_series_read_only=False)
     assert system3.get_time_series_directory() != SimpleSystem._make_time_series_directory(
         filename
     )
     system3_ts_dir = system3.get_time_series_directory()
     assert system3_ts_dir is not None
-    assert not system3_ts_dir.is_relative_to(system2_ts_dir)
 
 
 @pytest.mark.parametrize(
@@ -160,10 +187,12 @@ def test_with_time_series_quantity(tmp_path):
     assert np.array_equal(ts2.data.magnitude, np.array(range(length)))
 
 
-@pytest.mark.parametrize("in_memory", [True, False])
-def test_system_with_time_series_normalization(tmp_path, in_memory):
+@pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
+def test_system_with_time_series_normalization(tmp_path, storage_type):
     system = SimpleSystem(
-        name="test-system", auto_add_composed_components=True, time_series_in_memory=in_memory
+        name="test-system",
+        auto_add_composed_components=True,
+        time_series_storage_type=storage_type,
     )
     gen = SimpleGenerator.example()
     system.add_components(gen)
@@ -212,3 +241,9 @@ def test_system_save(tmp_path, simple_system_with_time_series):
     assert not os.path.exists(fpath), f"Original folder {fpath} was not deleted sucessfully."
     zip_fpath = f"{fpath}.zip"
     assert os.path.exists(zip_fpath), f"Zip file {zip_fpath} does not exists"
+
+
+def test_legacy_format():
+    # This file was save from v0.2.1 with test_with_time_series_quantity.
+    # Ensure that we can deserialize it.
+    SimpleSystem.from_json(Path("tests/data/legacy_system.json"))

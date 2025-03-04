@@ -1,5 +1,5 @@
 from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
-from infrasys.time_series_models import SingleTimeSeries
+from infrasys.time_series_models import SingleTimeSeries, TimeSeriesStorageType
 from infrasys.exceptions import ISAlreadyAttached
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
@@ -11,13 +11,21 @@ import pytest
 @pytest.mark.parametrize(
     "original_kwargs,new_kwargs,original_stype,new_stype",
     [
-        ({"time_series_in_memory": True}, {}, InMemoryTimeSeriesStorage, ArrowTimeSeriesStorage),
-        ({}, {"time_series_in_memory": True}, ArrowTimeSeriesStorage, InMemoryTimeSeriesStorage),
+        (
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            {},
+            InMemoryTimeSeriesStorage,
+            ArrowTimeSeriesStorage,
+        ),
+        (
+            {},
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            ArrowTimeSeriesStorage,
+            InMemoryTimeSeriesStorage,
+        ),
     ],
 )
-def test_memory_convert_storage_time_series(
-    original_kwargs, new_kwargs, original_stype, new_stype
-):
+def test_convert_storage_time_series(original_kwargs, new_kwargs, original_stype, new_stype):
     test_bus = SimpleBus.example()
     test_generator = SimpleGenerator.example()
     system = SimpleSystem(auto_add_composed_components=True, **original_kwargs)
@@ -31,7 +39,7 @@ def test_memory_convert_storage_time_series(
     test_time_series_data = SingleTimeSeries(
         data=np.arange(24),
         resolution=timedelta(hours=1),
-        initial_time=datetime.now(),
+        initial_time=datetime(2020, 1, 1),
         variable_name="load",
     )
     system.add_time_series(test_time_series_data, test_generator)

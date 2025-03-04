@@ -10,7 +10,7 @@ from loguru import logger
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.system import System
-from infrasys.time_series_models import SingleTimeSeries
+from infrasys.time_series_models import SingleTimeSeries, TimeSeriesStorageType
 
 from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
 
@@ -103,10 +103,13 @@ def test_copied_storage_system(simple_system_with_time_series):
     gen_component = next(simple_system_with_time_series.get_components(SimpleGenerator))
     data_array_1 = simple_system_with_time_series.list_time_series(gen_component)[0].data
 
-    simple_system_with_time_series.convert_storage(time_series_in_memory=True, replace=True)
+    simple_system_with_time_series.convert_storage(
+        time_series_storage_type=TimeSeriesStorageType.MEMORY
+    )
 
     assert isinstance(
-        simple_system_with_time_series._time_series_mgr._storage, InMemoryTimeSeriesStorage
+        simple_system_with_time_series._time_series_mgr._storage,
+        InMemoryTimeSeriesStorage,
     )
 
     data_array_2 = simple_system_with_time_series.list_time_series(gen_component)[0].data
