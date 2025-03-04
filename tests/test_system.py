@@ -1,11 +1,11 @@
 import itertools
-import os
 from datetime import timedelta, datetime
 from uuid import uuid4
 
 import numpy as np
 import pytest
 
+from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.exceptions import (
     ISAlreadyAttached,
     ISNotStored,
@@ -14,6 +14,7 @@ from infrasys.exceptions import (
 )
 from infrasys import Component, Location, SingleTimeSeries
 from infrasys.quantities import ActivePower
+from infrasys.time_series_models import TimeSeriesKey, TimeSeriesStorageType
 from .models.simple_system import (
     GeneratorBase,
     SimpleSystem,
@@ -246,98 +247,120 @@ def test_time_series():
     assert not system.has_time_series(gen2, variable_name=variable_name)
 
 
-@pytest.mark.parametrize(
-    "in_memory,use_quantity,sql_json",
-    list(itertools.product([True, False], [True, False], [True, False])),
+TS_STORAGE_OPTIONS = (
+    TimeSeriesStorageType.ARROW,
+    TimeSeriesStorageType.MEMORY,
 )
-def test_time_series_retrieval(in_memory, use_quantity, sql_json):
-    try:
-        if not sql_json:
-            os.environ["__INFRASYS_NON_JSON_SQLITE__"] = "1"
-        system = SimpleSystem(time_series_in_memory=in_memory)
-        bus = SimpleBus(name="test-bus", voltage=1.1)
-        gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
-        system.add_components(bus, gen)
 
-        length = 10
-        initial_time = datetime(year=2020, month=1, day=1)
-        time_array = [initial_time + timedelta(hours=i) for i in range(length)]
-        data = (
-            [ActivePower(np.random.rand(length), "watts") for _ in range(4)]
-            if use_quantity
-            else [np.random.rand(length) for _ in range(4)]  # type: ignore
+
+@pytest.mark.parametrize(
+    "storage_type,use_quantity",
+    list(itertools.product(TS_STORAGE_OPTIONS, [True, False])),
+)
+def test_time_series_retrieval(storage_type, use_quantity):
+    system = SimpleSystem(time_series_storage_type=storage_type)
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen)
+
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    time_array = [initial_time + timedelta(hours=i) for i in range(length)]
+    data = (
+        [ActivePower(np.random.rand(length), "watts") for _ in range(4)]
+        if use_quantity
+        else [np.random.rand(length) for _ in range(4)]  # type: ignore
+    )
+    variable_name = "active_power"
+    ts1 = SingleTimeSeries.from_time_array(data[0], variable_name, time_array)
+    ts2 = SingleTimeSeries.from_time_array(data[1], variable_name, time_array)
+    ts3 = SingleTimeSeries.from_time_array(data[2], variable_name, time_array)
+    ts4 = SingleTimeSeries.from_time_array(data[3], variable_name, time_array)
+    system.add_time_series(ts1, gen, scenario="high", model_year="2030")
+    system.add_time_series(ts2, gen, scenario="high", model_year="2035")
+    system.add_time_series(ts3, gen, scenario="low", model_year="2030")
+    key4 = system.add_time_series(ts4, gen, scenario="low", model_year="2035")
+    assert len(system.list_time_series_keys(gen)) == 4
+    assert len(system.list_time_series_metadata(gen)) == 4
+    assert len(system.list_time_series_metadata(gen, scenario="high", model_year="2035")) == 1
+    assert (
+        system.list_time_series_metadata(gen, scenario="high", model_year="2035")[
+            0
+        ].user_attributes["model_year"]
+        == "2035"
+    )
+    assert len(system.list_time_series_metadata(gen, scenario="low")) == 2
+    for metadata in system.list_time_series_metadata(gen, scenario="high"):
+        assert metadata.user_attributes["scenario"] == "high"
+
+    assert all(
+        np.equal(
+            system.get_time_series(gen, variable_name, scenario="high", model_year="2030").data,
+            ts1.data,
         )
-        variable_name = "active_power"
-        ts1 = SingleTimeSeries.from_time_array(data[0], variable_name, time_array)
-        ts2 = SingleTimeSeries.from_time_array(data[1], variable_name, time_array)
-        ts3 = SingleTimeSeries.from_time_array(data[2], variable_name, time_array)
-        ts4 = SingleTimeSeries.from_time_array(data[3], variable_name, time_array)
-        system.add_time_series(ts1, gen, scenario="high", model_year="2030")
-        system.add_time_series(ts2, gen, scenario="high", model_year="2035")
-        system.add_time_series(ts3, gen, scenario="low", model_year="2030")
+    )
+    assert all(
+        np.equal(
+            system.get_time_series(gen, variable_name, scenario="high", model_year="2035").data,
+            ts2.data,
+        )
+    )
+    assert all(
+        np.equal(
+            system.get_time_series(gen, variable_name, scenario="low", model_year="2030").data,
+            ts3.data,
+        )
+    )
+    assert all(
+        np.equal(
+            system.get_time_series_by_key(gen, key4).data,
+            ts4.data,
+        )
+    )
+
+    with pytest.raises(ISAlreadyAttached):
         system.add_time_series(ts4, gen, scenario="low", model_year="2035")
-        assert len(system.list_time_series_metadata(gen)) == 4
-        assert len(system.list_time_series_metadata(gen, scenario="high", model_year="2035")) == 1
-        assert (
-            system.list_time_series_metadata(gen, scenario="high", model_year="2035")[
-                0
-            ].user_attributes["model_year"]
-            == "2035"
-        )
-        assert len(system.list_time_series_metadata(gen, scenario="low")) == 2
-        for metadata in system.list_time_series_metadata(gen, scenario="high"):
-            assert metadata.user_attributes["scenario"] == "high"
 
-        assert all(
-            np.equal(
-                system.get_time_series(
-                    gen, variable_name, scenario="high", model_year="2030"
-                ).data,
-                ts1.data,
-            )
-        )
-        assert all(
-            np.equal(
-                system.get_time_series(
-                    gen, variable_name, scenario="high", model_year="2035"
-                ).data,
-                ts2.data,
-            )
-        )
-        assert all(
-            np.equal(
-                system.get_time_series(gen, variable_name, scenario="low", model_year="2030").data,
-                ts3.data,
-            )
-        )
-        assert all(
-            np.equal(
-                system.get_time_series(gen, variable_name, scenario="low", model_year="2035").data,
-                ts4.data,
-            )
-        )
+    assert system.has_time_series(gen, variable_name=variable_name)
+    assert system.has_time_series(gen, variable_name=variable_name, scenario="high")
+    assert system.has_time_series(
+        gen, variable_name=variable_name, scenario="high", model_year="2030"
+    )
+    assert not system.has_time_series(gen, variable_name=variable_name, model_year="2036")
+    with pytest.raises(ISOperationNotAllowed):
+        system.get_time_series(gen, variable_name=variable_name, scenario="high")
+    with pytest.raises(ISNotStored):
+        system.get_time_series(gen, variable_name=variable_name, scenario="medium")
+    assert len(system.list_time_series(gen, variable_name=variable_name, scenario="high")) == 2
+    assert len(system.list_time_series(gen, variable_name=variable_name)) == 4
+    system.remove_time_series(gen, variable_name=variable_name, scenario="high")
+    assert len(system.list_time_series(gen, variable_name=variable_name)) == 2
+    system.remove_time_series(gen, variable_name=variable_name)
+    assert not system.has_time_series(gen, variable_name=variable_name)
 
-        with pytest.raises(ISAlreadyAttached):
-            system.add_time_series(ts4, gen, scenario="low", model_year="2035")
 
-        assert system.has_time_series(gen, variable_name=variable_name)
-        assert system.has_time_series(gen, variable_name=variable_name, scenario="high")
-        assert system.has_time_series(
-            gen, variable_name=variable_name, scenario="high", model_year="2030"
-        )
-        assert not system.has_time_series(gen, variable_name=variable_name, model_year="2036")
-        with pytest.raises(ISOperationNotAllowed):
-            system.get_time_series(gen, variable_name=variable_name, scenario="high")
-        with pytest.raises(ISNotStored):
-            system.get_time_series(gen, variable_name=variable_name, scenario="medium")
-        assert len(system.list_time_series(gen, variable_name=variable_name, scenario="high")) == 2
-        assert len(system.list_time_series(gen, variable_name=variable_name)) == 4
-        system.remove_time_series(gen, variable_name=variable_name, scenario="high")
-        assert len(system.list_time_series(gen, variable_name=variable_name)) == 2
-        system.remove_time_series(gen, variable_name=variable_name)
-        assert not system.has_time_series(gen, variable_name=variable_name)
-    finally:
-        os.environ.pop("__INFRASYS_NON_JSON_SQLITE__", None)
+@pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
+def test_open_time_series_store(storage_type: TimeSeriesStorageType):
+    system = SimpleSystem(time_series_storage_type=storage_type)
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen)
+
+    length = 10
+    initial_time = datetime(year=2020, month=1, day=1)
+    timestamps = [initial_time + timedelta(hours=i) for i in range(length)]
+    time_series_arrays: list[SingleTimeSeries] = []
+    with system.open_time_series_store() as conn:
+        for i in range(5):
+            ts = SingleTimeSeries.from_time_array(np.random.rand(length), f"ts{i}", timestamps)
+            system.add_time_series(ts, gen)
+            time_series_arrays.append(ts)
+    with system.open_time_series_store() as conn:
+        for i in range(5):
+            ts = system.get_time_series(gen, variable_name=f"ts{i}", connection=conn)
+            assert np.array_equal(
+                system.get_time_series(gen, f"ts{i}").data, time_series_arrays[i].data
+            )
 
 
 def test_time_series_removal():
@@ -415,12 +438,12 @@ def test_serialize_time_series_from_array(tmp_path):
     assert ts2.data.tolist() == list(data)
 
 
-@pytest.mark.parametrize("in_memory", [True, False])
-def test_time_series_slices(in_memory):
+@pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
+def test_time_series_slices(storage_type):
     system = SimpleSystem(
         name="test-system",
         auto_add_composed_components=True,
-        time_series_in_memory=in_memory,
+        time_series_storage_type=storage_type,
     )
     gen = SimpleGenerator.example()
     system.add_components(gen)
@@ -509,13 +532,13 @@ def test_deepcopy_component(simple_system_with_time_series: SimpleSystem):
     assert gen2.bus is not gen1.bus
 
 
-@pytest.mark.parametrize("inputs", [(True, False), (True, False)])
+@pytest.mark.parametrize("inputs", list(itertools.product(TS_STORAGE_OPTIONS, [True, False])))
 def test_remove_component(inputs):
-    in_memory, cascade_down = inputs
+    storage_type, cascade_down = inputs
     system = SimpleSystem(
         name="test-system",
         auto_add_composed_components=True,
-        time_series_in_memory=in_memory,
+        time_series_storage_type=storage_type,
     )
     gen1 = SimpleGenerator.example()
     bus = gen1.bus
@@ -700,3 +723,56 @@ def test_system_counts():
 
 def test_system_printing(simple_system_with_time_series):
     simple_system_with_time_series.info()
+
+
+def test_bulk_add_time_series():
+    system = SimpleSystem(time_series_storage_type=TimeSeriesStorageType.ARROW)
+    assert isinstance(system.time_series.storage, ArrowTimeSeriesStorage)
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen)
+    time_series: list[SingleTimeSeries] = []
+    keys: list[TimeSeriesKey] = []
+    with system.open_time_series_store() as conn:
+        for i in range(2):
+            for initial_time, resolution, length in (
+                (datetime(year=2020, month=1, day=1), timedelta(hours=1), 10),
+                (datetime(year=2020, month=2, day=1), timedelta(minutes=5), 15),
+            ):
+                data = np.random.rand(length)
+                name = f"test_ts_{length}_{i}"
+                ts = SingleTimeSeries.from_array(data, name, initial_time, resolution)
+                key = system.add_time_series(ts, gen, connection=conn)
+                keys.append(key)
+                time_series.append(ts)
+
+    with system.open_time_series_store() as conn:
+        for expected_ts in time_series:
+            actual_ts = system.get_time_series(
+                gen,
+                time_series_type=SingleTimeSeries,
+                variable_name=expected_ts.variable_name,
+                connection=conn,
+            )
+            assert np.array_equal(expected_ts.data, actual_ts.data)
+
+
+def test_bulk_add_time_series_with_rollback():
+    system = SimpleSystem(time_series_storage_type=TimeSeriesStorageType.ARROW)
+    assert isinstance(system.time_series.storage, ArrowTimeSeriesStorage)
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen)
+    with pytest.raises(ISAlreadyAttached):
+        with system.open_time_series_store() as conn:
+            initial_time = datetime(year=2020, month=1, day=1)
+            resolution = timedelta(hours=1)
+            length = 10
+            data = np.random.rand(length)
+            name = "test_ts"
+            ts = SingleTimeSeries.from_array(data, name, initial_time, resolution)
+            system.add_time_series(ts, gen, connection=conn)
+            assert system.has_time_series(gen, variable_name=name)
+            system.add_time_series(ts, gen, connection=conn)
+
+    assert not system.has_time_series(gen, variable_name=name)
