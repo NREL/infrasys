@@ -19,6 +19,7 @@ from infrasys.time_series_models import (
     SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
+    TimeSeriesStorageType,
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
@@ -54,16 +55,15 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
+        connection: Any = None,
     ) -> None:
         if isinstance(time_series, SingleTimeSeries):
-            self.add_raw_single_time_series(metadata.time_series_uuid, time_series.data_array)
+            self._add_single_time_series(metadata.time_series_uuid, time_series.data_array)
         else:
             msg = f"Bug: need to implement add_time_series for {type(time_series)}"
             raise NotImplementedError(msg)
 
-    def add_raw_single_time_series(
-        self, time_series_uuid: UUID, time_series_data: NDArray
-    ) -> None:
+    def _add_single_time_series(self, time_series_uuid: UUID, time_series_data: NDArray) -> None:
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
         if not fpath.exists():
             arrow_batch = self._convert_to_record_batch(time_series_data, str(time_series_uuid))
@@ -80,6 +80,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
+        connection: Any = None,
     ) -> Any:
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(
@@ -89,21 +90,28 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
-    def remove_time_series(self, uuid: UUID) -> None:
-        fpath = self._ts_directory.joinpath(f"{uuid}{EXTENSION}")
+    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
         if not fpath.exists():
-            msg = f"No time series with {uuid} is stored"
+            msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
         fpath.unlink()
 
-    def serialize(self, dst: Path | str, src: Optional[Path | str] = None) -> None:
+    def serialize(
+        self, data: dict[str, Any], dst: Path | str, src: Path | str | None = None
+    ) -> None:
         # From the shutil documentation: the copying operation will continue if
         # it encounters existing directories, and files within the dst tree
         # will be overwritten by corresponding files from the src tree.
         if src is None:
             src = self._ts_directory
         shutil.copytree(src, dst, dirs_exist_ok=True)
+        self.add_serialized_data(data)
         logger.info("Copied time series data to {}", dst)
+
+    @staticmethod
+    def add_serialized_data(data: dict[str, Any]) -> None:
+        data["time_series_storage_type"] = TimeSeriesStorageType.ARROW.value
 
     def _get_single_time_series(
         self,
