@@ -1184,7 +1184,7 @@ class System:
 
         Parameters
         ----------
-        owner : Component
+        owner : Component | SupplementalAttribute
             Component to which the time series must be attached.
         variable_name : str | None
             Optional, search for time series with this name.
