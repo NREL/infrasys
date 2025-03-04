@@ -30,6 +30,7 @@ from infrasys.utils.path_utils import delete_if_exists
 
 
 _SINGLE_TIME_SERIES_BASE_NAME = "single_time_series"
+_TIME_SERIES_FILENAME = "time_series_data.db"
 
 
 class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
@@ -64,6 +65,23 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
             dst_file = Path(f.name)
         logger.debug("Creating database at {}", dst_file)
         atexit.register(delete_if_exists, dst_file)
+        store = Store(engine_name=engine_name, file_path=dst_file)
+        id_manager = IDManager(next_id=1)
+        return cls(store, id_manager, read_only=read_only)
+
+    @classmethod
+    def create_with_permanent_directory(
+        cls,
+        base_directory: Path,
+        engine_name: str = "duckdb",
+        read_only: bool = False,
+    ) -> Self:
+        """Construct ChronifyTimeSeriesStorage with a permanent directory."""
+        dst_file = base_directory / _TIME_SERIES_FILENAME
+        if dst_file.exists():
+            msg = f"Bug: time series database already exists: {dst_file}"
+            raise Exception(msg)
+        logger.debug("Creating database at {}", dst_file)
         store = Store(engine_name=engine_name, file_path=dst_file)
         id_manager = IDManager(next_id=1)
         return cls(store, id_manager, read_only=read_only)
@@ -304,7 +322,13 @@ def _(time_series: SingleTimeSeries) -> str:
 
 
 @singledispatch
-def _make_time_config(time_series: SingleTimeSeries) -> DatetimeRange:
+def _make_time_config(time_series) -> Any:
+    msg = "Bug: need to implement _make_time_config for {type(time_series)}"
+    raise NotImplementedError(msg)
+
+
+@_make_time_config.register(SingleTimeSeries)
+def _(time_series: SingleTimeSeries) -> DatetimeRange:
     return DatetimeRange(
         start=time_series.initial_time,
         resolution=time_series.resolution,
@@ -313,7 +337,7 @@ def _make_time_config(time_series: SingleTimeSeries) -> DatetimeRange:
     )
 
 
-def _make_table_schema(time_series: SingleTimeSeries, table_name: str) -> TableSchema:
+def _make_table_schema(time_series: TimeSeriesData, table_name: str) -> TableSchema:
     return TableSchema(
         name=table_name,
         value_column="value",

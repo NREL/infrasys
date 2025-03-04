@@ -1294,8 +1294,8 @@ class System:
         Examples
         --------
         >>> with system.open_time_series_store() as conn:
-            system.add_time_series(ts1, gen1, connection=conn)
-            system.add_time_series(ts2, gen1, connection=conn)
+        ...     system.add_time_series(ts1, gen1, connection=conn)
+        ...     system.add_time_series(ts2, gen1, connection=conn)
         """
         with self._time_series_mgr.open_time_series_store() as conn:
             yield conn

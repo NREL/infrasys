@@ -68,15 +68,15 @@ class TimeSeriesManager:
     def create_new_storage(permanent: bool = False, **kwargs):
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         storage_type = _process_time_series_kwarg("time_series_storage_type", **kwargs)
+        if permanent and base_directory is None:
+            msg = "Can't convert to permanent storage without a base directory"
+            raise ISInvalidParameter(msg)
+
         match storage_type:
             case TimeSeriesStorageType.ARROW:
                 if permanent:
-                    if base_directory is None:
-                        msg = "Can't convert to permanent storage without a base directory"
-                        raise ISInvalidParameter(msg)
-                    return ArrowTimeSeriesStorage.create_with_permanent_directory(
-                        directory=base_directory
-                    )
+                    assert base_directory is not None
+                    return ArrowTimeSeriesStorage.create_with_permanent_directory(base_directory)
                 return ArrowTimeSeriesStorage.create_with_temp_directory(
                     base_directory=base_directory
                 )
@@ -87,6 +87,13 @@ class TimeSeriesManager:
                         'option or install chronify with `pip install "infrasys[chronify]"`.'
                     )
                     raise ImportError(msg)
+                if permanent:
+                    assert base_directory is not None
+                    return ChronifyTimeSeriesStorage.create_with_permanent_directory(
+                        base_directory,
+                        engine_name=_process_time_series_kwarg("chronify_engine_name", **kwargs),
+                        read_only=_process_time_series_kwarg("time_series_read_only", **kwargs),
+                    )
                 return ChronifyTimeSeriesStorage.create_with_temp_directory(
                     base_directory=base_directory,
                     engine_name=_process_time_series_kwarg("chronify_engine_name", **kwargs),

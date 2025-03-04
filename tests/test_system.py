@@ -727,7 +727,7 @@ def test_system_printing(simple_system_with_time_series):
     simple_system_with_time_series.info()
 
 
-def test_convert_chronify_to_arrow(tmp_path):
+def test_convert_chronify_to_arrow_in_deserialize(tmp_path):
     system = SimpleSystem(time_series_storage_type=TimeSeriesStorageType.CHRONIFY)
     assert isinstance(system.time_series.storage, ChronifyTimeSeriesStorage)
     assert system.time_series.storage.get_database_url()
