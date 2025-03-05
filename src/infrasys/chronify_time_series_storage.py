@@ -15,7 +15,7 @@ from chronify import DatetimeRange, Store, TableSchema
 from loguru import logger
 from sqlalchemy import Connection
 
-from infrasys.exceptions import ISInvalidParameter
+from infrasys.exceptions import ISFileExists, ISInvalidParameter
 from infrasys.id_manager import IDManager
 from infrasys.time_series_models import (
     SingleTimeSeries,
@@ -80,8 +80,8 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         """Construct ChronifyTimeSeriesStorage with a permanent directory."""
         dst_file = base_directory / _TIME_SERIES_FILENAME
         if dst_file.exists():
-            msg = f"Bug: time series database already exists: {dst_file}"
-            raise Exception(msg)
+            msg = f"time series database already exists: {dst_file}"
+            raise ISFileExists(msg)
         logger.debug("Creating database at {}", dst_file)
         store = Store(engine_name=engine_name, file_path=dst_file)
         id_manager = IDManager(next_id=1)
