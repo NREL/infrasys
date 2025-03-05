@@ -1,3 +1,4 @@
+from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
 from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesStorageType
 from infrasys.exceptions import ISAlreadyAttached
@@ -16,6 +17,24 @@ import pytest
             {},
             InMemoryTimeSeriesStorage,
             ArrowTimeSeriesStorage,
+        ),
+        (
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            {"time_series_storage_type": TimeSeriesStorageType.CHRONIFY},
+            InMemoryTimeSeriesStorage,
+            ChronifyTimeSeriesStorage,
+        ),
+        (
+            {"time_series_storage_type": TimeSeriesStorageType.CHRONIFY},
+            {"time_series_storage_type": TimeSeriesStorageType.ARROW},
+            ChronifyTimeSeriesStorage,
+            ArrowTimeSeriesStorage,
+        ),
+        (
+            {"time_series_storage_type": TimeSeriesStorageType.ARROW},
+            {"time_series_storage_type": TimeSeriesStorageType.CHRONIFY},
+            ArrowTimeSeriesStorage,
+            ChronifyTimeSeriesStorage,
         ),
         (
             {},

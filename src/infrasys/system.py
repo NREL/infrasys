@@ -91,6 +91,7 @@ class System:
               - time_series_directory: Location to store time series files, defaults to the system's
                 tmp directory. Use an alternate location if the space in that directory is limited,
                 such as on a compute node with no local storage.
+              - chronify_engine_name: Database engine to use with chronify, defaults to "duckdb".
 
         Examples
         --------
