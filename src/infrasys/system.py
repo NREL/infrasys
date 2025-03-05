@@ -744,6 +744,7 @@ class System:
         component: Component
         component_type: Optional[Type[Component]]
             Filter the returned list to components of this type.
+            If the type has subclasses, all subclasses will be included.
 
         See Also
         --------
@@ -765,6 +766,7 @@ class System:
         component: Component
         component_type: Optional[Type[Component]]
             Filter the returned list to components of this type.
+            If the type has subclasses, all subclasses will be included.
 
         Examples
         --------
