@@ -69,13 +69,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
 
     @_add_time_series.register(SingleTimeSeries)
     def _(self, time_series):
-        return self._add_single_time_series(time_series)
-
-    @_add_time_series.register(NonSequentialTimeSeries)
-    def _(self, time_series):
-        return self._add_non_sequential_time_series(time_series)
-
-    def _add_single_time_series(self, time_series) -> None:
         time_series_data = time_series.data_array
         time_series_uuid = time_series.uuid
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
@@ -91,7 +84,8 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         else:
             logger.debug("{} was already stored", time_series_uuid)
 
-    def _add_non_sequential_time_series(self, time_series) -> None:
+    @_add_time_series.register(NonSequentialTimeSeries)
+    def _(self, time_series):
         time_series_data = (time_series.data_array, time_series.timestamps_array)
         time_series_uuid = time_series.uuid
         fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
@@ -139,7 +133,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         if src is None:
             src = self._ts_directory
         shutil.copytree(src, dst, dirs_exist_ok=True)
-        self.add_serialized_data(data)
         self.add_serialized_data(data)
         logger.info("Copied time series data to {}", dst)
 
@@ -193,8 +186,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         if len(columns) != 2:
             msg = f"Bug: expected two columns: {columns=}"
             raise Exception(msg)
-        # This should be equal to metadata.time_series_uuid in versions
-        # v0.2.1 or later. Earlier versions used the time series variable name.
         data_column, timestamps_column = columns[0], columns[1]
         data, timestamps = (
             base_ts[data_column],

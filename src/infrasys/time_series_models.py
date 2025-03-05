@@ -440,6 +440,11 @@ class NonSequentialTimeSeries(TimeSeriesData):
             msg = "Duplicate timestamps found. Timestamps must be unique."
             raise ValueError(msg)
 
+        time_array = np.array(timestamps, dtype="datetime64[ns]")
+        if not np.all(np.diff(time_array) > np.timedelta64(0, "s")):
+            msg = "Timestamps must be in chronological order."
+            raise ValueError(msg)
+
         if not isinstance(timestamps, np.ndarray):
             return np.array(timestamps)
 

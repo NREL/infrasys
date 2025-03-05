@@ -246,8 +246,7 @@ def test_with_nonsequential_time_series_quantity(tmp_path):
     data = ActivePower(range(length), "watts")
     variable_name = "active_power"
     timestamps = [
-        datetime(year=2030, month=1, day=1) + timedelta(seconds=np.random.randint(1000) * i)
-        for i in range(10)
+        datetime(year=2030, month=1, day=1) + timedelta(seconds=100 * i) for i in range(10)
     ]
     ts = NonSequentialTimeSeries.from_array(
         data=data, variable_name=variable_name, timestamps=timestamps

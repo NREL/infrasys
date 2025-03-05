@@ -14,7 +14,7 @@ from infrasys.time_series_models import NonSequentialTimeSeries
 def sample_timestamps():
     "Sample timestamps sequence"
     base_datetime = datetime(year=2020, month=1, day=1)
-    return [base_datetime + timedelta(hours=np.random.randint(1000)) for _ in range(4)]
+    return [base_datetime + timedelta(hours=4 * i) for i in range(4)]
 
 
 @pytest.fixture(name="quantity_data")
@@ -66,6 +66,20 @@ def test_duplicate_timestamps(data, variable_name):
         datetime(2020, 5, 20),
     ]
     with pytest.raises(ValueError, match="Timestamps must be unique"):
+        NonSequentialTimeSeries.from_array(
+            data=data, variable_name=variable_name, timestamps=timestamps
+        )
+
+
+def test_chronological_timestamps(data, variable_name):
+    """Check that time series has unique timestamps"""
+    timestamps = [
+        datetime(2020, 6, 17),
+        datetime(2020, 5, 17),
+        datetime(2020, 5, 18),
+        datetime(2020, 5, 20),
+    ]
+    with pytest.raises(ValueError, match="chronological order"):
         NonSequentialTimeSeries.from_array(
             data=data, variable_name=variable_name, timestamps=timestamps
         )
