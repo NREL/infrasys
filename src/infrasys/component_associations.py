@@ -5,6 +5,7 @@ from uuid import UUID
 from loguru import logger
 
 from infrasys.component import Component
+from infrasys.utils.classes import get_all_concrete_subclasses
 from infrasys.utils.sqlite import execute
 
 
@@ -74,11 +75,11 @@ class ComponentAssociations:
         For example, return the bus attached to a generator.
         """
         where_clause = "WHERE component_uuid = ?"
-        if component_type is None:
-            params = [str(component.uuid)]
-        else:
-            params = [str(component.uuid), component_type.__name__]
-            where_clause += " AND attached_component_type = ?"
+        params = [str(component.uuid)]
+        if component_type is not None:
+            res = _make_params_and_where_clause(component_type, "attached_component_type")
+            params.extend(res[0])
+            where_clause += res[1]
         query = f"SELECT attached_component_uuid FROM {self.TABLE_NAME} {where_clause}"
         cur = self._con.cursor()
         return [UUID(x[0]) for x in execute(cur, query, params)]
@@ -90,11 +91,11 @@ class ComponentAssociations:
         For example, return all components connected to a bus.
         """
         where_clause = "WHERE attached_component_uuid = ?"
-        if component_type is None:
-            params = [str(component.uuid)]
-        else:
-            params = [str(component.uuid), component_type.__name__]
-            where_clause += " AND component_type = ?"
+        params = [str(component.uuid)]
+        if component_type is not None:
+            res = _make_params_and_where_clause(component_type, "component_type")
+            params.extend(res[0])
+            where_clause += res[1]
         query = f"SELECT component_uuid FROM {self.TABLE_NAME} {where_clause}"
         cur = self._con.cursor()
         return [UUID(x[0]) for x in execute(cur, query, params)]
@@ -128,3 +129,22 @@ class ComponentAssociations:
             str(attached_component.uuid),
             type(attached_component).__name__,
         )
+
+
+def _make_params_and_where_clause(
+    component_type: Type[Component], field: str
+) -> tuple[list[str], str]:
+    params = _make_type_params(component_type)
+    if len(params) == 1:
+        where_clause = f" AND {field} = ?"
+    else:
+        where_clause = f" AND {field} IN ({','.join(['?'] * len(params))})"
+    return params, where_clause
+
+
+def _make_type_params(component_type: Type[Component]) -> list[str]:
+    params: list[str] = []
+    subclasses = get_all_concrete_subclasses(component_type) or [component_type]
+    for cls in subclasses:
+        params.append(cls.__name__)  # type: ignore
+    return params

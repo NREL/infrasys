@@ -157,12 +157,12 @@ def test_component_associations(tmp_path):
         subsystem = SimpleSubsystem(name=f"test-subsystem{i}", generators=[gen1, gen2])
         system.add_components(geo, bus, gen1, gen2, subsystem)
 
-    def check_attached_components(my_sys):
+    def check_attached_components(my_sys, parent_type, child_type):
         for i in range(3):
             bus = my_sys.get_component(SimpleBus, f"bus{i}")
             gen1 = my_sys.get_component(SimpleGenerator, f"gen{i}a")
             gen2 = my_sys.get_component(SimpleGenerator, f"gen{i}b")
-            attached = my_sys.list_parent_components(bus, component_type=SimpleGenerator)
+            attached = my_sys.list_parent_components(bus, component_type=parent_type)
             assert len(attached) == 2
             labels = {gen1.label, gen2.label}
             for component in attached:
@@ -172,24 +172,28 @@ def test_component_associations(tmp_path):
                 assert attached_subsystems[0].name == f"test-subsystem{i}"
                 assert not my_sys.list_parent_components(attached_subsystems[0])
                 assert my_sys.list_child_components(component) == [bus]
-                assert my_sys.list_child_components(component, component_type=SimpleBus) == [bus]
+                assert my_sys.list_child_components(component, component_type=child_type) == [bus]
 
             for component in (bus, gen1, gen2):
                 with pytest.raises(ISOperationNotAllowed):
                     my_sys.remove_component(component)
 
-    check_attached_components(system)
+    check_attached_components(system, SimpleGenerator, SimpleBus)
+    check_attached_components(system, GeneratorBase, Component)
+    check_attached_components(system, Component, Component)
     system._component_mgr._associations.clear()
     for component in system.iter_all_components():
         assert not system.list_parent_components(component)
 
     system.rebuild_component_associations()
-    check_attached_components(system)
+    check_attached_components(system, SimpleGenerator, SimpleBus)
+    check_attached_components(system, GeneratorBase, Component)
 
     save_dir = tmp_path / "test_system"
     system.save(save_dir)
     system2 = SimpleSystem.from_json(save_dir / "system.json")
-    check_attached_components(system2)
+    check_attached_components(system2, SimpleGenerator, SimpleBus)
+    check_attached_components(system2, GeneratorBase, Component)
 
     bus = system2.get_component(SimpleBus, "bus1")
     with pytest.raises(ISOperationNotAllowed):
