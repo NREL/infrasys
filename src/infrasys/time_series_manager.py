@@ -11,7 +11,7 @@ from loguru import logger
 
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys import Component
-from infrasys.exceptions import ISInvalidParameter, ISOperationNotAllowed
+from infrasys.exceptions import ISFileExists, ISInvalidParameter, ISOperationNotAllowed
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_metadata_store import TimeSeriesMetadataStore
@@ -68,9 +68,13 @@ class TimeSeriesManager:
     def create_new_storage(permanent: bool = False, **kwargs):
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         storage_type = _process_time_series_kwarg("time_series_storage_type", **kwargs)
-        if permanent and base_directory is None:
-            msg = "Can't convert to permanent storage without a base directory"
-            raise ISInvalidParameter(msg)
+        if permanent:
+            if base_directory is None:
+                msg = "Can't convert to permanent storage without a base directory"
+                raise ISInvalidParameter(msg)
+            if base_directory.exists():
+                msg = f"{base_directory} already exists"
+                raise ISFileExists(msg)
 
         match storage_type:
             case TimeSeriesStorageType.ARROW:

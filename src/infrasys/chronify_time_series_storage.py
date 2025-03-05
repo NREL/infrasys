@@ -15,6 +15,7 @@ from chronify import DatetimeRange, Store, TableSchema
 from loguru import logger
 from sqlalchemy import Connection
 
+from infrasys.exceptions import ISInvalidParameter
 from infrasys.id_manager import IDManager
 from infrasys.time_series_models import (
     SingleTimeSeries,
@@ -49,7 +50,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         # Those will eventually use integer IDs instead.
         # We don't want to store UUIDs in the chronify database.
         # Integer IDs are much smaller and faster for search.
-        # Manage a mapping of UUIDs to integer IDs until we can remove UUIDs.
+        # Manage a mapping of UUIDs to integer IDs until we can remove UUIDs (#80).
         self._uuid_lookup: dict[UUID, int] = uuid_lookup or {}
         self._id_manager = id_manager
 
@@ -185,7 +186,10 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
     ) -> None:
         db_id = self._get_db_id(metadata.time_series_uuid)
         table_name = _get_table_name(metadata)
-        self._store.delete_rows(table_name, {"id": db_id}, connection=connection)
+        num_deleted = self._store.delete_rows(table_name, {"id": db_id}, connection=connection)
+        if num_deleted < 1:
+            msg = f"Failed to delete rows in the chronfiy database for {metadata.time_series_uuid}"
+            raise ISInvalidParameter(msg)
 
     def serialize(
         self, data: dict[str, Any], dst: Path | str, src: Path | str | None = None
