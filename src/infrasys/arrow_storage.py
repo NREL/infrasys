@@ -120,7 +120,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
         if not fpath.exists():
             msg = f"No time series with {metadata.time_series_uuid} is stored"
-            msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
         fpath.unlink()
 
