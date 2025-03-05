@@ -17,6 +17,7 @@ from typing import (
 from uuid import UUID
 
 import numpy as np
+import pandas as pd
 import pint
 from numpy.typing import NDArray
 from pydantic import (
@@ -48,6 +49,7 @@ class TimeSeriesStorageType(StrEnum):
 
     MEMORY = "memory"
     ARROW = "arrow"
+    CHRONIFY = "chronify"
     HDF5 = "hdf5"
     PARQUET = "parquet"
 
@@ -205,6 +207,12 @@ class SingleTimeSeries(TimeSeriesData):
             resolution,
             normalization=normalization,
         )
+
+    def make_timestamps(self) -> NDArray:
+        """Return the timestamps as a numpy array."""
+        return pd.date_range(
+            start=self.initial_time, periods=len(self.data), freq=self.resolution
+        ).values
 
     @staticmethod
     def get_time_series_metadata_type() -> Type:

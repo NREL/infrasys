@@ -126,6 +126,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
         if not fpath.exists():
             msg = f"No time series with {metadata.time_series_uuid} is stored"
+            msg = f"No time series with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
         fpath.unlink()
 
@@ -138,6 +139,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         if src is None:
             src = self._ts_directory
         shutil.copytree(src, dst, dirs_exist_ok=True)
+        self.add_serialized_data(data)
         self.add_serialized_data(data)
         logger.info("Copied time series data to {}", dst)
 
@@ -235,8 +237,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
                 pa.field("timestamp", pa_timestamps_array.type),
             ]
         )
-
-        return pa.record_batch([data_array, timestamps_array], schema=schema)
+        return pa.record_batch([pa_data_array, pa_timestamps_array], schema=schema)
 
 
 def clean_tmp_folder(folder: Path | str) -> None:

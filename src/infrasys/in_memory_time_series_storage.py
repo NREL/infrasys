@@ -6,8 +6,6 @@ from typing import Any, TypeAlias
 
 from numpy.typing import NDArray
 from uuid import UUID
-
-
 from loguru import logger
 
 from infrasys.exceptions import ISNotStored

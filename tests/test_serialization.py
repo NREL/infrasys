@@ -3,6 +3,7 @@ from pathlib import Path
 import random
 import os
 from datetime import datetime, timedelta
+from typing import Type
 
 import numpy as np
 from numpy._typing import NDArray
@@ -16,7 +17,7 @@ from infrasys.component import Component
 from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
-from infrasys.time_series_models import TimeSeriesStorageType
+from infrasys.time_series_models import TimeSeriesStorageType, TimeSeriesData
 from .models.simple_system import (
     SimpleSystem,
     SimpleBus,
@@ -25,6 +26,13 @@ from .models.simple_system import (
 )
 
 TS_STORAGE_OPTIONS = (
+    TimeSeriesStorageType.ARROW,
+    TimeSeriesStorageType.CHRONIFY,
+    TimeSeriesStorageType.MEMORY,
+)
+
+# chronify not yet implemented for nonsequentialtimeseries
+TS_STORAGE_OPTIONS_NONSEQUENTIAL = (
     TimeSeriesStorageType.ARROW,
     TimeSeriesStorageType.MEMORY,
 )
@@ -113,6 +121,8 @@ def check_deserialize_with_read_only_time_series(
     gen2_name: str,
     variable_name: str,
     expected_ts_data: NDArray | pint.Quantity,
+    expected_ts_timestamps: NDArray | None = None,
+    time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
 ):
     system = SimpleSystem.from_json(filename, time_series_read_only=True)
     system_ts_dir = system.get_time_series_directory()
@@ -122,14 +132,18 @@ def check_deserialize_with_read_only_time_series(
     with pytest.raises(ISOperationNotAllowed):
         system.remove_time_series(gen1b, variable_name=variable_name)
 
-    ts2 = system.get_time_series(gen1b, variable_name=variable_name)
+    ts2 = system.get_time_series(
+        gen1b, time_series_type=time_series_type, variable_name=variable_name
+    )
     assert np.array_equal(ts2.data, expected_ts_data)
+    if expected_ts_timestamps is not None:
+        assert np.array_equal(ts2.timestamps, expected_ts_timestamps)
 
 
-@pytest.mark.parametrize("time_series_in_memory", [True, False])
-def test_serialize_nonsequential_time_series(tmp_path, time_series_in_memory):
+@pytest.mark.parametrize("time_series_storage_type", TS_STORAGE_OPTIONS_NONSEQUENTIAL)
+def test_serialize_nonsequential_time_series(tmp_path, time_series_storage_type):
     "Test serialization of NonSequentialTimeSeries"
-    system = SimpleSystem(time_series_in_memory=time_series_in_memory)
+    system = SimpleSystem(time_series_storage_type=time_series_storage_type)
     bus = SimpleBus(name="test-bus", voltage=1.1)
     gen1 = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
     gen2 = SimpleGenerator(name="gen2", active_power=1.0, rating=1.0, bus=bus, available=True)
@@ -145,24 +159,19 @@ def test_serialize_nonsequential_time_series(tmp_path, time_series_in_memory):
         data=data, variable_name=variable_name, timestamps=timestamps
     )
     system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
-    system.get_time_series(
-        gen1, time_series_type=NonSequentialTimeSeries, variable_name=variable_name
-    )
     filename = tmp_path / "system.json"
     system.to_json(filename)
 
-    system2 = SimpleSystem.from_json(filename, time_series_read_only=True)
-    system2_ts_dir = system2.get_time_series_directory()
-    assert system2_ts_dir is not None
-    assert system2_ts_dir == SimpleSystem._make_time_series_directory(filename)
-    gen1b = system.get_component(SimpleGenerator, gen1.name)
-    with pytest.raises(ISOperationNotAllowed):
-        system2.remove_time_series(gen1b, variable_name=variable_name)
-
-    ts2 = system.get_time_series(
-        gen1b, time_series_type=NonSequentialTimeSeries, variable_name=variable_name
+    check_deserialize_with_read_write_time_series(filename)
+    check_deserialize_with_read_only_time_series(
+        filename,
+        gen1.name,
+        gen2.name,
+        variable_name,
+        ts.data,
+        ts.timestamps,
+        time_series_type=NonSequentialTimeSeries,
     )
-    assert np.array_equal(ts2.data, ts.data)
 
 
 def check_deserialize_with_read_write_time_series(filename):
@@ -323,3 +332,25 @@ def test_legacy_format():
     # This file was save from v0.2.1 with test_with_time_series_quantity.
     # Ensure that we can deserialize it.
     SimpleSystem.from_json(Path("tests/data/legacy_system.json"))
+
+
+def test_convert_chronify_storage_permanent(tmp_path):
+    gen = SimpleGenerator.example()
+    system = SimpleSystem(
+        auto_add_composed_components=True, time_series_storage_type=TimeSeriesStorageType.ARROW
+    )
+    system.add_components(gen)
+    variable_name = "active_power"
+    length = 10
+    data = list(range(length))
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
+    system.add_time_series(ts, gen)
+    system.convert_storage(
+        time_series_storage_type=TimeSeriesStorageType.CHRONIFY,
+        time_series_directory=tmp_path,
+        in_place=False,
+        permanent=True,
+    )
+    assert (tmp_path / "time_series_data.db").exists()

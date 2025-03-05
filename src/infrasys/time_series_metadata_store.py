@@ -326,6 +326,9 @@ class TimeSeriesMetadataStore:
         query = f"SELECT metadata FROM {self.TABLE_NAME} WHERE {where_clause}"
         rows = execute(cur, query, params=params).fetchall()
         metadata = [_deserialize_time_series_metadata(x[0]) for x in rows]
+        if not metadata:
+            msg = "No metadata matching the inputs is stored"
+            raise ISNotStored(msg)
 
         query = f"DELETE FROM {self.TABLE_NAME} WHERE ({where_clause})"
         execute(cur, query, params=params)

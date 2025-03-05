@@ -91,6 +91,7 @@ class System:
               - time_series_directory: Location to store time series files, defaults to the system's
                 tmp directory. Use an alternate location if the space in that directory is limited,
                 such as on a compute node with no local storage.
+              - chronify_engine_name: Database engine to use with chronify, defaults to "duckdb".
 
         Examples
         --------
@@ -744,6 +745,7 @@ class System:
         component: Component
         component_type: Optional[Type[Component]]
             Filter the returned list to components of this type.
+            If the type has subclasses, all subclasses will be included.
 
         See Also
         --------
@@ -765,6 +767,7 @@ class System:
         component: Component
         component_type: Optional[Type[Component]]
             Filter the returned list to components of this type.
+            If the type has subclasses, all subclasses will be included.
 
         Examples
         --------
