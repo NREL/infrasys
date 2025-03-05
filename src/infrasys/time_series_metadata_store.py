@@ -3,10 +3,9 @@
 import hashlib
 import itertools
 import json
-import os
 import sqlite3
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence
 from uuid import UUID
 
 from loguru import logger
@@ -37,18 +36,6 @@ class TimeSeriesMetadataStore:
         self._con = con
         if initialize:
             self._create_metadata_table()
-        self._supports_sqlite_json = _does_sqlite_support_json()
-        if not self._supports_sqlite_json:
-            # This is true on Ubuntu 22.04, which is used by GitHub runners as of March 2024.
-            # It is non-trivial to upgrade SQLite on those platforms.
-            # There is code in this file to preserve behavior with less than optimal performance
-            # in some cases. We can remove it when we're confident that users and runners have
-            # newer SQLite versions.
-            logger.debug(
-                "SQLite version {} does not support JSON queries, and so time series queries may "
-                "have degraded performance.",
-                sqlite3.sqlite_version,
-            )
 
     def _create_metadata_table(self):
         schema = [
@@ -89,6 +76,7 @@ class TimeSeriesMetadataStore:
         self,
         metadata: TimeSeriesMetadata,
         *owners: Component | SupplementalAttribute,
+        connection: sqlite3.Connection | None = None,
     ) -> None:
         """Add metadata to the store.
 
@@ -112,7 +100,8 @@ class TimeSeriesMetadataStore:
                 msg = "Adding time series to a supplemental attribute is not supported yet"
                 raise ISOperationNotAllowed(msg)
 
-        cur = self._con.cursor()
+        con = connection or self._con
+        cur = con.cursor()
         query = f"SELECT COUNT(*) FROM {self.TABLE_NAME} WHERE {where_clause}"
         res = execute(cur, query, params=params).fetchone()
         if res[0] > 0:
@@ -143,7 +132,10 @@ class TimeSeriesMetadataStore:
             )
             for owner in owners
         ]
-        self._insert_rows(rows)
+        self._insert_rows(rows, cur)
+        if connection is None:
+            self._con.commit()
+        # else, commit/rollback will occur at a higer level.
 
     def get_time_series_counts(self) -> "TimeSeriesCounts":
         """Return summary counts of components and time series."""
@@ -240,16 +232,6 @@ class TimeSeriesMetadataStore:
         ):
             return True
 
-        if not self._supports_sqlite_json:
-            return bool(
-                self._list_metadata_no_sql_json(
-                    component,
-                    variable_name=variable_name,
-                    time_series_type=time_series_type,
-                    **user_attributes,
-                )
-            )
-
         where_clause, params = self._make_where_clause(
             (component,), variable_name, time_series_type, **user_attributes
         )
@@ -258,75 +240,56 @@ class TimeSeriesMetadataStore:
         res = execute(cur, query, params=params).fetchone()
         return res[0] > 0
 
-    def list_existing_time_series(self, time_series_uuids: list[UUID]) -> set[UUID]:
+    def list_existing_time_series(self, time_series_uuids: Iterable[UUID]) -> set[UUID]:
         """Return the UUIDs that are present."""
         cur = self._con.cursor()
         params = tuple(str(x) for x in time_series_uuids)
-        uuids = ",".join(itertools.repeat("?", len(time_series_uuids)))
+        uuids = ",".join(itertools.repeat("?", len(params)))
         query = (
             f"SELECT time_series_uuid FROM {self.TABLE_NAME} WHERE time_series_uuid IN ({uuids})"
         )
         rows = execute(cur, query, params=params).fetchall()
         return {UUID(x[0]) for x in rows}
 
-    def list_missing_time_series(self, time_series_uuids: list[UUID]) -> set[UUID]:
+    def list_missing_time_series(self, time_series_uuids: Iterable[UUID]) -> set[UUID]:
         """Return the UUIDs that are not present."""
         existing_uuids = set(self.list_existing_time_series(time_series_uuids))
         return set(time_series_uuids) - existing_uuids
 
     def list_metadata(
         self,
-        *components: Component | SupplementalAttribute,
+        *owners: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **user_attributes,
     ) -> list[TimeSeriesMetadata]:
         """Return a list of metadata that match the query."""
-        if not self._supports_sqlite_json:
-            return [
-                x[1]
-                for x in self._list_metadata_no_sql_json(
-                    *components,
-                    variable_name=variable_name,
-                    time_series_type=time_series_type,
-                    **user_attributes,
-                )
-            ]
-
         where_clause, params = self._make_where_clause(
-            components, variable_name, time_series_type, **user_attributes
+            owners, variable_name, time_series_type, **user_attributes
         )
         query = f"SELECT metadata FROM {self.TABLE_NAME} WHERE {where_clause}"
         cur = self._con.cursor()
         rows = execute(cur, query, params=params).fetchall()
         return [_deserialize_time_series_metadata(x[0]) for x in rows]
 
-    def _list_metadata_no_sql_json(
-        self,
-        *components: Component | SupplementalAttribute,
-        variable_name: Optional[str] = None,
-        time_series_type: Optional[str] = None,
-        **user_attributes,
-    ) -> list[tuple[int, TimeSeriesMetadata]]:
-        """Return a list of metadata that match the query.
+    def list_metadata_with_time_series_uuid(
+        self, time_series_uuid: UUID, limit: int | None = None
+    ) -> list[TimeSeriesMetadata]:
+        """Return metadata attached to the given time_series_uuid.
 
-        Returns
-        -------
-        list[tuple[int, TimeSeriesMetadata]]
-            The first element of each tuple is the database id field that uniquely identifies the
-            row.
+        Parameters
+        ----------
+        time_series_uuid
+            The UUID of the time series.
+        limit
+            The maximum number of metadata to return. If None, all metadata are returned.
         """
-        where_clause, params = self._make_where_clause(components, variable_name, time_series_type)
-        query = f"SELECT id, metadata FROM {self.TABLE_NAME} WHERE {where_clause}"
+        params = (str(time_series_uuid),)
+        limit_str = "" if limit is None else f"LIMIT {limit}"
+        query = f"SELECT metadata FROM {self.TABLE_NAME} WHERE time_series_uuid = ? {limit_str}"
         cur = self._con.cursor()
-        rows = execute(cur, query, params).fetchall()
-
-        metadata_list = []
-        for row in rows:
-            metadata = _deserialize_time_series_metadata(row[1])
-            if _do_attributes_match(metadata.user_attributes, **user_attributes):
-                metadata_list.append((row[0], metadata))
-        return metadata_list
+        rows = execute(cur, query, params=params).fetchall()
+        return [_deserialize_time_series_metadata(x[0]) for x in rows]
 
     def list_rows(
         self,
@@ -337,13 +300,6 @@ class TimeSeriesMetadataStore:
         **user_attributes,
     ) -> list[tuple]:
         """Return a list of rows that match the query."""
-        if not self._supports_sqlite_json and user_attributes:
-            msg = (
-                "list_rows is not supported with user_attributes with SQLite version "
-                "{sqlite3.sqlite_version}"
-            )
-            raise ISOperationNotAllowed(msg)
-
         where_clause, params = self._make_where_clause(
             components, variable_name, time_series_type, **user_attributes
         )
@@ -358,58 +314,38 @@ class TimeSeriesMetadataStore:
         *components: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Optional[str] = None,
+        connection: sqlite3.Connection | None = None,
         **user_attributes,
-    ) -> list[UUID]:
-        """Remove all matching rows and return the time series UUIDs."""
-        cur = self._con.cursor()
-        if not self._supports_sqlite_json:
-            ts_uuids = set()
-            ids = []
-            for id_, metadata in self._list_metadata_no_sql_json(
-                *components,
-                variable_name=variable_name,
-                time_series_type=time_series_type,
-                **user_attributes,
-            ):
-                ts_uuids.add(metadata.time_series_uuid)
-                ids.append(id_)
-            params = [str(x) for x in ids]
-            id_str = ",".join(itertools.repeat("?", len(ids)))
-            query = f"DELETE FROM {self.TABLE_NAME} WHERE id IN ({id_str})"
-            execute(cur, query, params=params)
-            count_deleted = execute(cur, "SELECT changes()").fetchall()[0][0]
-            if count_deleted != len(ids):
-                msg = f"Bug: Unexpected length mismatch {len(ts_uuids)=} {count_deleted=}"
-                raise Exception(msg)
-            self._con.commit()
-            return list(ts_uuids)
-
+    ) -> list[TimeSeriesMetadata]:
+        """Remove all matching rows and return the metadata."""
+        con = connection or self._con
+        cur = con.cursor()
         where_clause, params = self._make_where_clause(
             components, variable_name, time_series_type, **user_attributes
         )
-        query = f"SELECT time_series_uuid FROM {self.TABLE_NAME} WHERE {where_clause}"
-        uuids = [UUID(x[0]) for x in execute(cur, query, params=params).fetchall()]
+        query = f"SELECT metadata FROM {self.TABLE_NAME} WHERE {where_clause}"
+        rows = execute(cur, query, params=params).fetchall()
+        metadata = [_deserialize_time_series_metadata(x[0]) for x in rows]
 
         query = f"DELETE FROM {self.TABLE_NAME} WHERE ({where_clause})"
         execute(cur, query, params=params)
-        self._con.commit()
+        if connection is None:
+            self._con.commit()
         count_deleted = execute(cur, "SELECT changes()").fetchall()[0][0]
-        if len(uuids) != count_deleted:
-            msg = f"Bug: Unexpected length mismatch: {len(uuids)=} {count_deleted=}"
+        if len(metadata) != count_deleted:
+            msg = f"Bug: Unexpected length mismatch: {len(metadata)=} {count_deleted=}"
             raise Exception(msg)
-        return uuids
+        return metadata
 
     def sql(self, query: str, params: Sequence[str] = ()) -> list[tuple]:
         """Run a SQL query on the time series metadata table."""
         cur = self._con.cursor()
         return execute(cur, query, params=params).fetchall()
 
-    def _insert_rows(self, rows: list[tuple]) -> None:
-        cur = self._con.cursor()
+    def _insert_rows(self, rows: list[tuple], cur: sqlite3.Cursor) -> None:
         placeholder = ",".join(["?"] * len(rows[0]))
         query = f"INSERT INTO {self.TABLE_NAME} VALUES({placeholder})"
         cur.executemany(query, rows)
-        self._con.commit()
 
     def _make_components_str(
         self, params: list[str], *owners: Component | SupplementalAttribute
@@ -449,7 +385,6 @@ class TimeSeriesMetadataStore:
             params.append(time_series_type)
 
         if attribute_hash is None and user_attributes:
-            _raise_if_unsupported_sql_operation()
             ua_hash_filter = _make_user_attribute_filter(user_attributes, params)
             ua_str = f"AND {ua_hash_filter}"
         else:
@@ -592,27 +527,3 @@ def _deserialize_time_series_metadata(text: str) -> TimeSeriesMetadata:
     type_metadata = SerializedTypeMetadata(**data.pop(TYPE_METADATA))
     metadata = deserialize_value(data, type_metadata.fields)
     return metadata
-
-
-def _does_sqlite_support_json() -> bool:
-    if "__INFRASYS_NON_JSON_SQLITE__" in os.environ:
-        return False
-
-    version = sqlite3.sqlite_version_info
-    return not (version[0] == 3 and version[1] < 38)
-
-
-def _raise_if_unsupported_sql_operation() -> None:
-    if not _does_sqlite_support_json():
-        msg = (
-            "Operations that perform a JSON search with SQLite require version 3.38 or later: "
-            f"{sqlite3.sqlite_version}. Please submit a bug report to the infrasys developers."
-        )
-        raise ISOperationNotAllowed(msg)
-
-
-def _do_attributes_match(db_attributes: dict[str, Any], **user_attributes: str) -> bool:
-    for key, val in user_attributes.items():
-        if db_attributes.get(key) != val:
-            return False
-    return True

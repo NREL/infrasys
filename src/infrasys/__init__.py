@@ -11,7 +11,13 @@ from .location import GeographicInfo, Location
 from .normalization import NormalizationModel
 from .supplemental_attribute import SupplementalAttribute
 from .system import System
-from .time_series_models import SingleTimeSeries, NonSequentialTimeSeries
+from .time_series_models import (
+    SingleTimeSeries,
+    NonSequentialTimeSeries,
+    TimeSeriesStorageType,
+    TimeSeriesKey,
+    SingleTimeSeriesKey,
+)
 
 
 __all__ = (
@@ -22,6 +28,9 @@ __all__ = (
     "NormalizationModel",
     "SingleTimeSeries",
     "NonSequentialTimeSeries",
+    "SingleTimeSeriesKey",
     "SupplementalAttribute",
     "System",
+    "TimeSeriesKey",
+    "TimeSeriesStorageType",
 )

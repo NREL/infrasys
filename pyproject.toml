@@ -27,18 +27,16 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    # This is what we want, but are currently be limited by pyarrow.
-    # Leave unbounded until pyarrow upgrades numpy.
-    #"numpy >= 2, < 3",
-    "numpy",
-    "pyarrow~=15.0.2",
-    "pint~=0.23",
     "loguru~=0.7.2",
-    "rich~=13.7.1",
+    "numpy >= 2, < 3",
+    "pint~=0.23",
+    "pyarrow~=19.0",
     "pydantic >= 2.7, < 3",
+    "rich~=13.7.1",
 ]
 [project.optional-dependencies]
 dev = [
+    "autodoc_pydantic~=2.0",
     "furo",
     "mypy >=1.13, < 2",
     "myst_parser",
@@ -49,7 +47,6 @@ dev = [
     "ruff",
     "sphinx",
     "sphinx-click",
-    "autodoc_pydantic~=2.0",
     "sphinx-copybutton",
     "sphinx-tabs~=3.4",
 ]

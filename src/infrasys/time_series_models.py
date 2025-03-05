@@ -2,8 +2,9 @@
 
 import abc
 import importlib
+import sqlite3
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from typing import (
     Any,
     Literal,
@@ -42,12 +43,12 @@ VALUE_COLUMN = "value"
 ISArray: TypeAlias = Sequence | NDArray | pint.Quantity
 
 
-class TimeSeriesStorageType(str, Enum):
+class TimeSeriesStorageType(StrEnum):
     """Defines the possible storage types for time series."""
 
+    MEMORY = "memory"
+    ARROW = "arrow"
     HDF5 = "hdf5"
-    IN_MEMORY = "in_memory"
-    FILE = "arrow"
     PARQUET = "parquet"
 
 
@@ -533,3 +534,32 @@ class NonSequentialTimeSeriesMetadata(NonSequentialTimeSeriesMetadataBase):
     @staticmethod
     def get_time_series_type_str() -> str:
         return "NonSequentialTimeSeries"
+
+
+class TimeSeriesKey(InfraSysBaseModel):
+    """Base class for time series keys."""
+
+    variable_name: str
+    time_series_type: Type[TimeSeriesData]
+    user_attributes: dict[str, Any] = {}
+
+
+class SingleTimeSeriesKey(TimeSeriesKey):
+    """Keys for SingleTimeSeries."""
+
+    length: int
+    initial_time: datetime
+    resolution: timedelta
+
+
+class NonSequentialTimeSeriesKey(TimeSeriesKey):
+    """Keys for SingleTimeSeries."""
+
+    length: int
+
+
+class DatabaseConnection(InfraSysBaseModel):
+    """Stores connections to the metadata and data databases during transactions."""
+
+    metadata_conn: sqlite3.Connection
+    data_conn: Any = None

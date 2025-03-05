@@ -10,7 +10,11 @@ from loguru import logger
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.system import System
-from infrasys.time_series_models import SingleTimeSeries, NonSequentialTimeSeries
+from infrasys.time_series_models import (
+    SingleTimeSeries,
+    NonSequentialTimeSeries,
+    TimeSeriesStorageType,
+)
 
 from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
 
@@ -182,11 +186,12 @@ def test_copied_storage_system_single_time_series(simple_system_with_time_series
     data_array_1 = simple_system_with_time_series.list_time_series(gen_component)[0].data
 
     simple_system_with_time_series.convert_storage(
-        time_series_type=SingleTimeSeries, time_series_in_memory=True, replace=True
+        time_series_type=SingleTimeSeries, time_series_storage_type=TimeSeriesStorageType.MEMORY
     )
 
     assert isinstance(
-        simple_system_with_time_series._time_series_mgr._storage, InMemoryTimeSeriesStorage
+        simple_system_with_time_series._time_series_mgr._storage,
+        InMemoryTimeSeriesStorage,
     )
 
     data_array_2 = simple_system_with_time_series.list_time_series(gen_component)[0].data
@@ -212,7 +217,8 @@ def test_copied_storage_system_nonsequential_time_series(
     )[0].timestamps
 
     simple_system_with_nonsequential_time_series.convert_storage(
-        time_series_type=NonSequentialTimeSeries, time_series_in_memory=True, replace=True
+        time_series_type=NonSequentialTimeSeries,
+        time_series_storage_type=TimeSeriesStorageType.MEMORY,
     )
 
     assert isinstance(

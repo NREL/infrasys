@@ -1,5 +1,9 @@
 from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
-from infrasys.time_series_models import SingleTimeSeries, NonSequentialTimeSeries
+from infrasys.time_series_models import (
+    SingleTimeSeries,
+    NonSequentialTimeSeries,
+    TimeSeriesStorageType,
+)
 from infrasys.exceptions import ISAlreadyAttached
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
@@ -8,28 +12,24 @@ import numpy as np
 import pytest
 
 
-def get_data_and_uuids_single_time_series(system):
-    uuids = system._time_series_mgr.metadata_store.unique_uuids_by_type(SingleTimeSeries.__name__)
-    data = {uuid: system._time_series_mgr._storage.get_raw_time_series(uuid) for uuid in uuids}
-    return uuids, data
-
-
-def get_data_and_uuids_nonsequential_time_series(system):
-    uuids = system._time_series_mgr.metadata_store.unique_uuids_by_type(
-        NonSequentialTimeSeries.__name__
-    )
-    data = {uuid: system._time_series_mgr._storage.get_raw_time_series(uuid) for uuid in uuids}
-    return uuids, data
-
-
 @pytest.mark.parametrize(
     "original_kwargs,new_kwargs,original_stype,new_stype",
     [
-        ({"time_series_in_memory": True}, {}, InMemoryTimeSeriesStorage, ArrowTimeSeriesStorage),
-        ({}, {"time_series_in_memory": True}, ArrowTimeSeriesStorage, InMemoryTimeSeriesStorage),
+        (
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            {},
+            InMemoryTimeSeriesStorage,
+            ArrowTimeSeriesStorage,
+        ),
+        (
+            {},
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            ArrowTimeSeriesStorage,
+            InMemoryTimeSeriesStorage,
+        ),
     ],
 )
-def test_memory_convert_storage_single_time_series(
+def test_convert_storage_single_time_series(
     original_kwargs, new_kwargs, original_stype, new_stype
 ):
     test_bus = SimpleBus.example()
@@ -45,34 +45,41 @@ def test_memory_convert_storage_single_time_series(
     test_time_series_data = SingleTimeSeries(
         data=np.arange(24),
         resolution=timedelta(hours=1),
-        initial_time=datetime.now(),
+        initial_time=datetime(2020, 1, 1),
         variable_name="load",
     )
     system.add_time_series(test_time_series_data, test_generator)
     with pytest.raises(ISAlreadyAttached):
         system.add_time_series(test_time_series_data, test_generator)
 
-    original_uuids, original_data = get_data_and_uuids_single_time_series(system)
-
-    system.convert_storage(time_series_type=SingleTimeSeries, **new_kwargs)
+    system.convert_storage(**new_kwargs)
 
     assert isinstance(system._time_series_mgr._storage, new_stype)
-    new_uuids, new_data = get_data_and_uuids_single_time_series(system)
 
-    assert set(original_uuids) == set(new_uuids)
-
-    for uuid in new_uuids:
-        assert np.array_equal(original_data[uuid], new_data[uuid])
+    ts2 = system.get_time_series(
+        test_generator, time_series_type=SingleTimeSeries, variable_name="load"
+    )
+    assert np.array_equal(ts2.data_array, test_time_series_data.data_array)
 
 
 @pytest.mark.parametrize(
     "original_kwargs,new_kwargs,original_stype,new_stype",
     [
-        ({"time_series_in_memory": True}, {}, InMemoryTimeSeriesStorage, ArrowTimeSeriesStorage),
-        ({}, {"time_series_in_memory": True}, ArrowTimeSeriesStorage, InMemoryTimeSeriesStorage),
+        (
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            {},
+            InMemoryTimeSeriesStorage,
+            ArrowTimeSeriesStorage,
+        ),
+        (
+            {},
+            {"time_series_storage_type": TimeSeriesStorageType.MEMORY},
+            ArrowTimeSeriesStorage,
+            InMemoryTimeSeriesStorage,
+        ),
     ],
 )
-def test_memory_convert_storage_nonsequential_time_series(
+def test_convert_storage_nonsequential_time_series(
     original_kwargs, new_kwargs, original_stype, new_stype
 ):
     test_bus = SimpleBus.example()
@@ -96,13 +103,11 @@ def test_memory_convert_storage_nonsequential_time_series(
     system.add_time_series(test_time_series_data, test_generator)
     with pytest.raises(ISAlreadyAttached):
         system.add_time_series(test_time_series_data, test_generator)
-
-    original_uuids, original_data = get_data_and_uuids_nonsequential_time_series(system)
-    system.convert_storage(time_series_type=NonSequentialTimeSeries, **new_kwargs)
+    system.convert_storage(**new_kwargs)
 
     assert isinstance(system._time_series_mgr._storage, new_stype)
-    new_uuids, new_data = get_data_and_uuids_nonsequential_time_series(system)
-
-    assert set(original_uuids) == set(new_uuids)
-    for uuid in new_uuids:
-        assert np.array_equal(original_data[uuid], new_data[uuid])
+    ts2 = system.get_time_series(
+        test_generator, time_series_type=NonSequentialTimeSeries, variable_name="load"
+    )
+    assert np.array_equal(ts2.data_array, test_time_series_data.data_array)
+    assert np.array_equal(ts2.timestamps, test_time_series_data.timestamps)
