@@ -261,13 +261,11 @@ class TimeSeriesMetadata(InfraSysBaseModel, abc.ABC):
     """Defines common metadata for all time series."""
 
     variable_name: str
-    initial_time: datetime
-    resolution: timedelta
     time_series_uuid: UUID
     user_attributes: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
-    type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
+    type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor", "NonSequentialTimeSeries"]
 
     @property
     def label(self) -> str:
@@ -290,6 +288,8 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
     """Base class for SingleTimeSeries metadata."""
 
     length: int
+    initial_time: datetime
+    resolution: timedelta
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @classmethod
@@ -380,17 +380,192 @@ TimeSeriesMetadataUnion = Annotated[
 ]
 
 
+class NonSequentialTimeSeries(TimeSeriesData):
+    """Defines a non-sequential time array with a single dimension of floats."""
+
+    data: NDArray | pint.Quantity
+    timestamps: NDArray
+
+    @computed_field
+    def length(self) -> int:
+        """Return the length of the data."""
+        return len(self.data)
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, NonSequentialTimeSeries):
+            raise NotImplementedError
+        is_equal = True
+        for field in self.model_fields_set:
+            if field == "data":
+                if not (self.data == other.data).all():
+                    is_equal = False
+                    break
+            elif field == "timestamps":
+                if not all(t1 == t2 for t1, t2 in zip(self.timestamps, other.timestamps)):
+                    is_equal = False
+                    break
+            else:
+                if not getattr(self, field) == getattr(other, field):
+                    is_equal = False
+                    break
+        return is_equal
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def check_data(cls, data) -> NDArray | pint.Quantity:
+        """Check time series data."""
+        if len(data) < 2:
+            msg = f"NonSequentialTimeSeries length must be at least 2: {len(data)}"
+            raise ValueError(msg)
+
+        if isinstance(data, pint.Quantity):
+            if not isinstance(data.magnitude, np.ndarray):
+                return type(data)(np.array(data.magnitude), units=data.units)
+            return data
+
+        if not isinstance(data, np.ndarray):
+            return np.array(data)
+
+        return data
+
+    @field_validator("timestamps", mode="before")
+    @classmethod
+    def check_timestamp(cls, timestamps: Sequence[datetime] | NDArray) -> NDArray:
+        """Check non-sequential timestamps."""
+        if len(timestamps) < 2:
+            msg = f"Time index must have at least 2 timestamps: {len(timestamps)}"
+            raise ValueError(msg)
+
+        if len(timestamps) != len(set(timestamps)):
+            msg = "Duplicate timestamps found. Timestamps must be unique."
+            raise ValueError(msg)
+
+        time_array = np.array(timestamps, dtype="datetime64[ns]")
+        if not np.all(np.diff(time_array) > np.timedelta64(0, "s")):
+            msg = "Timestamps must be in chronological order."
+            raise ValueError(msg)
+
+        if not isinstance(timestamps, np.ndarray):
+            return np.array(timestamps)
+
+        return timestamps
+
+    @classmethod
+    def from_array(
+        cls,
+        data: ISArray,
+        timestamps: Sequence[datetime] | NDArray,
+        variable_name: str,
+        normalization: NormalizationModel = None,
+    ) -> "NonSequentialTimeSeries":
+        """Method of NonSequentialTimeSeries that creates an instance from an array and timestamps.
+
+        Parameters
+        ----------
+        data
+            Sequence that contains the values of the time series
+        timestamps
+            Sequence that contains the non-sequential timestamps
+        variable_name
+            Name assigned to the values of the time series (e.g., active_power)
+        normalization
+            Normalization model to normalize the data
+
+        Returns
+        -------
+        NonSequentialTimeSeries
+        """
+        if normalization is not None:
+            npa = data if isinstance(data, np.ndarray) else np.array(data)
+            data = normalization.normalize_array(npa)
+
+        return NonSequentialTimeSeries(
+            data=data,  # type: ignore
+            timestamps=timestamps,  # type: ignore
+            variable_name=variable_name,
+            normalization=normalization,
+        )
+
+    @staticmethod
+    def get_time_series_metadata_type() -> Type:
+        "Get the metadata type of the NonSequentialTimeSeries"
+        return NonSequentialTimeSeriesMetadata
+
+    @property
+    def data_array(self) -> NDArray:
+        "Get the data array NonSequentialTimeSeries"
+        if isinstance(self.data, pint.Quantity):
+            return self.data.magnitude
+        return self.data
+
+    @property
+    def timestamps_array(self) -> NDArray:
+        "Get the timestamps array NonSequentialTimeSeries"
+        return self.timestamps
+
+
+class NonSequentialTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
+    """Base class for NonSequentialTimeSeries metadata."""
+
+    length: int
+    type: Literal["NonSequentialTimeSeries"]
+
+    @classmethod
+    def from_data(
+        cls, time_series: NonSequentialTimeSeries, **user_attributes
+    ) -> "NonSequentialTimeSeriesMetadataBase":
+        """Construct a NonSequentialTimeSeriesMetadata from a NonSequentialTimeSeries."""
+        quantity_metadata = (
+            QuantityMetadata(
+                module=type(time_series.data).__module__,
+                quantity_type=type(time_series.data),
+                units=str(time_series.data.units),
+            )
+            if isinstance(time_series.data, pint.Quantity)
+            else None
+        )
+        return cls(
+            variable_name=time_series.variable_name,
+            length=time_series.length,  # type: ignore
+            time_series_uuid=time_series.uuid,
+            user_attributes=user_attributes,
+            quantity_metadata=quantity_metadata,
+            normalization=time_series.normalization,
+            type=cls.get_time_series_type_str(),  # type: ignore
+        )
+
+    @staticmethod
+    def get_time_series_data_type() -> Type:
+        return NonSequentialTimeSeries
+
+
+class NonSequentialTimeSeriesMetadata(NonSequentialTimeSeriesMetadataBase):
+    """Defines the metadata for a NonSequentialTimeSeries."""
+
+    type: Literal["NonSequentialTimeSeries"] = "NonSequentialTimeSeries"
+
+    @staticmethod
+    def get_time_series_type_str() -> str:
+        return "NonSequentialTimeSeries"
+
+
 class TimeSeriesKey(InfraSysBaseModel):
     """Base class for time series keys."""
 
     variable_name: str
-    initial_time: datetime
-    resolution: timedelta
-    time_series_type: Type[SingleTimeSeries]
+    time_series_type: Type[TimeSeriesData]
     user_attributes: dict[str, Any] = {}
 
 
 class SingleTimeSeriesKey(TimeSeriesKey):
+    """Keys for SingleTimeSeries."""
+
+    length: int
+    initial_time: datetime
+    resolution: timedelta
+
+
+class NonSequentialTimeSeriesKey(TimeSeriesKey):
     """Keys for SingleTimeSeries."""
 
     length: int

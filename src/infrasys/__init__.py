@@ -13,6 +13,7 @@ from .supplemental_attribute import SupplementalAttribute
 from .system import System
 from .time_series_models import (
     SingleTimeSeries,
+    NonSequentialTimeSeries,
     TimeSeriesStorageType,
     TimeSeriesKey,
     SingleTimeSeriesKey,
@@ -26,6 +27,7 @@ __all__ = (
     "Location",
     "NormalizationModel",
     "SingleTimeSeries",
+    "NonSequentialTimeSeries",
     "SingleTimeSeriesKey",
     "SupplementalAttribute",
     "System",

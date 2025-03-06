@@ -221,7 +221,7 @@ class AverageRateCurve(ValueCurve, Generic[AverageRateCurveTypes]):
 
                 xs = self.function_data.x_coords
                 ys = np.multiply(xs[1:], self.function_data.y_coords).tolist()
-                ys.insert(0, c)
+                ys.insert(0, c)  # type:ignore
 
                 return InputOutputCurve(
                     function_data=PiecewiseLinearData(

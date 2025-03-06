@@ -20,6 +20,9 @@ from infrasys.time_series_models import (
     SingleTimeSeries,
     SingleTimeSeriesKey,
     SingleTimeSeriesMetadata,
+    NonSequentialTimeSeries,
+    NonSequentialTimeSeriesMetadata,
+    NonSequentialTimeSeriesKey,
     TimeSeriesData,
     TimeSeriesKey,
     TimeSeriesMetadata,
@@ -477,18 +480,19 @@ class TimeSeriesManager:
             The new storage instance.
         """
         new_storage = self.create_new_storage(**kwargs)
-        for time_series_uuid in self.metadata_store.unique_uuids_by_type(
-            SingleTimeSeries.__name__
-        ):
-            metadata = self.metadata_store.list_metadata_with_time_series_uuid(
-                time_series_uuid, limit=1
-            )
-            if len(metadata) != 1:
-                msg = f"Expected 1 metadata for {time_series_uuid}, got {len(metadata)}"
-                raise Exception(msg)
+        for time_series_type in (SingleTimeSeries, NonSequentialTimeSeries):
+            for time_series_uuid in self.metadata_store.unique_uuids_by_type(
+                time_series_type.__name__
+            ):
+                metadata = self.metadata_store.list_metadata_with_time_series_uuid(
+                    time_series_uuid, limit=1
+                )
+                if len(metadata) != 1:
+                    msg = f"Expected 1 metadata for {time_series_uuid}, got {len(metadata)}"
+                    raise Exception(msg)
 
-            time_series = self._storage.get_time_series(metadata[0])
-            new_storage.add_time_series(metadata[0], time_series)
+                time_series = self._storage.get_time_series(metadata[0])
+                new_storage.add_time_series(metadata[0], time_series)
 
         if in_place:
             self._storage = new_storage
@@ -511,6 +515,16 @@ def _(metadata: SingleTimeSeriesMetadata) -> TimeSeriesKey:
         user_attributes=metadata.user_attributes,
         variable_name=metadata.variable_name,
         time_series_type=SingleTimeSeries,
+    )
+
+
+@make_time_series_key.register(NonSequentialTimeSeriesMetadata)
+def _(metadata: NonSequentialTimeSeriesMetadata) -> TimeSeriesKey:
+    return NonSequentialTimeSeriesKey(
+        length=metadata.length,
+        user_attributes=metadata.user_attributes,
+        variable_name=metadata.variable_name,
+        time_series_type=NonSequentialTimeSeries,
     )
 
 
