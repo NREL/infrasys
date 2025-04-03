@@ -1,10 +1,12 @@
 """Manages time series arrays"""
 
+import atexit
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from functools import singledispatch
 from pathlib import Path
+from tempfile import mkdtemp
 from typing import Any, Generator, Optional, Type
 
 from loguru import logger
@@ -12,6 +14,7 @@ from loguru import logger
 from infrasys import Component
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.exceptions import ISInvalidParameter, ISOperationNotAllowed
+from infrasys.h5_time_series_storage import HDF5TimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_metadata_store import TimeSeriesMetadataStore
@@ -29,6 +32,7 @@ from infrasys.time_series_models import (
     TimeSeriesStorageType,
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
+from infrasys.utils.path_utils import clean_tmp_folder
 
 try:
     from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
@@ -38,7 +42,17 @@ except ImportError:
     is_chronify_installed = False
 
 
+def is_h5py_installed():
+    try:
+        import h5py  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 TIME_SERIES_KWARGS = {
+    "in_memory": False,
     "time_series_read_only": False,
     "time_series_directory": None,
     "time_series_storage_type": TimeSeriesStorageType.ARROW,
@@ -68,13 +82,17 @@ class TimeSeriesManager:
         # TODO: create parsing mechanism? CSV, CSV + JSON
 
     @staticmethod
-    def create_new_storage(permanent: bool = False, **kwargs):
+    def create_new_storage(permanent: bool = False, **kwargs):  # noqa: C901
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         storage_type = _process_time_series_kwarg("time_series_storage_type", **kwargs)
         if permanent:
             if base_directory is None:
                 msg = "Can't convert to permanent storage without a base directory"
                 raise ISInvalidParameter(msg)
+        if not base_directory:
+            base_directory = Path(mkdtemp(dir=base_directory))
+            logger.debug("Creating tmp folder at {}", base_directory)
+            atexit.register(clean_tmp_folder, base_directory)
 
         match storage_type:
             case TimeSeriesStorageType.ARROW:
@@ -105,6 +123,12 @@ class TimeSeriesManager:
                 )
             case TimeSeriesStorageType.MEMORY:
                 return InMemoryTimeSeriesStorage()
+            case TimeSeriesStorageType.HDF5:
+                if not is_h5py_installed():
+                    msg = f"`{storage_type}` backend requires `h5py` to be installed. "
+                    msg += 'Install it using `pip install "infrasys[h5]".'
+                    raise ImportError(msg)
+                return HDF5TimeSeriesStorage(base_directory, **kwargs)
             case _:
                 msg = f"{storage_type=}"
                 raise NotImplementedError(msg)
@@ -443,6 +467,8 @@ class TimeSeriesManager:
                         base_directory=dst_time_series_directory
                     )
                     storage.serialize({}, storage.get_time_series_directory(), src=time_series_dir)
+            case TimeSeriesStorageType.HDF5:
+                storage = HDF5TimeSeriesStorage(time_series_dir, **kwargs)
             case _:
                 msg = f"time_series_storage_type={ts_type} is not supported"
                 raise NotImplementedError(msg)
