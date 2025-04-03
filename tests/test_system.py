@@ -261,6 +261,7 @@ TS_STORAGE_OPTIONS = (
     TimeSeriesStorageType.ARROW,
     TimeSeriesStorageType.CHRONIFY,
     TimeSeriesStorageType.MEMORY,
+    TimeSeriesStorageType.HDF5,
 )
 
 
