@@ -68,6 +68,7 @@ files = [
   "src",
   "tests",
 ]
+ignore-missing-imports= true
 
 [tool.pytest.ini_options]
 pythonpath = "src"
