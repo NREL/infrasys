@@ -31,6 +31,26 @@ there might be different profiles for different scenarios or model years.
     )
 ```
 
+## Resolution
+
+Infrastructure systems support two types of objects for passing the resolution:
+:class:`datetime.timedelta` and :class:`dateutil.relativedelta.relativedelta`.
+These types allow users to define durations with varying levels of granularity
+and semantic meaning. 
+While `timedelta` is best suited for precise, fixed-length
+intervals (e.g., seconds, minutes, hours, days), `relativedelta` is more
+appropriate for calendar-aware durations such as months or years, which do not
+have a fixed number of days.
+
+Internally, all durations—regardless of whether they are specified using
+`timedelta` or `relativedelta`—are normalized and serialized into a strict [ISO
+8601 format](https://en.wikipedia.org/wiki/ISO_8601#Durations).
+This provides a consistent and standardized representation of
+durations across the system, ensuring compatibility and simplifying transport,
+storage, and validation.
+For example, a `timedelta` of 1 month will be converted to the ISO format string
+`P1M` and a `timedelta` of 1 hour will be converted to `P0DT1H`.
+
 ## Behaviors
 Users can customize time series behavior with these flags passed to the `System` constructor:
 

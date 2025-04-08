@@ -54,3 +54,8 @@ copybutton_line_continuation_character = "\\"
 copybutton_here_doc_delimiter = "EOT"
 copybutton_prompt_text = "$"
 copybutton_copy_empty_lines = False
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "dateutil": ("https://dateutil.readthedocs.io/en/stable/", None),
+}
