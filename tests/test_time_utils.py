@@ -6,7 +6,7 @@ from dateutil.relativedelta import relativedelta
 from infrasys.utils.time_utils import from_iso_8601, to_iso_8601
 
 
-def test_iso_8601():
+def test_to_iso_8601():
     delta = timedelta(minutes=10)
 
     result = to_iso_8601(delta)
@@ -20,7 +20,23 @@ def test_iso_8601():
     with pytest.raises(ValueError):
         _ = to_iso_8601(delta)
 
+
+def test_from_iso_8601():
+    delta_str = "P10M"
+    result = from_iso_8601(delta_str)
+    assert isinstance(result, relativedelta)
+    assert result.months == 10
+
+    delta_str = "P0DT0.100S"
+    result = from_iso_8601(delta_str)
+    assert isinstance(result, timedelta)
+    assert result.total_seconds() == 0.1
+
     delta_str = "P0DT35.0024S"
+    with pytest.raises(ValueError):
+        _ = from_iso_8601(delta_str)
+
+    delta_str = "WrongString"
     with pytest.raises(ValueError):
         _ = from_iso_8601(delta_str)
 

@@ -30,14 +30,53 @@ DURATION_TO_TYPE = {
 
 
 def from_iso_8601(duration: str) -> timedelta | relativedelta:
+    """Convert a duration string from the ISO 8601 to Python delta.
+
+    Parameters
+    ----------
+    duration: str
+        String representing the time duration following the standard ISO 8601.
+
+    Returns
+    -------
+    timedelta | relativedelta
+        Python object representing the time duration as a delta.
+
+    Raises
+    ------
+    ValueError
+        If fractional milliseconds are provided (e.g, P0DT30.532S)
+        If the string does not follow the ISO 8601 format.
+
+    See Also
+    --------
+    to_iso_8601: Reverse operation of this function
+
+    Examples
+    --------
+    A simple example for a delta of 10 months.
+
+    >>> delta_str = "P1M"
+    >>> result = from_iso_8601(delta_str)
+    >>> print(result)
+    relativedelta(months=1)
+
+    For a delta of 1 hour
+
+    >>> delta_str = "P0DT1H"
+    >>> result = from_iso_8601(delta_str)
+    >>> print(result)
+    timedelta(hours=1)
+    """
     for name, regex in REGEX_DURATIONS.items():
         if match := re.match(regex, duration):
             if name == "milliseconds":
                 value_float = float(match.group(1))
-                if value_float % 1 != 0.0:
-                    msg = "Milliseconds must bee divisible by 1000"
+                if (value_float * 1_000) % 1 != 0.0:
+                    msg = "Fractional milliseconds are not supported. "
+                    msg += "Provide seconds with a integer number of milliseconds"
                     raise ValueError(msg)
-                value = int(value_float) * 1000
+                value = value_float * 1_000
             else:
                 value = int(match.group(1))
             return DURATION_TO_TYPE[name](**{name: value})
@@ -48,7 +87,46 @@ def from_iso_8601(duration: str) -> timedelta | relativedelta:
 
 
 def to_iso_8601(duration: timedelta | relativedelta) -> str:
-    """Convert a timedelta or relativedelta object to ISO 8601 duration format."""
+    """Convert a timedelta or relativedelta object to ISO 8601 duration string.
+
+    Parameters
+    ----------
+    duration: timedelta | relativedelta
+        Python object representing a timedelta
+
+    Returns
+    -------
+    str
+        String representation of the duration using the ISO 8601.
+
+    Raises
+    ------
+    TypeError
+        If the object provided is not either `timedelta` or `relativedelta`.
+
+    ValueError
+        If fractional milliseconds are provided (e.g, P0DT30.532S)
+
+    See Also
+    --------
+    from_iso_8601: Reverse operation of this function
+
+    Examples
+    --------
+    A simple example for a delta of 10 months.
+
+    >>> delta = timedelta(hours=1)
+    >>> result = to_iso_8601(delta)
+    >>> print(result)
+    "P0DT1H"
+
+    For a delta of 1 year
+
+    >>> delta = relativedelta(years=1)
+    >>> result = to_iso_8601(delta)
+    >>> print(result)
+    "P1Y"
+    """
     if not isinstance(duration, (timedelta, relativedelta)):
         msg = "Input must be a timedelta or relativedelta object."
         raise TypeError(msg)
