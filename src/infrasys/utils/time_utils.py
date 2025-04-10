@@ -54,7 +54,7 @@ def from_iso_8601(duration: str) -> timedelta | relativedelta:
 
     Examples
     --------
-    A simple example for a delta of 10 months.
+    A simple example for a delta of 1 month.
 
     >>> delta_str = "P1M"
     >>> result = from_iso_8601(delta_str)
@@ -113,7 +113,7 @@ def to_iso_8601(duration: timedelta | relativedelta) -> str:
 
     Examples
     --------
-    A simple example for a delta of 10 months.
+    A simple example for a delta of 1 hour.
 
     >>> delta = timedelta(hours=1)
     >>> result = to_iso_8601(delta)
