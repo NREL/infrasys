@@ -173,3 +173,19 @@ def to_iso_8601(duration: timedelta | relativedelta) -> str:
         msg += f"{total_seconds=} must be divisible by 1ms"
         raise ValueError(msg)
     return f"P0DT{total_seconds:.3f}S"
+
+
+def _str_timedelta_to_iso_8601(delta_str: str) -> str:
+    """Convert a str(timedelta) to ISO 8601 string."""
+    pattern = r"(?:(?P<days>\d+) days?, )?(?P<hours>\d+):(?P<minutes>\d+):(?P<seconds>\d+)"
+    match = re.fullmatch(pattern, delta_str)
+    if not match:
+        msg = f"Invalid timedelta format: {delta_str=}"
+        raise ValueError(msg)
+    days = int(match.group("days") or 0)
+    hours = int(match.group("hours"))
+    minutes = int(match.group("minutes"))
+    seconds = int(match.group("seconds"))
+    delta = timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+
+    return to_iso_8601(delta)

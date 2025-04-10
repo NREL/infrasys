@@ -1,28 +1,30 @@
 import itertools
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import numpy as np
 import pytest
 
+from infrasys import TIME_SERIES_ASSOCIATIONS_TABLE, Component, Location, SingleTimeSeries
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
 from infrasys.exceptions import (
     ISAlreadyAttached,
+    ISConflictingArguments,
     ISNotStored,
     ISOperationNotAllowed,
-    ISConflictingArguments,
 )
-from infrasys import Component, Location, SingleTimeSeries
 from infrasys.quantities import ActivePower
 from infrasys.time_series_models import TimeSeriesKey, TimeSeriesStorageType
+from infrasys.utils.time_utils import to_iso_8601
+
 from .models.simple_system import (
     GeneratorBase,
-    SimpleSystem,
+    RenewableGenerator,
     SimpleBus,
     SimpleGenerator,
     SimpleSubsystem,
-    RenewableGenerator,
+    SimpleSystem,
 )
 
 
@@ -295,14 +297,14 @@ def test_time_series_retrieval(storage_type, use_quantity):
     assert len(system.list_time_series_metadata(gen)) == 4
     assert len(system.list_time_series_metadata(gen, scenario="high", model_year="2035")) == 1
     assert (
-        system.list_time_series_metadata(gen, scenario="high", model_year="2035")[
-            0
-        ].user_attributes["model_year"]
+        system.list_time_series_metadata(gen, scenario="high", model_year="2035")[0].features[
+            "model_year"
+        ]
         == "2035"
     )
     assert len(system.list_time_series_metadata(gen, scenario="low")) == 2
     for metadata in system.list_time_series_metadata(gen, scenario="high"):
-        assert metadata.user_attributes["scenario"] == "high"
+        assert metadata.features["scenario"] == "high"
 
     assert all(
         np.equal(
@@ -636,9 +638,9 @@ def test_time_series_metadata_sql():
     system.add_time_series(ts2, gen2)
     rows = system.time_series.metadata_store.sql(
         f"""
-        SELECT component_type, time_series_type, component_uuid, time_series_uuid
-        FROM {system.time_series.metadata_store.TABLE_NAME}
-        WHERE component_uuid = '{gen1.uuid}'
+        SELECT owner_type, time_series_type, owner_uuid, time_series_uuid
+        FROM {TIME_SERIES_ASSOCIATIONS_TABLE}
+        WHERE owner_uuid = '{gen1.uuid}'
     """
     )
     assert len(rows) == 1
@@ -664,9 +666,9 @@ def test_time_series_metadata_list_rows():
     system.add_time_series(ts1, gen1)
     system.add_time_series(ts2, gen2)
     columns = [
-        "component_type",
+        "owner_type",
         "time_series_type",
-        "component_uuid",
+        "owner_uuid",
         "time_series_uuid",
     ]
     rows = system.time_series.metadata_store.list_rows(
@@ -720,13 +722,23 @@ def test_system_counts():
     assert ts_counts.time_series_count == 2 * 10
     assert (
         ts_counts.time_series_type_count[
-            ("SimpleGenerator", "SingleTimeSeries", "2020-01-01 02:00:00", "1:00:00")
+            (
+                "SimpleGenerator",
+                "SingleTimeSeries",
+                "2020-01-01 02:00:00",
+                to_iso_8601(timedelta(hours=1)),
+            )
         ]
         == 2
     )
     assert (
         ts_counts.time_series_type_count[
-            ("SimpleBus", "SingleTimeSeries", "2020-02-01 00:10:00", "0:05:00")
+            (
+                "SimpleBus",
+                "SingleTimeSeries",
+                "2020-02-01 00:10:00",
+                to_iso_8601(timedelta(minutes=5)),
+            )
         ]
         == 1
     )

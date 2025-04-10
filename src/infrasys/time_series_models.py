@@ -257,12 +257,12 @@ class QuantityMetadata(InfraSysBaseModel):
         return values
 
 
-class TimeSeriesMetadata(InfraSysBaseModel, abc.ABC):
+class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Defines common metadata for all time series."""
 
     variable_name: str
     time_series_uuid: UUID
-    user_attributes: dict[str, Any] = {}
+    features: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor", "NonSequentialTimeSeries"]
@@ -293,7 +293,7 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
     @classmethod
-    def from_data(cls, time_series: SingleTimeSeries, **user_attributes) -> Any:
+    def from_data(cls, time_series: SingleTimeSeries, **features) -> Any:
         """Construct a SingleTimeSeriesMetadata from a SingleTimeSeries."""
         quantity_metadata = (
             QuantityMetadata(
@@ -310,7 +310,7 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
             initial_time=time_series.initial_time,
             length=time_series.length,  # type: ignore
             time_series_uuid=time_series.uuid,
-            user_attributes=user_attributes,
+            features=features,
             quantity_metadata=quantity_metadata,
             normalization=time_series.normalization,
             type=cls.get_time_series_type_str(),  # type: ignore
@@ -512,7 +512,7 @@ class NonSequentialTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
 
     @classmethod
     def from_data(
-        cls, time_series: NonSequentialTimeSeries, **user_attributes
+        cls, time_series: NonSequentialTimeSeries, **features
     ) -> "NonSequentialTimeSeriesMetadataBase":
         """Construct a NonSequentialTimeSeriesMetadata from a NonSequentialTimeSeries."""
         quantity_metadata = (
@@ -528,7 +528,7 @@ class NonSequentialTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
             variable_name=time_series.variable_name,
             length=time_series.length,  # type: ignore
             time_series_uuid=time_series.uuid,
-            user_attributes=user_attributes,
+            features=features,
             quantity_metadata=quantity_metadata,
             normalization=time_series.normalization,
             type=cls.get_time_series_type_str(),  # type: ignore
@@ -554,7 +554,7 @@ class TimeSeriesKey(InfraSysBaseModel):
 
     variable_name: str
     time_series_type: Type[TimeSeriesData]
-    user_attributes: dict[str, Any] = {}
+    features: dict[str, Any] = {}
 
 
 class SingleTimeSeriesKey(TimeSeriesKey):

@@ -1,12 +1,12 @@
 """Defines a System"""
 
-from contextlib import contextmanager
 import json
 import shutil
 import sqlite3
-from operator import itemgetter
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime
+from operator import itemgetter
 from pathlib import Path
 from typing import Any, Callable, Generator, Iterable, Optional, Type, TypeVar
 from uuid import UUID, uuid4
@@ -15,27 +15,29 @@ from loguru import logger
 from rich import print as _pprint
 from rich.table import Table
 
-from infrasys.exceptions import (
-    ISFileExists,
-    ISConflictingArguments,
-    ISOperationNotAllowed,
-)
-from infrasys.models import make_label
 from infrasys.component import (
     Component,
 )
 from infrasys.component_manager import ComponentManager
+from infrasys.db_migrations import migrate_legacy_schema, needs_migration
+from infrasys.exceptions import (
+    ISConflictingArguments,
+    ISFileExists,
+    ISOperationNotAllowed,
+)
+from infrasys.models import make_label
 from infrasys.serialization import (
+    TYPE_METADATA,
     CachedTypeHelper,
-    SerializedTypeMetadata,
     SerializedBaseType,
     SerializedComponentReference,
     SerializedQuantityType,
     SerializedType,
-    TYPE_METADATA,
+    SerializedTypeMetadata,
 )
 from infrasys.supplemental_attribute import SupplementalAttribute
-from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
+from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
+from infrasys.time_series_manager import TIME_SERIES_KWARGS, TimeSeriesManager
 from infrasys.time_series_models import (
     DatabaseConnection,
     SingleTimeSeries,
@@ -43,7 +45,6 @@ from infrasys.time_series_models import (
     TimeSeriesKey,
     TimeSeriesMetadata,
 )
-from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
 from infrasys.utils.sqlite import backup, create_in_memory_db, restore
 
 T = TypeVar("T", bound="Component")
@@ -191,7 +192,9 @@ class System:
             data["system"] = system_data
 
         backup(self._con, time_series_dir / self.DB_FILENAME)
-        self._time_series_mgr.serialize(system_data["time_series"], time_series_dir)
+        self._time_series_mgr.serialize(
+            system_data["time_series"], time_series_dir, db_name=self.DB_FILENAME
+        )
 
         with open(filename, "w", encoding="utf-8") as f_out:
             json.dump(data, f_out, indent=indent)
@@ -302,6 +305,10 @@ class System:
         )
         con = create_in_memory_db()
         restore(con, ts_path / data["time_series"]["directory"] / System.DB_FILENAME)
+
+        if needs_migration(con):
+            migrate_legacy_schema(con)
+
         time_series_manager = TimeSeriesManager.deserialize(
             con, data["time_series"], ts_path, **ts_kwargs
         )
@@ -849,7 +856,7 @@ class System:
                     component,
                     time_series_type=metadata.get_time_series_data_type(),
                     variable_name=metadata.variable_name,
-                    **metadata.user_attributes,
+                    **metadata.features,
                 )
         self._component_mgr.remove(component, cascade_down=cascade_down, force=force)
 
@@ -920,7 +927,7 @@ class System:
                     attribute,
                     time_series_type=metadata.get_time_series_data_type(),
                     variable_name=metadata.variable_name,
-                    **metadata.user_attributes,
+                    **metadata.features,
                 )
         return self._supplemental_attr_mgr.remove(attribute)
 
@@ -963,7 +970,7 @@ class System:
         time_series: TimeSeriesData,
         *owners: Component | SupplementalAttribute,
         connection: DatabaseConnection | None = None,
-        **user_attributes: Any,
+        **features: Any,
     ) -> TimeSeriesKey:
         """Store a time series array for one or more components or supplemental attributes.
 
@@ -973,7 +980,7 @@ class System:
             Time series data to store.
         owners : Component | SupplementalAttribute
             Add the time series to all of these components or supplemental attributes.
-        user_attributes : Any
+        features : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
 
         Returns
@@ -1005,7 +1012,7 @@ class System:
             time_series,
             *owners,
             connection=connection,
-            **user_attributes,
+            **features,
         )
 
     def copy_time_series(
@@ -1048,7 +1055,7 @@ class System:
         start_time: datetime | None = None,
         length: int | None = None,
         connection: DatabaseConnection | None = None,
-        **user_attributes: str,
+        **features: str,
     ) -> Any:
         """Return a time series array.
 
@@ -1064,7 +1071,7 @@ class System:
             If not None, take a slice of the time series starting at this time.
         length : int | None
             If not None, take a slice of the time series with this length.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
         connection
             Optional, connection returned by :meth:`open_time_series_store`
@@ -1099,7 +1106,7 @@ class System:
             start_time=start_time,
             length=length,
             connection=connection,
-            **user_attributes,
+            **features,
         )
 
     def get_time_series_by_key(
@@ -1113,7 +1120,7 @@ class System:
         owner: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
-        **user_attributes: str,
+        **features: str,
     ) -> bool:
         """Return True if the component has time series matching the inputs.
 
@@ -1125,14 +1132,14 @@ class System:
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
         """
         return self.time_series.has_time_series(
             owner,
             variable_name=variable_name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
 
     def list_time_series(
@@ -1142,7 +1149,7 @@ class System:
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-        **user_attributes: Any,
+        **features: Any,
     ) -> list[TimeSeriesData]:
         """Return all time series that match the inputs.
 
@@ -1158,7 +1165,7 @@ class System:
             If not None, take a slice of the time series starting at this time.
         length : int | None
             If not None, take a slice of the time series with this length.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
 
         Examples
@@ -1173,7 +1180,7 @@ class System:
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
-            **user_attributes,
+            **features,
         )
 
     def list_time_series_keys(
@@ -1181,7 +1188,7 @@ class System:
         owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
-        **user_attributes: Any,
+        **features: Any,
     ) -> list[TimeSeriesKey]:
         """Return all time series keys that match the inputs.
 
@@ -1193,7 +1200,7 @@ class System:
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
 
         Examples
@@ -1206,7 +1213,7 @@ class System:
             owner,
             variable_name=variable_name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
 
     def list_time_series_metadata(
@@ -1214,7 +1221,7 @@ class System:
         component: Component,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
-        **user_attributes: Any,
+        **features: Any,
     ) -> list[TimeSeriesMetadata]:
         """Return all time series metadata that match the inputs.
 
@@ -1226,7 +1233,7 @@ class System:
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
 
         Examples
@@ -1239,7 +1246,7 @@ class System:
             component,
             variable_name=variable_name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
 
     def remove_time_series(
@@ -1247,7 +1254,7 @@ class System:
         *owners: Component | SupplementalAttribute,
         variable_name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
-        **user_attributes: Any,
+        **features: Any,
     ) -> None:
         """Remove all time series arrays attached to the components or supplemental attributes
         matching the inputs.
@@ -1260,7 +1267,7 @@ class System:
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
 
         Raises
@@ -1279,7 +1286,7 @@ class System:
             *owners,
             variable_name=variable_name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
 
     @contextmanager
