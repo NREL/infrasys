@@ -46,6 +46,7 @@ from infrasys.time_series_models import (
     TimeSeriesMetadata,
 )
 from infrasys.utils.sqlite import backup, create_in_memory_db, restore
+from infrasys.utils.time_utils import from_iso_8601
 
 T = TypeVar("T", bound="Component")
 U = TypeVar("U", bound="SupplementalAttribute")
@@ -1668,7 +1669,7 @@ class SystemInfo:
                 f"{component_type}",
                 f"{time_series_type}",
                 f"{time_series_start_time}",
-                f"{time_series_resolution}",
+                f"{from_iso_8601(time_series_resolution)}",
                 f"{component_type_count[component_type]}",
                 f"{time_series_count}",
             )
