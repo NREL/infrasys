@@ -169,6 +169,7 @@ def to_iso_8601(duration: timedelta | relativedelta) -> str:
         else seconds + microseconds / 1_000_000
     )
     if round(total_seconds, 3) == 0:
-        msg = "Milliseconds must bee divisible by 1000"
+        msg = "The minimum resolution is `1ms`. "
+        msg += f"{total_seconds=} must be divisible by 1ms"
         raise ValueError(msg)
     return f"P0DT{total_seconds:.3f}S"
