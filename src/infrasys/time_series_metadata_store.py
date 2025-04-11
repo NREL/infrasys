@@ -571,6 +571,7 @@ class TimeSeriesMetadataStore:
             ]
             cur.executemany(query, metadata)
             dst_con.commit()
+        dst_con.close()
         return
 
 
