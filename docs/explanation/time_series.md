@@ -42,8 +42,8 @@ intervals (e.g., seconds, minutes, hours, days), `relativedelta` is more
 appropriate for calendar-aware durations such as months or years, which do not
 have a fixed number of days.
 
-Internally, all durations—regardless of whether they are specified using
-`timedelta` or `relativedelta`—are normalized and serialized into a strict [ISO
+Internally, all durations, regardless of whether they are specified using
+`timedelta` or `relativedelta`, are normalized and serialized into a strict [ISO
 8601 format](https://en.wikipedia.org/wiki/ISO_8601#Durations).
 This provides a consistent and standardized representation of
 durations across the system, ensuring compatibility and simplifying transport,
