@@ -5,6 +5,7 @@ from loguru import logger
 logger.disable("infrasys")
 
 __version__ = metadata.metadata("infrasys")["Version"]
+TS_METADATA_FORMAT_VERSION = "1.0.0"
 
 TIME_SERIES_ASSOCIATIONS_TABLE = "time_series_associations"
 TIME_SERIES_METADATA_TABLE = "time_series_metadata"

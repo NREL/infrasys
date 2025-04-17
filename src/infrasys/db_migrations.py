@@ -9,6 +9,7 @@ from infrasys import (
     TIME_SERIES_ASSOCIATIONS_TABLE,
     TIME_SERIES_METADATA_TABLE,
 )
+from infrasys.utils.metadata_utils import create_associations_table
 from infrasys.utils.sqlite import execute
 from infrasys.utils.time_utils import _str_timedelta_to_iso_8601
 
@@ -37,7 +38,8 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
 
     Returns
     -------
-        bool: True if migration was successful
+    bool:
+        True if migration was successful
     """
     logger.info("Migrating legacy metadata schema.")
 
@@ -65,11 +67,7 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
     logger.info("Creating backup tables.")
     execute(
         cursor,
-        f"CREATE TEMPORARY TABLE {TEMP_TABLE} AS SELECT * FROM {TIME_SERIES_METADATA_TABLE}",
-    )
-    execute(
-        cursor,
-        f"DROP TABLE {TIME_SERIES_METADATA_TABLE}",
+        f"ALTER TABLE {TIME_SERIES_METADATA_TABLE} RENAME TO {TEMP_TABLE}",
     )
 
     logger.info("Creating new schema tables...")
@@ -87,29 +85,8 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
         cursor, f"CREATE TABLE {KEY_VALUE_STORE_TABLE}(key TEXT PRIMARY KEY, VALUE JSON NOT NULL)"
     )
 
-    execute(
-        cursor,
-        f"""
-        CREATE TABLE {TIME_SERIES_ASSOCIATIONS_TABLE} (
-            id INTEGER PRIMARY KEY,
-            time_series_uuid TEXT NOT NULL,
-            time_series_type TEXT NOT NULL,
-            time_series_category TEXT NOT NULL,
-            initial_timestamp TEXT,
-            resolution TEXT NULL,
-            horizon TEXT,
-            interval TEXT,
-            window_count INTEGER,
-            length INTEGER,
-            name TEXT NOT NULL,
-            owner_uuid TEXT NOT NULL,
-            owner_type TEXT NOT NULL,
-            owner_category TEXT NOT NULL,
-            features JSON NOT NULL,
-            metadata_id TEXT NOT NULL
-        )
-    """,
-    )
+    # Create associations table
+    create_associations_table(connection=conn)
 
     logger.info("Migrating data from legacy schema...")
     cursor.execute(f"SELECT * FROM {TEMP_TABLE}")
@@ -145,7 +122,7 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
             f"INSERT INTO {TIME_SERIES_METADATA_TABLE} (metadata_uuid, metadata) VALUES (?, ?)",
             params=(metadata_uuid, metadata_json),
         )
-        metadata_id = cursor.lastrowid
+        # metadata_id = cursor.lastrowid
 
         time_series_category = "StaticTimeSeries"
         owner_category = "Component"
@@ -157,7 +134,7 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
             INSERT INTO {TIME_SERIES_ASSOCIATIONS_TABLE} (
                 time_series_uuid, time_series_type, time_series_category,
                 initial_timestamp, resolution, length, name, owner_uuid, owner_type,
-                owner_category, features, metadata_id
+                owner_category, features, metadata_uuid
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             params=(
@@ -172,7 +149,7 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
                 component_type,
                 owner_category,
                 features_json,
-                metadata_id,
+                metadata_uuid,
             ),
         )
 

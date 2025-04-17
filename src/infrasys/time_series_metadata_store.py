@@ -1,6 +1,5 @@
 """Stores time series metadata in a SQLite database."""
 
-import hashlib
 import itertools
 import json
 import sqlite3
@@ -15,8 +14,8 @@ from infrasys import (
     KEY_VALUE_STORE_TABLE,
     TIME_SERIES_ASSOCIATIONS_TABLE,
     TIME_SERIES_METADATA_TABLE,
+    TS_METADATA_FORMAT_VERSION,
     Component,
-    __version__,
 )
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infrasys.serialization import (
@@ -31,6 +30,7 @@ from infrasys.time_series_models import (
     SingleTimeSeriesMetadataBase,
     TimeSeriesMetadata,
 )
+from infrasys.utils.metadata_utils import create_associations_table
 from infrasys.utils.sqlite import execute
 from infrasys.utils.time_utils import to_iso_8601
 
@@ -41,7 +41,7 @@ class TimeSeriesMetadataStore:
     def __init__(self, con: sqlite3.Connection, initialize: bool = True):
         self._con = con
         if initialize:
-            self._create_associations_table()
+            assert create_associations_table(connection=self._con)
             self._create_key_value_store()
         self._cache_metadata: dict[UUID, TimeSeriesMetadata] = {}
 
@@ -61,9 +61,8 @@ class TimeSeriesMetadataStore:
         schema_text = ",".join(schema)
         cur = self._con.cursor()
         execute(cur, f"CREATE TABLE {KEY_VALUE_STORE_TABLE}({schema_text})")
-        self._create_indexes(cur)
 
-        rows = [("infrasys_version", __version__)]
+        rows = [("version", TS_METADATA_FORMAT_VERSION)]
         placeholder = ",".join(["?"] * len(rows[0]))
         query = f"INSERT INTO {KEY_VALUE_STORE_TABLE}(key, value) VALUES({placeholder})"
         cur.executemany(query, rows)
@@ -104,18 +103,19 @@ class TimeSeriesMetadataStore:
         schema_text = ",".join(schema)
         cur = self._con.cursor()
         execute(cur, f"CREATE TABLE {TIME_SERIES_ASSOCIATIONS_TABLE}({schema_text})")
-        self._create_indexes(cur)
+        self._create_indexes()
         self._con.commit()
         logger.debug("Created time series associations table")
 
-    def _create_indexes(self, cur) -> None:
+    def _create_indexes(self) -> None:
         # Index strategy:
         # 1. Optimize for these user queries with indexes:
         #    1a. all time series attached to one component
         #    1b. time series for one component + variable_name + type
         #    1c. time series for one component with all user attributes
-        # 2. Optimize for checks at system.add_time_series. Use all fields and attribute hash.
+        # 2. Optimize for checks at system.add_time_series. Use all fields.
         # 3. Optimize for returning all metadata for a time series UUID.
+        cur = self._con.cursor()
         execute(
             cur,
             f"CREATE INDEX IF NOT EXISTS by_c_vn_tst_hash ON {TIME_SERIES_ASSOCIATIONS_TABLE} "
@@ -442,7 +442,6 @@ class TimeSeriesMetadataStore:
         owners: tuple[Component | SupplementalAttribute, ...],
         variable_name: Optional[str],
         time_series_type: Optional[str],
-        attribute_hash: Optional[str] = None,
         **features: str,
     ) -> tuple[str, list[str]]:
         params: list[str] = []
@@ -460,19 +459,13 @@ class TimeSeriesMetadataStore:
             ts_str = "AND time_series_type = ?"
             params.append(time_series_type)
 
-        if attribute_hash is None and features:
-            ua_hash_filter = _make_user_attribute_filter(features, params)
-            ua_str = f"AND {ua_hash_filter}"
+        if features:
+            ua_filter = _make_user_attribute_filter(features, params)
+            ua_str = f"AND {ua_filter}"
         else:
             ua_str = ""
 
-        if attribute_hash:
-            ua_hash_filter = _make_user_attribute_hash_filter(attribute_hash, params)
-            ua_hash = f"AND {ua_hash_filter}"
-        else:
-            ua_hash = ""
-
-        return f"({component_str} {var_str} {ts_str}) {ua_str} {ua_hash}", params
+        return f"({component_str} {var_str} {ts_str}) {ua_str}", params
 
     def _try_time_series_metadata_by_full_params(
         self,
@@ -593,27 +586,8 @@ def _make_user_attribute_filter(features: dict[str, Any], params: list[str]) -> 
     return "AND ".join(items)
 
 
-def _make_user_attribute_hash_filter(attribute_hash: str, params: list[str]) -> str:
-    params.append(attribute_hash)
-    return "features_hash = ?"
-
-
 def _make_user_attribute_dict(features: dict[str, Any]) -> dict[str, Any]:
     return {k: features[k] for k in sorted(features)}
-
-
-def _compute_user_attribute_hash(features: dict[str, Any]) -> str | None:
-    if not features:
-        return None
-
-    attrs = _make_user_attribute_dict(features)
-    return _compute_hash(bytes(json.dumps(attrs), encoding="utf-8"))
-
-
-def _compute_hash(text: bytes) -> str:
-    hash_obj = hashlib.sha256()
-    hash_obj.update(text)
-    return hash_obj.hexdigest()
 
 
 def _deserialize_time_series_metadata(text: str) -> TimeSeriesMetadata:
