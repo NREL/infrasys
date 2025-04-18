@@ -361,11 +361,12 @@ def test_open_time_series_store(storage_type: TimeSeriesStorageType):
     initial_time = datetime(year=2020, month=1, day=1)
     timestamps = [initial_time + timedelta(hours=i) for i in range(length)]
     time_series_arrays: list[SingleTimeSeries] = []
-    with system.open_time_series_store() as conn:
-        for i in range(5):
-            ts = SingleTimeSeries.from_time_array(np.random.rand(length), f"ts{i}", timestamps)
-            system.add_time_series(ts, gen)
-            time_series_arrays.append(ts)
+    # this doesn't do anything
+    # with system.open_time_series_store() as conn:
+    for i in range(5):
+        ts = SingleTimeSeries.from_time_array(np.random.rand(length), f"ts{i}", timestamps)
+        system.add_time_series(ts, gen)
+        time_series_arrays.append(ts)
     with system.open_time_series_store() as conn:
         for i in range(5):
             ts = system.get_time_series(gen, variable_name=f"ts{i}", connection=conn)
