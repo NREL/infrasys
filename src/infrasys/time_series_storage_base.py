@@ -18,7 +18,6 @@ class TimeSeriesStorageBase(abc.ABC):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Any = None,
     ) -> None:
         """Store a time series array."""
 
@@ -34,12 +33,11 @@ class TimeSeriesStorageBase(abc.ABC):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Any = None,
     ) -> TimeSeriesData:
         """Return a time series array."""
 
     @abc.abstractmethod
-    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+    def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
         """Remove a time series array."""
 
     @abc.abstractmethod

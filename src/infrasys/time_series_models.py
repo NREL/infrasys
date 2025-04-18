@@ -1,5 +1,3 @@
-"""Defines models for time series arrays."""
-
 import abc
 import importlib
 import sqlite3

@@ -36,7 +36,6 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Any = None,
     ) -> None:
         if isinstance(time_series, (SingleTimeSeries, NonSequentialTimeSeries)):
             if metadata.time_series_uuid not in self._arrays:
@@ -61,7 +60,6 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Any = None,
     ) -> TimeSeriesData:
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(metadata, start_time, length)
@@ -69,7 +67,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             return self._get_nonsequential_time_series(metadata)
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
 
-    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+    def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
         time_series = self._arrays.pop(metadata.time_series_uuid, None)
         if time_series is None:
             msg = f"No time series with {metadata.time_series_uuid} is stored"

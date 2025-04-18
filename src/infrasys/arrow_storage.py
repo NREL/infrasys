@@ -33,7 +33,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
 
     def __init__(self, directory: Path) -> None:
         self._ts_directory = directory
-        self._ts_metadata: str | None = None
+        self._ts_metadata: str | None = None  # what is this doing?
 
     @classmethod
     def create_with_temp_directory(
@@ -58,7 +58,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Any = None,
     ) -> None:
         self._add_time_series(time_series)
 
@@ -104,7 +103,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Any = None,
     ) -> Any:
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(
@@ -116,7 +114,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
-    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+    def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
         fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
         if not fpath.exists():
             msg = f"No time series with {metadata.time_series_uuid} is stored"

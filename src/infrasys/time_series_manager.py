@@ -43,6 +43,7 @@ TIME_SERIES_KWARGS = {
     "time_series_directory": None,
     "time_series_storage_type": TimeSeriesStorageType.ARROW,
     "chronify_engine_name": "duckdb",
+    "conn": None,
 }
 
 
@@ -71,6 +72,7 @@ class TimeSeriesManager:
     def create_new_storage(permanent: bool = False, **kwargs):
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         storage_type = _process_time_series_kwarg("time_series_storage_type", **kwargs)
+        conn = _process_time_series_kwarg("conn", **kwargs)
         if permanent:
             if base_directory is None:
                 msg = "Can't convert to permanent storage without a base directory"
@@ -97,11 +99,13 @@ class TimeSeriesManager:
                         base_directory,
                         engine_name=_process_time_series_kwarg("chronify_engine_name", **kwargs),
                         read_only=_process_time_series_kwarg("time_series_read_only", **kwargs),
+                        connection=conn,
                     )
                 return ChronifyTimeSeriesStorage.create_with_temp_directory(
                     base_directory=base_directory,
                     engine_name=_process_time_series_kwarg("chronify_engine_name", **kwargs),
                     read_only=_process_time_series_kwarg("time_series_read_only", **kwargs),
+                    connection=conn,
                 )
             case TimeSeriesStorageType.MEMORY:
                 return InMemoryTimeSeriesStorage()
@@ -168,7 +172,6 @@ class TimeSeriesManager:
             self._storage.add_time_series(
                 metadata,
                 time_series,
-                connection=_get_data_connection(connection),
             )
         return make_time_series_key(metadata)
 
@@ -318,9 +321,7 @@ class TimeSeriesManager:
         time_series = {x.time_series_uuid: x for x in metadata}
         missing_uuids = self._metadata_store.list_missing_time_series(time_series.keys())
         for uuid in missing_uuids:
-            self._storage.remove_time_series(
-                time_series[uuid], connection=_get_data_connection(connection)
-            )
+            self._storage.remove_time_series(time_series[uuid])
             logger.info("Removed time series {}.{}", time_series_type, variable_name)
 
     def copy(
@@ -361,7 +362,6 @@ class TimeSeriesManager:
             metadata,
             start_time=start_time,
             length=length,
-            connection=_get_data_connection(connection),
         )
 
     def serialize(

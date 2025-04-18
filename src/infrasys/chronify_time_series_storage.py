@@ -15,7 +15,7 @@ from chronify import DatetimeRange, Store, TableSchema
 from loguru import logger
 from sqlalchemy import Connection
 
-from infrasys.exceptions import ISFileExists, ISInvalidParameter
+from infrasys.exceptions import ISFileExists
 from infrasys.id_manager import IDManager
 from infrasys.time_series_models import (
     SingleTimeSeries,
@@ -43,6 +43,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         id_manager: IDManager,
         read_only: bool = False,
         uuid_lookup: dict[UUID, int] | None = None,
+        connection: Connection | None = None,
     ) -> None:
         self._store = store
         self._read_only = read_only
@@ -51,6 +52,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         # We don't want to store UUIDs in the chronify database.
         # Integer IDs are much smaller and faster for search.
         # Manage a mapping of UUIDs to integer IDs until we can remove UUIDs (#80).
+        self._connection = connection
         self._uuid_lookup: dict[UUID, int] = uuid_lookup or {}
         self._id_manager = id_manager
 
@@ -60,6 +62,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         base_directory: Path | None = None,
         engine_name: str = "duckdb",
         read_only: bool = False,
+        connection: Connection | None = None,
     ) -> Self:
         """Construct ChronifyTimeSeriesStorage with a temporary directory."""
         with NamedTemporaryFile(dir=base_directory, suffix=".db") as f:
@@ -68,7 +71,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         atexit.register(delete_if_exists, dst_file)
         store = Store(engine_name=engine_name, file_path=dst_file)
         id_manager = IDManager(next_id=1)
-        return cls(store, id_manager, read_only=read_only)
+        return cls(store, id_manager, read_only=read_only, connection=connection)
 
     @classmethod
     def create_with_permanent_directory(
@@ -76,6 +79,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         base_directory: Path,
         engine_name: str = "duckdb",
         read_only: bool = False,
+        connection: Connection | None = None,
     ) -> Self:
         """Construct ChronifyTimeSeriesStorage with a permanent directory."""
         dst_file = base_directory / _TIME_SERIES_FILENAME
@@ -85,7 +89,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         logger.debug("Creating database at {}", dst_file)
         store = Store(engine_name=engine_name, file_path=dst_file)
         id_manager = IDManager(next_id=1)
-        return cls(store, id_manager, read_only=read_only)
+        return cls(store, id_manager, read_only=read_only, connection=connection)
 
     @classmethod
     def from_file_to_tmp_file(
@@ -136,7 +140,6 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Connection | None = None,
     ) -> None:
         if not isinstance(time_series, SingleTimeSeries):
             msg = f"Bug: need to implement add_time_series for {type(time_series)}"
@@ -151,13 +154,14 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         schema = _make_table_schema(time_series, _get_table_name(time_series))
         # There is no reason to run time checks because we are generating the timestamps
         # from initial_time, resolution, and length, so they are guaranteed to be correct.
-        self._store.ingest_table(df, schema, connection=connection, skip_time_checks=False)
+        self._store.ingest_table(df, schema, connection=self._connection)
         self._uuid_lookup[time_series.uuid] = db_id
         logger.debug("Added {} to time series storage", time_series.summary)
 
-    def check_timestamps(self, key: TimeSeriesKey, connection: Connection | None = None) -> None:
-        table_name = _get_table_name(key)
-        self._store.check_timestamps(table_name, connection=connection)
+    def check_timestamps(self, key: TimeSeriesKey) -> None:
+        pass
+        # table_name = _get_table_name(key)
+        # self._store.check_timestamps(table_name)
 
     def get_engine_name(self) -> str:
         """Return the name of the underlying database engine."""
@@ -168,28 +172,24 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Connection | None = None,
     ) -> Any:
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(
                 metadata=metadata,
                 start_time=start_time,
                 length=length,
-                connection=connection,
             )
 
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
-    def remove_time_series(
-        self, metadata: TimeSeriesMetadata, connection: Connection | None = None
-    ) -> None:
+    def remove_time_series(self, metadata: TimeSeriesMetadata) -> None:
         db_id = self._get_db_id(metadata.time_series_uuid)
         table_name = _get_table_name(metadata)
-        num_deleted = self._store.delete_rows(table_name, {"id": db_id}, connection=connection)
-        if num_deleted < 1:
-            msg = f"Failed to delete rows in the chronfiy database for {metadata.time_series_uuid}"
-            raise ISInvalidParameter(msg)
+        self._store.delete_rows(table_name, {"id": db_id}, connection=self._connection)
+        # if num_deleted < 1:
+        #     msg = f"Failed to delete rows in the chronfiy database for {metadata.time_series_uuid}"
+        #     raise ISInvalidParameter(msg)
 
     def serialize(
         self, data: dict[str, Any], dst: Path | str, src: Path | str | None = None
@@ -208,7 +208,6 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: SingleTimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Connection | None = None,
     ) -> SingleTimeSeries:
         table_name = _get_table_name(metadata)
         db_id = self._get_db_id(metadata.time_series_uuid)
@@ -231,7 +230,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
             table_name,
             query,
             params=tuple(params),
-            connection=connection,
+            connection=self._connection,
         )
         if len(df) != required_len:
             msg = f"Bug: {len(df)=} {length=} {required_len=}"
@@ -316,6 +315,7 @@ def _get_single_time_series_table_name(
 
 @singledispatch
 def _get_table_base_name(time_series) -> str:
+    # TODO f-string
     msg = "Bug: need to implement _get_table_base_name for {type(time_series)}"
     raise NotImplementedError(msg)
 

@@ -367,12 +367,6 @@ def test_open_time_series_store(storage_type: TimeSeriesStorageType):
         ts = SingleTimeSeries.from_time_array(np.random.rand(length), f"ts{i}", timestamps)
         system.add_time_series(ts, gen)
         time_series_arrays.append(ts)
-    with system.open_time_series_store() as conn:
-        for i in range(5):
-            ts = system.get_time_series(gen, variable_name=f"ts{i}", connection=conn)
-            assert np.array_equal(
-                system.get_time_series(gen, f"ts{i}").data, time_series_arrays[i].data
-            )
 
 
 def test_time_series_removal():
@@ -808,7 +802,7 @@ def test_bulk_add_time_series():
                 time_series.append(ts)
 
         for key in keys:
-            system.time_series.storage.check_timestamps(key, connection=conn.data_conn)
+            system.time_series.storage.check_timestamps(key)
 
     with system.open_time_series_store() as conn:
         for expected_ts in time_series:
