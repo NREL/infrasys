@@ -187,7 +187,7 @@ class TimeSeriesMetadataStore:
                 str(owner.uuid),
                 owner.__class__.__name__,
                 "Component",
-                json.dumps(metadata.features),
+                make_features_string(metadata.features),
                 str(metadata.uuid),
             )
             for owner in owners
@@ -595,3 +595,10 @@ def _deserialize_time_series_metadata(text: str) -> TimeSeriesMetadata:
     type_metadata = SerializedTypeMetadata(**data.pop(TYPE_METADATA))
     metadata = deserialize_value(data, type_metadata.fields)
     return metadata
+
+
+def make_features_string(features: dict[str, Any]) -> str:
+    """Serializes a dictionary of features into a JSON array."""
+    key_names = sorted(features.keys())
+    data = [{k: features[k]} for k in key_names]
+    return json.dumps(data)
