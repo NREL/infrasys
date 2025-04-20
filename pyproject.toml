@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "loguru~=0.7.2",
     "numpy >= 2, < 3",
+    "orjson>=3.10.16",
     "pandas >= 2, < 3",
     "pint~=0.23",
     "pyarrow~=19.0",
