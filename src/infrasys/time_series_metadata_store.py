@@ -460,12 +460,12 @@ class TimeSeriesMetadataStore:
             params.append(time_series_type)
 
         if features:
-            ua_filter = _make_user_attribute_filter(features, params)
-            ua_str = f"AND {ua_filter}"
+            feat_filter = _make_features_filter(features, params)
+            feat_str = f"AND {feat_filter}"
         else:
-            ua_str = ""
+            feat_str = ""
 
-        return f"({component_str} {var_str} {ts_str}) {ua_str}", params
+        return f"({component_str} {var_str} {ts_str}) {feat_str}", params
 
     def _try_time_series_metadata_by_full_params(
         self,
@@ -577,16 +577,16 @@ class TimeSeriesCounts:
     time_series_type_count: dict[tuple[str, str, str, str], int]
 
 
-def _make_user_attribute_filter(features: dict[str, Any], params: list[str]) -> str:
-    attrs = _make_user_attribute_dict(features)
+def _make_features_filter(features: dict[str, Any], params: list[str]) -> str:
+    attrs = _make_features_dict(features)
     items = []
     for key, val in attrs.items():
-        items.append(f"features->>'$.{key}' = ? ")
+        items.append(f"features ->> '$.{key}' = ? ")
         params.append(val)
     return "AND ".join(items)
 
 
-def _make_user_attribute_dict(features: dict[str, Any]) -> dict[str, Any]:
+def _make_features_dict(features: dict[str, Any]) -> dict[str, Any]:
     return {k: features[k] for k in sorted(features)}
 
 
@@ -598,7 +598,6 @@ def _deserialize_time_series_metadata(text: str) -> TimeSeriesMetadata:
 
 
 def make_features_string(features: dict[str, Any]) -> str:
-    """Serializes a dictionary of features into a JSON array."""
-    key_names = sorted(features.keys())
-    data = [{k: features[k]} for k in key_names]
+    """Serializes a dictionary of features into a sorted string."""
+    data = dict(sorted(features.items()))
     return json.dumps(data)
