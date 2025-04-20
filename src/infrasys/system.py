@@ -1,6 +1,5 @@
 """Defines a System"""
 
-import json
 import shutil
 import sqlite3
 from collections import defaultdict
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Generator, Iterable, Optional, Type, TypeVar
 from uuid import UUID, uuid4
 
+import orjson
 from loguru import logger
 from rich import print as _pprint
 from rich.table import Table
@@ -197,8 +197,9 @@ class System:
             system_data["time_series"], time_series_dir, db_name=self.DB_FILENAME
         )
 
-        with open(filename, "w", encoding="utf-8") as f_out:
-            json.dump(data, f_out, indent=indent)
+        data_dump = orjson.dumps(data)
+        with open(filename, "wb") as f_out:
+            f_out.write(data_dump)
             logger.info("Wrote system data to {}", filename)
 
     @classmethod
@@ -220,8 +221,8 @@ class System:
         --------
         >>> system = System.from_json("systems/system1.json")
         """
-        with open(filename, encoding="utf-8") as f_in:
-            data = json.load(f_in)
+        with open(filename, "rb") as f_in:
+            data = orjson.loads(f_in.read())
         time_series_parent_dir = Path(filename).parent
         return cls.from_dict(
             data, time_series_parent_dir, upgrade_handler=upgrade_handler, **kwargs

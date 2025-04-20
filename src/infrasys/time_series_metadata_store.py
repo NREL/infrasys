@@ -1,13 +1,13 @@
 """Stores time series metadata in a SQLite database."""
 
 import itertools
-import json
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 from uuid import UUID
 
+import orjson
 from loguru import logger
 
 from infrasys import (
@@ -559,7 +559,7 @@ class TimeSeriesMetadataStore:
             execute(cur, f"CREATE TABLE {TIME_SERIES_METADATA_TABLE}({schema_text})")
             query = f"INSERT INTO {TIME_SERIES_METADATA_TABLE} VALUES (?, ?, jsonb(?))"
             metadata = [
-                (None, str(metadata_uuid), json.dumps(serialize_value(metadata)))
+                (None, str(metadata_uuid), orjson.dumps(serialize_value(metadata)))
                 for metadata_uuid, metadata in self._cache_metadata.items()
             ]
             cur.executemany(query, metadata)
@@ -591,7 +591,7 @@ def _make_features_dict(features: dict[str, Any]) -> dict[str, Any]:
 
 
 def _deserialize_time_series_metadata(text: str) -> TimeSeriesMetadata:
-    data = json.loads(text)
+    data = orjson.loads(text)
     type_metadata = SerializedTypeMetadata(**data.pop(TYPE_METADATA))
     metadata = deserialize_value(data, type_metadata.fields)
     return metadata
@@ -600,4 +600,4 @@ def _deserialize_time_series_metadata(text: str) -> TimeSeriesMetadata:
 def make_features_string(features: dict[str, Any]) -> str:
     """Serializes a dictionary of features into a sorted string."""
     data = dict(sorted(features.items()))
-    return json.dumps(data)
+    return orjson.dumps(data).decode()

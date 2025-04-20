@@ -1,28 +1,29 @@
-import json
-from pathlib import Path
-import random
 import os
+import random
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Type
 
 import numpy as np
-from numpy._typing import NDArray
+import orjson
 import pint
 import pytest
+from numpy._typing import NDArray
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
 
-from infrasys import Location, SingleTimeSeries, NonSequentialTimeSeries
+from infrasys import Location, NonSequentialTimeSeries, SingleTimeSeries
 from infrasys.component import Component
-from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
-from infrasys.time_series_models import TimeSeriesStorageType, TimeSeriesData
+from infrasys.quantities import ActivePower, Distance
+from infrasys.time_series_models import TimeSeriesData, TimeSeriesStorageType
+
 from .models.simple_system import (
-    SimpleSystem,
     SimpleBus,
     SimpleGenerator,
     SimpleSubsystem,
+    SimpleSystem,
 )
 
 TS_STORAGE_OPTIONS = (
@@ -300,7 +301,7 @@ def test_system_with_single_time_series_normalization(tmp_path, storage_type):
 
 def test_json_schema():
     schema = ComponentWithPintQuantity.model_json_schema()
-    assert isinstance(json.loads(json.dumps(schema)), dict)
+    assert isinstance(orjson.loads(orjson.dumps(schema)), dict)
 
 
 def test_system_save(tmp_path, simple_system_with_time_series):

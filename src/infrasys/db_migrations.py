@@ -1,7 +1,7 @@
-import json
 import sqlite3
 from uuid import uuid4
 
+import orjson
 from loguru import logger
 
 from infrasys import (
@@ -106,12 +106,12 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
             metadata_json,
         ) = row
 
-        metadata_data = json.loads(metadata_json)
+        metadata_data = orjson.loads(metadata_json)
         features = {}
         if "user_attributes" in metadata_data:  # We renamed user_attributes to features
             features = metadata_data.pop("user_attributes")
-        features_json = json.dumps(features)
-        metadata_json = json.dumps(metadata_data)
+        features_json = orjson.dumps(features)
+        metadata_json = orjson.dumps(metadata_data)
 
         # NOTE: Shall we force the metadata to have UUID? It currently does not have it.
         metadata_uuid = str(
