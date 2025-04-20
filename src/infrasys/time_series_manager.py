@@ -2,6 +2,7 @@
 
 import atexit
 import sqlite3
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 from functools import singledispatch
@@ -55,6 +56,7 @@ TIME_SERIES_KWARGS = {
     "in_memory": False,
     "time_series_read_only": False,
     "time_series_directory": None,
+    "time_series_storage_file": None,
     "time_series_storage_type": TimeSeriesStorageType.ARROW,
     "chronify_engine_name": "duckdb",
 }
@@ -72,10 +74,13 @@ class TimeSeriesManager:
         con: sqlite3.Connection,
         storage: Optional[TimeSeriesStorageBase] = None,
         initialize: bool = True,
+        metadata_store: TimeSeriesMetadataStore | None = None,
         **kwargs,
     ) -> None:
         self._con = con
-        self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
+        self._metadata_store = metadata_store or TimeSeriesMetadataStore(
+            con, initialize=initialize
+        )
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
         self._storage = storage or self.create_new_storage(**kwargs)
 
@@ -406,6 +411,11 @@ class TimeSeriesManager:
             assert isinstance(new_storage, ArrowTimeSeriesStorage)
             new_storage.add_serialized_data(data)
             self._metadata_store.serialize(Path(dst) / db_name)
+        elif isinstance(self._storage, HDF5TimeSeriesStorage):
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                temp_file_path = Path(tmpdirname) / db_name
+                self._metadata_store.serialize(temp_file_path)
+                self._storage.serialize(data, dst, src=src)
         else:
             self._metadata_store.serialize(Path(dst) / db_name)
             self._storage.serialize(data, dst, src=src)
@@ -421,6 +431,7 @@ class TimeSeriesManager:
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
+        metadata_store = None
         if (
             _process_time_series_kwarg("time_series_storage_type", **kwargs)
             == TimeSeriesStorageType.MEMORY
@@ -469,12 +480,16 @@ class TimeSeriesManager:
                     storage.serialize({}, storage.get_time_series_directory(), src=time_series_dir)
             case TimeSeriesStorageType.HDF5:
                 storage = HDF5TimeSeriesStorage(time_series_dir, **kwargs)
+                metadata_store = TimeSeriesMetadataStore(
+                    storage.get_metadata_store(), initialize=False
+                )
             case _:
                 msg = f"time_series_storage_type={ts_type} is not supported"
                 raise NotImplementedError(msg)
 
-        mgr = cls(con, storage=storage, initialize=False, **kwargs)
-        mgr._metadata_store._load_metadata_into_memory()
+        mgr = cls(con, storage=storage, metadata_store=metadata_store, initialize=False, **kwargs)
+
+        mgr.metadata_store._load_metadata_into_memory()
         if (
             "time_series_storage_type" in kwargs
             and _process_time_series_kwarg("time_series_storage_type", **kwargs) != ts_type
