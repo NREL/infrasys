@@ -1,12 +1,15 @@
+import sqlite3
+import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import h5py
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
     SingleTimeSeries,
+    SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
     TimeSeriesStorageType,
@@ -16,7 +19,7 @@ from infrasys.time_series_storage_base import TimeSeriesStorageBase
 TIME_SERIES_STORAGE_FILE = "time_series_storage.h5"
 HDF5_TS_ROOT_PATH = "time_series"
 HDF5_TS_METADATA_ROOT_PATH = "time_series_metadata"
-TIME_SERIES_DATA_FORMAT_VERSION = "2.0.0"
+TIME_SERIES_DATA_FORMAT_VERSION = "1.0.0"
 TIME_SERIES_VERSION_KEY = "data_format_version"
 
 
@@ -24,7 +27,11 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
     """Stores time series in an h5 file."""
 
     def __init__(
-        self, directory: Path, fpath: Path | None = None, in_memory: bool = False, **kwargs
+        self,
+        directory: Path | None = None,
+        time_series_storage_file: Path | str | None = None,
+        in_memory: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize the HDF5 time series storage.
 
@@ -39,7 +46,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         """
         self._ts_directory = directory
         self._in_memory = in_memory
-        self._file_path = fpath or directory / TIME_SERIES_STORAGE_FILE
+        self._file_path = time_series_storage_file
 
         if in_memory:
             self._f = h5py.File.in_memory()
@@ -63,6 +70,15 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         """
         return self._f[HDF5_TS_ROOT_PATH]
 
+    def _serialize_compression_settings(self):
+        """Add default compression settings."""
+        root = self._get_root()
+        root.attrs["compression_enabled"] = False
+        root.attrs["compression_type"] = "CompressionTypes.DEFLATE"
+        root.attrs["compression_level"] = 3
+        root.attrs["compression_shuffle"] = True
+        return
+
     @staticmethod
     def add_serialized_data(data: dict[str, Any]) -> None:
         data["time_series_storage_type"] = str(TimeSeriesStorageType.HDF5)
@@ -84,6 +100,8 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         connection : Any, optional
             Optional connection parameter (not used in this implementation)
         """
+        assert isinstance(time_series, SingleTimeSeries)
+        assert isinstance(metadata, SingleTimeSeriesMetadata)
         root = self._get_root()
         uuid = str(metadata.time_series_uuid)
 
@@ -98,10 +116,24 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             group.attrs["initial_timestamp"] = metadata.initial_time.isoformat()
             group.attrs["resolution"] = metadata.resolution.total_seconds()
 
-            meta_group = self._f[HDF5_TS_METADATA_ROOT_PATH]
-            if uuid not in meta_group:
-                pass
-                # meta_group.create_group(uuid)
+    def get_metadata_store(self) -> sqlite3.Connection:
+        """Get the metadata store.
+
+        Returns
+        -------
+        TimeSeriesMetadataStore
+            The metadata store
+        """
+        ts_metadata = bytes(self._f[HDF5_TS_METADATA_ROOT_PATH][:])
+        conn = sqlite3.connect(":memory:")
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            temp_file_path = tmp.name
+            tmp.write(ts_metadata)
+            backup_conn = sqlite3.connect(temp_file_path)
+            with conn:
+                backup_conn.backup(conn)
+            backup_conn.close()
+        return conn
 
     def get_time_series_directory(self) -> Optional[Path]:
         """Return the directory containing time series files.
@@ -141,6 +173,8 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         KeyError
             If the time series with the specified UUID doesn't exist
         """
+        assert isinstance(metadata, SingleTimeSeriesMetadata)
+        assert isinstance(metadata, SingleTimeSeriesMetadata)
         root = self._get_root()
         uuid = str(metadata.time_series_uuid)
 
@@ -192,7 +226,10 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             del meta_group[uuid]
 
     def serialize(
-        self, data: Dict[str, Any], dst: Path | str, src: Optional[Path | str] = None
+        self,
+        data: dict[str, Any],
+        dst: Path | str,
+        src: Optional[Path | str] = None,
     ) -> None:
         """Serialize all time series to the destination directory.
 
@@ -208,7 +245,11 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         dst_path = Path(dst) / TIME_SERIES_STORAGE_FILE if Path(dst).is_dir() else Path(dst)
         self._f.flush()
 
-        with h5py.File(dst_path, "w") as dst_file:
+        # NOTE: I need to fix this
+        # with open(metadata_fpath, "rb") as f:
+        #     binary_data = f.read()
+
+        with h5py.File(dst_path, "a") as dst_file:
             if HDF5_TS_ROOT_PATH in self._f:
                 h5py.h5o.copy(
                     self._f.id,
@@ -216,14 +257,14 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
                     dst_file.id,
                     HDF5_TS_ROOT_PATH.encode("utf-8"),
                 )
+                if HDF5_TS_METADATA_ROOT_PATH in dst_file:
+                    del dst_file[HDF5_TS_METADATA_ROOT_PATH]
+                # dst_file.create_dataset(
+                #     HDF5_TS_METADATA_ROOT_PATH,
+                #     data=np.frombuffer(binary_data, dtype=np.uint8),
+                #     dtype=np.uint8,
+                # )
 
-            if HDF5_TS_METADATA_ROOT_PATH in self._f:
-                h5py.h5o.copy(
-                    self._f.id,
-                    HDF5_TS_METADATA_ROOT_PATH.encode("utf-8"),
-                    dst_file.id,
-                    HDF5_TS_METADATA_ROOT_PATH.encode("utf-8"),
-                )
         self.add_serialized_data(data)
 
     def __del__(self):
