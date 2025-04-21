@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from infrasys import System
-from infrasys.h5_time_series_storage import TIME_SERIES_STORAGE_FILE, HDF5TimeSeriesStorage
+from infrasys.h5_time_series_storage import HDF5TimeSeriesStorage
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesStorageType
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 from tests.models.simple_system import SimpleBus, SimpleGenerator
@@ -103,7 +103,8 @@ def test_h5py_serialization(tmp_path, system_with_h5_storage):
     # Serialize
     fpath = tmp_path / Path("test.json")
     system.to_json(fpath)
-    output_time_series_file = tmp_path / f"{fpath.stem}_time_series" / TIME_SERIES_STORAGE_FILE
+    fname = system._time_series_mgr.storage.STORAGE_FILE
+    output_time_series_file = tmp_path / f"{fpath.stem}_time_series" / fname
     assert (output_time_series_file).exists()
 
     # Deserialize

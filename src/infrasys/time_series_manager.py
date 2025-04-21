@@ -10,6 +10,8 @@ from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any, Generator, Optional, Type
 
+import h5py
+import numpy as np
 from loguru import logger
 
 from infrasys import Component
@@ -401,7 +403,7 @@ class TimeSeriesManager:
         src: Path | str | None = None,
     ) -> None:
         """Serialize the time series data to dst."""
-        if isinstance(self._storage, InMemoryTimeSeriesStorage):
+        if isinstance(self.storage, InMemoryTimeSeriesStorage):
             new_storage = self.convert_storage(
                 time_series_storage_type=TimeSeriesStorageType.ARROW,
                 time_series_directory=dst,
@@ -411,11 +413,19 @@ class TimeSeriesManager:
             assert isinstance(new_storage, ArrowTimeSeriesStorage)
             new_storage.add_serialized_data(data)
             self._metadata_store.serialize(Path(dst) / db_name)
-        elif isinstance(self._storage, HDF5TimeSeriesStorage):
+        elif isinstance(self.storage, HDF5TimeSeriesStorage):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 temp_file_path = Path(tmpdirname) / db_name
                 self._metadata_store.serialize(temp_file_path)
                 self._storage.serialize(data, dst, src=src)
+                with open(temp_file_path, "rb") as f:
+                    binary_data = f.read()
+                with h5py.File(self.storage.output_file, "a") as f_out:
+                    f_out.create_dataset(
+                        self.storage.HDF5_TS_METADATA_ROOT_PATH,
+                        data=np.frombuffer(binary_data, dtype=np.uint8),
+                        dtype=np.uint8,
+                    )
         else:
             self._metadata_store.serialize(Path(dst) / db_name)
             self._storage.serialize(data, dst, src=src)
@@ -449,6 +459,7 @@ class TimeSeriesManager:
 
         # This term was introduced in v0.3.0. Maintain compatibility with old serialized files.
         ts_type = data.get("time_series_storage_type", TimeSeriesStorageType.ARROW)
+        ts_fpath = data.get("time_series_storage_file")
         match ts_type:
             case TimeSeriesStorageType.CHRONIFY:
                 if not is_chronify_installed:
@@ -479,7 +490,7 @@ class TimeSeriesManager:
                     )
                     storage.serialize({}, storage.get_time_series_directory(), src=time_series_dir)
             case TimeSeriesStorageType.HDF5:
-                storage = HDF5TimeSeriesStorage(time_series_dir, **kwargs)
+                storage = HDF5TimeSeriesStorage(time_series_storage_file=ts_fpath, **kwargs)
                 metadata_store = TimeSeriesMetadataStore(
                     storage.get_metadata_store(), initialize=False
                 )

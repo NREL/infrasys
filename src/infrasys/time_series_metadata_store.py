@@ -31,7 +31,7 @@ from infrasys.time_series_models import (
     TimeSeriesMetadata,
 )
 from infrasys.utils.metadata_utils import create_associations_table
-from infrasys.utils.sqlite import execute
+from infrasys.utils.sqlite import backup, execute
 from infrasys.utils.time_utils import to_iso_8601
 
 
@@ -548,6 +548,7 @@ class TimeSeriesMetadataStore:
         return [UUID(ustr[0]) for ustr in uuid_strings]
 
     def serialize(self, filename: Path | str) -> None:
+        backup(self._con, filename)
         with sqlite3.connect(filename) as dst_con:
             schema = [
                 "id INTEGER PRIMARY KEY",
