@@ -16,15 +16,16 @@ from infrasys.time_series_models import (
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
-TIME_SERIES_STORAGE_FILE = "time_series_storage.h5"
-HDF5_TS_ROOT_PATH = "time_series"
-HDF5_TS_METADATA_ROOT_PATH = "time_series_metadata"
 TIME_SERIES_DATA_FORMAT_VERSION = "1.0.0"
 TIME_SERIES_VERSION_KEY = "data_format_version"
 
 
 class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
     """Stores time series in an h5 file."""
+
+    STORAGE_FILE = "time_series_storage.h5"
+    HDF5_TS_ROOT_PATH = "time_series"
+    HDF5_TS_METADATA_ROOT_PATH = "time_series_metadata"
 
     def __init__(
         self,
@@ -48,17 +49,17 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         self._in_memory = in_memory
         self._file_path = time_series_storage_file
 
-        if in_memory:
+        if not self._file_path or self._in_memory:
             self._f = h5py.File.in_memory()
         else:
             self._f = h5py.File(self._file_path, "a")
 
-        if HDF5_TS_ROOT_PATH not in self._f:
-            root = self._f.create_group(HDF5_TS_ROOT_PATH)
+        if self.HDF5_TS_ROOT_PATH not in self._f:
+            root = self._f.create_group(self.HDF5_TS_ROOT_PATH)
             root.attrs[TIME_SERIES_VERSION_KEY] = TIME_SERIES_DATA_FORMAT_VERSION
 
-        if HDF5_TS_METADATA_ROOT_PATH not in self._f:
-            self._f.create_group(HDF5_TS_METADATA_ROOT_PATH)
+        if self.HDF5_TS_METADATA_ROOT_PATH not in self._f:
+            self._f.create_group(self.HDF5_TS_METADATA_ROOT_PATH)
 
     def _get_root(self):
         """Get the root group for time series data.
@@ -68,7 +69,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         h5py.Group
             Root group for time series data
         """
-        return self._f[HDF5_TS_ROOT_PATH]
+        return self._f[self.HDF5_TS_ROOT_PATH]
 
     def _serialize_compression_settings(self):
         """Add default compression settings."""
@@ -124,7 +125,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         TimeSeriesMetadataStore
             The metadata store
         """
-        ts_metadata = bytes(self._f[HDF5_TS_METADATA_ROOT_PATH][:])
+        ts_metadata = bytes(self._f[self.HDF5_TS_METADATA_ROOT_PATH][:])
         conn = sqlite3.connect(":memory:")
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             temp_file_path = tmp.name
@@ -221,7 +222,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         del root[uuid]
 
-        meta_group = self._f[HDF5_TS_METADATA_ROOT_PATH]
+        meta_group = self._f[self.HDF5_TS_METADATA_ROOT_PATH]
         if uuid in meta_group:
             del meta_group[uuid]
 
@@ -242,7 +243,8 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         src : Path or str, optional
             Optional source directory or file path
         """
-        dst_path = Path(dst) / TIME_SERIES_STORAGE_FILE if Path(dst).is_dir() else Path(dst)
+        dst_path = Path(dst) / self.STORAGE_FILE if Path(dst).is_dir() else Path(dst)
+        self.output_file = dst_path
         self._f.flush()
 
         # NOTE: I need to fix this
@@ -250,21 +252,22 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         #     binary_data = f.read()
 
         with h5py.File(dst_path, "a") as dst_file:
-            if HDF5_TS_ROOT_PATH in self._f:
+            if self.HDF5_TS_ROOT_PATH in self._f:
                 h5py.h5o.copy(
                     self._f.id,
-                    HDF5_TS_ROOT_PATH.encode("utf-8"),
+                    self.HDF5_TS_ROOT_PATH.encode("utf-8"),
                     dst_file.id,
-                    HDF5_TS_ROOT_PATH.encode("utf-8"),
+                    self.HDF5_TS_ROOT_PATH.encode("utf-8"),
                 )
-                if HDF5_TS_METADATA_ROOT_PATH in dst_file:
-                    del dst_file[HDF5_TS_METADATA_ROOT_PATH]
+                if self.HDF5_TS_METADATA_ROOT_PATH in dst_file:
+                    del dst_file[self.HDF5_TS_METADATA_ROOT_PATH]
                 # dst_file.create_dataset(
                 #     HDF5_TS_METADATA_ROOT_PATH,
                 #     data=np.frombuffer(binary_data, dtype=np.uint8),
                 #     dtype=np.uint8,
                 # )
 
+        data["time_series_storage_file"] = str(dst_path)
         self.add_serialized_data(data)
 
     def __del__(self):
