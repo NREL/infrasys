@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from infrasys import System
+from infrasys.exceptions import ISAlreadyAttached
 from infrasys.h5_time_series_storage import HDF5TimeSeriesStorage
 from infrasys.time_series_models import SingleTimeSeries, TimeSeriesStorageType
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
@@ -57,7 +58,7 @@ def test_handler_creation(tmp_path):
     assert isinstance(storage, HDF5TimeSeriesStorage)
 
 
-def test_adding_time_series(tmp_path):
+def test_h5_time_series(tmp_path):
     storage_type = TimeSeriesStorageType.HDF5
     system = System(
         name="test",
@@ -81,6 +82,10 @@ def test_adding_time_series(tmp_path):
     system.add_time_series(ts, gen, scenario="one", model_year="2030")
     time_series = system.get_time_series(gen)
     assert np.array_equal(time_series.data, ts.data)
+
+    system.remove_time_series(gen)
+
+    assert not system.has_time_series(gen)
 
 
 def test_h5py_serialization(tmp_path, system_with_h5_storage):
@@ -114,3 +119,27 @@ def test_h5py_serialization(tmp_path, system_with_h5_storage):
     gen2 = system.get_component(SimpleGenerator, name="gen1")
     time_series = system_deserialized.get_time_series(gen2)
     assert np.array_equal(time_series.data, ts.data)
+
+
+@pytest.mark.xfail(reason="Until we figure out if we need to rollback h5.")
+def test_h5_context_manager(system_with_h5_storage):
+    system = system_with_h5_storage
+
+    bus = SimpleBus(name="test", voltage=1.1)
+    gen = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
+
+    system.add_component(gen)
+
+    ts_name = "test_ts"
+    ts = SingleTimeSeries.from_array(
+        data=range(8784),
+        variable_name=ts_name,
+        initial_time=datetime(year=2020, month=1, day=1),
+        resolution=timedelta(hours=1),
+    )
+    with pytest.raises(ISAlreadyAttached):
+        with system._time_series_mgr._storage:
+            system.add_time_series(ts, gen, scenario="one", model_year="2030")
+            system.add_time_series(ts, gen, scenario="one", model_year="2030")
+
+    assert not system.has_time_series(gen, variable_name=ts_name)
