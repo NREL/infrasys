@@ -1,22 +1,22 @@
 """Test related to the pyarrow storage manager."""
 
-import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+import pytest
 from loguru import logger
 
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.system import System
 from infrasys.time_series_models import (
-    SingleTimeSeries,
     NonSequentialTimeSeries,
+    SingleTimeSeries,
     TimeSeriesStorageType,
 )
 
-from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
+from .models.simple_system import SimpleBus, SimpleGenerator, SimpleSystem
 
 
 @pytest.fixture(scope="session")

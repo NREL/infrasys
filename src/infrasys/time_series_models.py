@@ -9,10 +9,10 @@ from typing import (
     Any,
     Literal,
     Optional,
+    Sequence,
     Type,
     TypeAlias,
     Union,
-    Sequence,
 )
 from uuid import UUID
 
@@ -23,9 +23,9 @@ from numpy.typing import NDArray
 from pydantic import (
     Field,
     WithJsonSchema,
+    computed_field,
     field_serializer,
     field_validator,
-    computed_field,
     model_validator,
 )
 from typing_extensions import Annotated
@@ -33,9 +33,8 @@ from typing_extensions import Annotated
 from infrasys.exceptions import (
     ISConflictingArguments,
 )
-from infrasys.models import InfraSysBaseModelWithIdentifers, InfraSysBaseModel
+from infrasys.models import InfraSysBaseModel, InfraSysBaseModelWithIdentifers
 from infrasys.normalization import NormalizationModel
-
 
 TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
@@ -571,8 +570,8 @@ class NonSequentialTimeSeriesKey(TimeSeriesKey):
     length: int
 
 
-class DatabaseConnection(InfraSysBaseModel):
+class TimeSeriesStorageContext(InfraSysBaseModel):
     """Stores connections to the metadata and data databases during transactions."""
 
     metadata_conn: sqlite3.Connection
-    data_conn: Any = None
+    data_context: Any = None

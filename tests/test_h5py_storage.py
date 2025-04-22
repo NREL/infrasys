@@ -121,7 +121,6 @@ def test_h5py_serialization(tmp_path, system_with_h5_storage):
     assert np.array_equal(time_series.data, ts.data)
 
 
-@pytest.mark.xfail(reason="Until we figure out if we need to rollback h5.")
 def test_h5_context_manager(system_with_h5_storage):
     system = system_with_h5_storage
 
@@ -138,8 +137,9 @@ def test_h5_context_manager(system_with_h5_storage):
         resolution=timedelta(hours=1),
     )
     with pytest.raises(ISAlreadyAttached):
-        with system._time_series_mgr._storage:
+        with system.open_time_series_store(mode="a"):
             system.add_time_series(ts, gen, scenario="one", model_year="2030")
             system.add_time_series(ts, gen, scenario="one", model_year="2030")
 
+    # Not a single time series should have been added.
     assert not system.has_time_series(gen, variable_name=ts_name)

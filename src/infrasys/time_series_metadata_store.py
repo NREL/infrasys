@@ -194,7 +194,7 @@ class TimeSeriesMetadataStore:
         ]
         self._insert_rows(rows, cur)
         if connection is None:
-            self._con.commit()
+            con.commit()
 
         self._cache_metadata[metadata.uuid] = metadata
         # else, commit/rollback will occur at a higer level.
@@ -293,6 +293,13 @@ class TimeSeriesMetadataStore:
         uuids = ",".join(itertools.repeat("?", len(params)))
         query = f"SELECT time_series_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE time_series_uuid IN ({uuids})"
         rows = execute(cur, query, params=params).fetchall()
+        return {UUID(x[0]) for x in rows}
+
+    def list_existing_time_series_uuids(self) -> set[UUID]:
+        """Return the UUIDs that are present."""
+        cur = self._con.cursor()
+        query = f"SELECT DISTINCT time_series_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE}"
+        rows = execute(cur, query).fetchall()
         return {UUID(x[0]) for x in rows}
 
     def list_missing_time_series(self, time_series_uuids: Iterable[UUID]) -> set[UUID]:
@@ -412,6 +419,26 @@ class TimeSeriesMetadataStore:
             else:
                 result.append(self._cache_metadata[metadata_uuid])
         return result
+
+    def remove_by_metadata(
+        self,
+        metadata: TimeSeriesMetadata,
+        connection: sqlite3.Connection | None = None,
+    ) -> TimeSeriesMetadata:
+        """Remove all associations for a given metadata and return the metadata."""
+        con = connection or self._con
+        cur = con.cursor()
+
+        query = f"DELETE FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE metadata_uuid = ?"
+        cur.execute(query, (str(metadata.uuid),))
+
+        if connection is None:
+            con.commit()
+
+        if metadata.uuid in self._cache_metadata:
+            return self._cache_metadata.pop(metadata.uuid)
+        else:
+            return metadata
 
     def sql(self, query: str, params: Sequence[str] = ()) -> list[tuple]:
         """Run a SQL query on the time series metadata table."""
