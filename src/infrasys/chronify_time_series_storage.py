@@ -29,7 +29,6 @@ from infrasys.time_series_models import (
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 from infrasys.utils.path_utils import delete_if_exists
 
-
 _SINGLE_TIME_SERIES_BASE_NAME = "single_time_series"
 _TIME_SERIES_FILENAME = "time_series_data.db"
 
@@ -136,7 +135,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Connection | None = None,
+        context: Connection | None = None,
     ) -> None:
         if not isinstance(time_series, SingleTimeSeries):
             msg = f"Bug: need to implement add_time_series for {type(time_series)}"
@@ -151,13 +150,13 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         schema = _make_table_schema(time_series, _get_table_name(time_series))
         # There is no reason to run time checks because we are generating the timestamps
         # from initial_time, resolution, and length, so they are guaranteed to be correct.
-        self._store.ingest_table(df, schema, connection=connection, skip_time_checks=False)
+        self._store.ingest_table(df, schema, connection=context, skip_time_checks=False)
         self._uuid_lookup[time_series.uuid] = db_id
         logger.debug("Added {} to time series storage", time_series.summary)
 
-    def check_timestamps(self, key: TimeSeriesKey, connection: Connection | None = None) -> None:
+    def check_timestamps(self, key: TimeSeriesKey, context: Connection | None = None) -> None:
         table_name = _get_table_name(key)
-        self._store.check_timestamps(table_name, connection=connection)
+        self._store.check_timestamps(table_name, connection=context)
 
     def get_engine_name(self) -> str:
         """Return the name of the underlying database engine."""
@@ -168,25 +167,25 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Connection | None = None,
+        context: Connection | None = None,
     ) -> Any:
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(
                 metadata=metadata,
                 start_time=start_time,
                 length=length,
-                connection=connection,
+                context=context,
             )
 
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
     def remove_time_series(
-        self, metadata: TimeSeriesMetadata, connection: Connection | None = None
+        self, metadata: TimeSeriesMetadata, context: Connection | None = None
     ) -> None:
         db_id = self._get_db_id(metadata.time_series_uuid)
         table_name = _get_table_name(metadata)
-        num_deleted = self._store.delete_rows(table_name, {"id": db_id}, connection=connection)
+        num_deleted = self._store.delete_rows(table_name, {"id": db_id}, connection=context)
         if num_deleted < 1:
             msg = f"Failed to delete rows in the chronfiy database for {metadata.time_series_uuid}"
             raise ISInvalidParameter(msg)
@@ -208,7 +207,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: SingleTimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Connection | None = None,
+        context: Connection | None = None,
     ) -> SingleTimeSeries:
         table_name = _get_table_name(metadata)
         db_id = self._get_db_id(metadata.time_series_uuid)
@@ -231,7 +230,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
             table_name,
             query,
             params=tuple(params),
-            connection=connection,
+            connection=context,
         )
         if len(df) != required_len:
             msg = f"Bug: {len(df)=} {length=} {required_len=}"
@@ -253,7 +252,7 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         )
 
     @contextmanager
-    def open_time_series_store(self) -> Generator[Connection, None, None]:
+    def open_time_series_store(self, mode) -> Generator[Connection, None, None]:
         with self._store.engine.begin() as conn:
             yield conn
 

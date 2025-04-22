@@ -1,28 +1,30 @@
 import itertools
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import numpy as np
 import pytest
 
+from infrasys import TIME_SERIES_ASSOCIATIONS_TABLE, Component, Location, SingleTimeSeries
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
 from infrasys.exceptions import (
     ISAlreadyAttached,
+    ISConflictingArguments,
     ISNotStored,
     ISOperationNotAllowed,
-    ISConflictingArguments,
 )
-from infrasys import Component, Location, SingleTimeSeries
 from infrasys.quantities import ActivePower
 from infrasys.time_series_models import TimeSeriesKey, TimeSeriesStorageType
+from infrasys.utils.time_utils import to_iso_8601
+
 from .models.simple_system import (
     GeneratorBase,
-    SimpleSystem,
+    RenewableGenerator,
     SimpleBus,
     SimpleGenerator,
     SimpleSubsystem,
-    RenewableGenerator,
+    SimpleSystem,
 )
 
 
@@ -261,6 +263,7 @@ TS_STORAGE_OPTIONS = (
     TimeSeriesStorageType.ARROW,
     TimeSeriesStorageType.CHRONIFY,
     TimeSeriesStorageType.MEMORY,
+    TimeSeriesStorageType.HDF5,
 )
 
 
@@ -295,14 +298,14 @@ def test_time_series_retrieval(storage_type, use_quantity):
     assert len(system.list_time_series_metadata(gen)) == 4
     assert len(system.list_time_series_metadata(gen, scenario="high", model_year="2035")) == 1
     assert (
-        system.list_time_series_metadata(gen, scenario="high", model_year="2035")[
-            0
-        ].user_attributes["model_year"]
+        system.list_time_series_metadata(gen, scenario="high", model_year="2035")[0].features[
+            "model_year"
+        ]
         == "2035"
     )
     assert len(system.list_time_series_metadata(gen, scenario="low")) == 2
     for metadata in system.list_time_series_metadata(gen, scenario="high"):
-        assert metadata.user_attributes["scenario"] == "high"
+        assert metadata.features["scenario"] == "high"
 
     assert all(
         np.equal(
@@ -361,14 +364,14 @@ def test_open_time_series_store(storage_type: TimeSeriesStorageType):
     initial_time = datetime(year=2020, month=1, day=1)
     timestamps = [initial_time + timedelta(hours=i) for i in range(length)]
     time_series_arrays: list[SingleTimeSeries] = []
-    with system.open_time_series_store() as conn:
+    with system.open_time_series_store():
         for i in range(5):
             ts = SingleTimeSeries.from_time_array(np.random.rand(length), f"ts{i}", timestamps)
             system.add_time_series(ts, gen)
             time_series_arrays.append(ts)
-    with system.open_time_series_store() as conn:
+    with system.open_time_series_store():
         for i in range(5):
-            ts = system.get_time_series(gen, variable_name=f"ts{i}", connection=conn)
+            ts = system.get_time_series(gen, variable_name=f"ts{i}")
             assert np.array_equal(
                 system.get_time_series(gen, f"ts{i}").data, time_series_arrays[i].data
             )
@@ -636,9 +639,9 @@ def test_time_series_metadata_sql():
     system.add_time_series(ts2, gen2)
     rows = system.time_series.metadata_store.sql(
         f"""
-        SELECT component_type, time_series_type, component_uuid, time_series_uuid
-        FROM {system.time_series.metadata_store.TABLE_NAME}
-        WHERE component_uuid = '{gen1.uuid}'
+        SELECT owner_type, time_series_type, owner_uuid, time_series_uuid
+        FROM {TIME_SERIES_ASSOCIATIONS_TABLE}
+        WHERE owner_uuid = '{gen1.uuid}'
     """
     )
     assert len(rows) == 1
@@ -664,9 +667,9 @@ def test_time_series_metadata_list_rows():
     system.add_time_series(ts1, gen1)
     system.add_time_series(ts2, gen2)
     columns = [
-        "component_type",
+        "owner_type",
         "time_series_type",
-        "component_uuid",
+        "owner_uuid",
         "time_series_uuid",
     ]
     rows = system.time_series.metadata_store.list_rows(
@@ -720,13 +723,23 @@ def test_system_counts():
     assert ts_counts.time_series_count == 2 * 10
     assert (
         ts_counts.time_series_type_count[
-            ("SimpleGenerator", "SingleTimeSeries", "2020-01-01 02:00:00", "1:00:00")
+            (
+                "SimpleGenerator",
+                "SingleTimeSeries",
+                "2020-01-01 02:00:00",
+                to_iso_8601(timedelta(hours=1)),
+            )
         ]
         == 2
     )
     assert (
         ts_counts.time_series_type_count[
-            ("SimpleBus", "SingleTimeSeries", "2020-02-01 00:10:00", "0:05:00")
+            (
+                "SimpleBus",
+                "SingleTimeSeries",
+                "2020-02-01 00:10:00",
+                to_iso_8601(timedelta(minutes=5)),
+            )
         ]
         == 1
     )
@@ -802,12 +815,12 @@ def test_bulk_add_time_series():
                 data = np.random.rand(length)
                 name = f"test_ts_{length}_{i}"
                 ts = SingleTimeSeries.from_array(data, name, initial_time, resolution)
-                key = system.add_time_series(ts, gen, connection=conn)
+                key = system.add_time_series(ts, gen)
                 keys.append(key)
                 time_series.append(ts)
 
         for key in keys:
-            system.time_series.storage.check_timestamps(key, connection=conn.data_conn)
+            system.time_series.storage.check_timestamps(key, context=conn.data_context)
 
     with system.open_time_series_store() as conn:
         for expected_ts in time_series:
@@ -815,7 +828,6 @@ def test_bulk_add_time_series():
                 gen,
                 time_series_type=SingleTimeSeries,
                 variable_name=expected_ts.variable_name,
-                connection=conn,
             )
             assert np.array_equal(expected_ts.data, actual_ts.data)
 
@@ -828,14 +840,14 @@ def test_bulk_add_time_series_with_rollback(storage_type: TimeSeriesStorageType)
     system.add_components(bus, gen)
     ts_name = "test_ts"
     with pytest.raises(ISAlreadyAttached):
-        with system.open_time_series_store() as conn:
+        with system.open_time_series_store():
             initial_time = datetime(year=2020, month=1, day=1)
             resolution = timedelta(hours=1)
             length = 10
             data = np.random.rand(length)
             ts = SingleTimeSeries.from_array(data, ts_name, initial_time, resolution)
-            system.add_time_series(ts, gen, connection=conn)
+            system.add_time_series(ts, gen)
             assert system.has_time_series(gen, variable_name=ts_name)
-            system.add_time_series(ts, gen, connection=conn)
+            system.add_time_series(ts, gen)
 
     assert not system.has_time_series(gen, variable_name=ts_name)

@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "loguru~=0.7.2",
     "numpy >= 2, < 3",
+    "orjson>=3.10.16",
     "pandas >= 2, < 3",
     "pint~=0.23",
     "pyarrow~=19.0",
@@ -37,6 +38,9 @@ dependencies = [
     "rich~=13.7.1",
 ]
 [project.optional-dependencies]
+h5 = [
+    "h5py"
+]
 chronify = [
     "chronify ~= 0.2.3",
 ]
@@ -50,6 +54,7 @@ dev = [
     "pyarrow-stubs",
     "pytest",
     "pytest-cov",
+    "pytest-missing-modules",
     "ruff",
     "sphinx",
     "sphinx-click",
@@ -117,15 +122,6 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
-
-[dependency-groups]
-dev = [
-    "ipython>=9.1.0",
-    "types-python-dateutil>=2.9.0.20241206",
-    "mypy >=1.13, < 2",
-    "pandas-stubs",
-    "pyarrow-stubs",
-]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]

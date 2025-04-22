@@ -1,6 +1,8 @@
 import shutil
 from pathlib import Path
 
+from loguru import logger
+
 
 def delete_if_exists(path: Path) -> bool:
     """Delete a file or directory if it exists.
@@ -22,3 +24,8 @@ def delete_if_exists(path: Path) -> bool:
             path.unlink()
         return True
     return False
+
+
+def clean_tmp_folder(folder: Path | str) -> None:
+    shutil.rmtree(folder)
+    logger.info("Wiped time series folder: {}", folder)
