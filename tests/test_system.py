@@ -360,14 +360,14 @@ def test_open_time_series_store(storage_type: TimeSeriesStorageType):
     initial_time = datetime(year=2020, month=1, day=1)
     timestamps = [initial_time + timedelta(hours=i) for i in range(length)]
     time_series_arrays: list[SingleTimeSeries] = []
-    with system.open_time_series_store() as conn:
+    with system.open_time_series_store():
         for i in range(5):
             ts = SingleTimeSeries.from_time_array(np.random.rand(length), f"ts{i}", timestamps)
             system.add_time_series(ts, gen)
             time_series_arrays.append(ts)
-    with system.open_time_series_store() as conn:
+    with system.open_time_series_store():
         for i in range(5):
-            ts = system.get_time_series(gen, name=f"ts{i}", connection=conn)
+            ts = system.get_time_series(gen, variable_name=f"ts{i}")
             assert np.array_equal(
                 system.get_time_series(gen, f"ts{i}").data, time_series_arrays[i].data
             )
@@ -809,12 +809,12 @@ def test_bulk_add_time_series():
                 data = np.random.rand(length)
                 name = f"test_ts_{length}_{i}"
                 ts = SingleTimeSeries.from_array(data, name, initial_time, resolution)
-                key = system.add_time_series(ts, gen, connection=conn)
+                key = system.add_time_series(ts, gen)
                 keys.append(key)
                 time_series.append(ts)
 
         for key in keys:
-            system.time_series.storage.check_timestamps(key, connection=conn.data_conn)
+            system.time_series.storage.check_timestamps(key, context=conn.data_context)
 
     with system.open_time_series_store() as conn:
         for expected_ts in time_series:
@@ -835,14 +835,14 @@ def test_bulk_add_time_series_with_rollback(storage_type: TimeSeriesStorageType)
     system.add_components(bus, gen)
     ts_name = "test_ts"
     with pytest.raises(ISAlreadyAttached):
-        with system.open_time_series_store() as conn:
+        with system.open_time_series_store():
             initial_time = datetime(year=2020, month=1, day=1)
             resolution = timedelta(hours=1)
             length = 10
             data = np.random.rand(length)
             ts = SingleTimeSeries.from_array(data, ts_name, initial_time, resolution)
-            system.add_time_series(ts, gen, connection=conn)
+            system.add_time_series(ts, gen)
             assert system.has_time_series(gen, name=ts_name)
-            system.add_time_series(ts, gen, connection=conn)
+            system.add_time_series(ts, gen)
 
     assert not system.has_time_series(gen, name=ts_name)
