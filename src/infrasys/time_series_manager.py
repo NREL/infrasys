@@ -336,15 +336,18 @@ class TimeSeriesManager:
             Raised if the manager was created in read-only mode.
         """
         self._handle_read_only()
+        metadata_connection = _get_metadata_connection(context)
         metadata = self._metadata_store.remove(
             *owners,
             variable_name=name,
             time_series_type=time_series_type.__name__,
-            connection=_get_metadata_connection(context),
+            connection=metadata_connection,
             **features,
         )
         time_series = {x.time_series_uuid: x for x in metadata}
-        missing_uuids = self._metadata_store.list_missing_time_series(time_series.keys())
+        missing_uuids = self._metadata_store.list_missing_time_series(
+            time_series.keys(), connection=metadata_connection
+        )
         for uuid in missing_uuids:
             self._storage.remove_time_series(time_series[uuid], context=_get_data_context(context))
             logger.info("Removed time series {}.{}", time_series_type, name)
@@ -519,11 +522,20 @@ class TimeSeriesManager:
                 new_uuids = (
                     set(self._metadata_store.list_existing_time_series_uuids()) - original_uuids
                 )
+
+                all_metadata = []
                 for uuid in new_uuids:
                     metadata_list = self._metadata_store.list_metadata_with_time_series_uuid(uuid)
                     for metadata in metadata_list:
-                        self._storage.remove_time_series(metadata, context=context)
                         self._metadata_store.remove_by_metadata(metadata, connection=self._con)
+                        all_metadata.append(metadata)
+
+                if hasattr(self._storage, "batch_remove_time_series"):
+                    self._storage.batch_remove_time_series(all_metadata, context=context)
+                else:
+                    for metadata in all_metadata:
+                        self._storage.remove_time_series(metadata, context=context)
+
                 self._con.rollback()
                 raise
             finally:

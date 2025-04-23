@@ -36,7 +36,7 @@ def file_handle(func):
         if context is not None:
             return func(self, *args, **kwargs)
         else:
-            with self.open_time_series_store() as file_handle:
+            with self.open_time_series_store("a") as file_handle:
                 kwargs["context"] = file_handle
                 return func(self, *args, **kwargs)
 
@@ -53,6 +53,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
     def __init__(
         self,
         directory: Path,
+        filename: str | None = None,
         **kwargs,
     ) -> None:
         """Initialize the HDF5 time series storage.
@@ -231,18 +232,83 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         ISNotStored
             If the time series with the specified UUID doesn't exist
         """
-        root = context[self.HDF5_TS_ROOT_PATH]
         uuid = str(metadata.time_series_uuid)
 
-        if uuid not in root:
+        if uuid not in context[self.HDF5_TS_ROOT_PATH]:
             msg = f"Time series with {uuid=} not found"
             raise ISNotStored(msg)
+        del context[self.HDF5_TS_ROOT_PATH][uuid]
 
-        del root[uuid]
+        # meta_group = context[self.HDF5_TS_METADATA_ROOT_PATH]
+        # if uuid in meta_group:
+        #     del meta_group[uuid]
 
+    @file_handle
+    def batch_remove_time_series(
+        self, metadata_list: list[TimeSeriesMetadata], context: Any = None
+    ) -> None:
+        """Remove multiple time series arrays in a single operation.
+
+        Parameters
+        ----------
+        metadata_list : list[TimeSeriesMetadata]
+            List of metadata for the time series to remove
+        context : Any, optional
+            Optional context data
+        """
+        root = context[self.HDF5_TS_ROOT_PATH]
         meta_group = context[self.HDF5_TS_METADATA_ROOT_PATH]
-        if uuid in meta_group:
-            del meta_group[uuid]
+
+        for metadata in metadata_list:
+            uuid = str(metadata.time_series_uuid)
+            if uuid in root:
+                del root[uuid]
+
+            if uuid in meta_group:
+                del meta_group[uuid]
+
+    def massive_batch_remove(self, metadata_list: list[TimeSeriesMetadata]) -> None:
+        """Ultra-fast removal for very large numbers of time series (10K+)."""
+        import os
+        import shutil
+
+        # Create a set of UUIDs to remove for fast lookups
+        uuids_to_remove = {str(metadata.time_series_uuid) for metadata in metadata_list}
+
+        # Create temporary file path
+        temp_file = self._fpath.with_suffix(".temp.h5")
+
+        # Copy only what we want to keep to the new file
+        with h5py.File(self._fpath, "r") as src_file, h5py.File(temp_file, "w") as dst_file:
+            # Copy all groups except time series data
+            for key in src_file.keys():
+                if key != self.HDF5_TS_ROOT_PATH and key != self.HDF5_TS_METADATA_ROOT_PATH:
+                    h5py.h5o.copy(
+                        src_file.id, key.encode("utf-8"), dst_file.id, key.encode("utf-8")
+                    )
+
+            # Create the main groups
+            ts_root = dst_file.create_group(self.HDF5_TS_ROOT_PATH)
+            meta_root = dst_file.create_group(self.HDF5_TS_METADATA_ROOT_PATH)
+
+            # Copy attributes
+            for attr_name, attr_value in src_file[self.HDF5_TS_ROOT_PATH].attrs.items():
+                ts_root.attrs[attr_name] = attr_value
+
+            # Copy only time series we want to keep
+            src_root = src_file[self.HDF5_TS_ROOT_PATH]
+            for uuid in src_root:
+                if uuid not in uuids_to_remove:
+                    h5py.h5o.copy(
+                        src_file.id,
+                        f"{self.HDF5_TS_ROOT_PATH}/{uuid}".encode("utf-8"),
+                        dst_file.id,
+                        f"{self.HDF5_TS_ROOT_PATH}/{uuid}".encode("utf-8"),
+                    )
+
+        # Replace original file with new one
+        os.remove(self._fpath)
+        shutil.move(temp_file, self._fpath)
 
     def serialize(
         self,

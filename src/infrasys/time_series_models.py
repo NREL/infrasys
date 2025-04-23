@@ -228,6 +228,14 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
 
 
+class DeterministicTimeSeries(TimeSeriesData):
+    """Defines a time array with a single dimension of floats."""
+
+    data: NDArray | pint.Quantity
+    resolution: timedelta
+    initial_time: datetime
+
+
 # TODO:
 # read CSV and Parquet and convert each column to a SingleTimeSeries
 
@@ -377,8 +385,37 @@ class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadataBase):
         return "SingleTimeSeriesScalingFactor"
 
 
+class DeterministicMetadataBase(TimeSeriesMetadata, abc.ABC):
+    """Base class for SingleTimeSeries metadata."""
+
+    initial_time: datetime
+    resolution: timedelta
+    interval: timedelta
+    horizon: timedelta
+    window_count: int
+    type: Literal["DeterministicTimeSeries"]
+
+    @staticmethod
+    def get_time_series_data_type() -> Type:
+        return DeterministicMetadata
+
+
+class DeterministicMetadata(DeterministicMetadataBase):
+    """Defines the metadata for a SingleTimeSeries."""
+
+    type: Literal["DeterministicMetadata"] = "DeterministicMetadata"
+
+    @staticmethod
+    def get_time_series_type_str() -> str:
+        return "DeterministicMetadata"
+
+
 TimeSeriesMetadataUnion = Annotated[
-    Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata],
+    Union[
+        SingleTimeSeriesMetadata,
+        SingleTimeSeriesScalingFactorMetadata,
+        DeterministicMetadata,
+    ],
     Field(discriminator="type"),
 ]
 

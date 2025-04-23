@@ -290,7 +290,10 @@ class TimeSeriesMetadataStore:
         ]
 
     def list_metadata_with_time_series_uuid(
-        self, time_series_uuid: UUID, limit: int | None = None
+        self,
+        time_series_uuid: UUID,
+        limit: int | None = None,
+        connection: sqlite3.Connection | None = None,
     ) -> list[TimeSeriesMetadata]:
         """Return metadata attached to the given time_series_uuid.
 
@@ -303,7 +306,6 @@ class TimeSeriesMetadataStore:
         """
         params = (str(time_series_uuid),)
         limit_str = "" if limit is None else f"LIMIT {limit}"
-        # Use the denormalized view
         query = f"""
         SELECT
             metadata_uuid
@@ -311,11 +313,44 @@ class TimeSeriesMetadataStore:
         WHERE
             time_series_uuid = ? {limit_str}
         """
-        cur = self._con.cursor()
+        con = connection or self._con
+        breakpoint()
+        cur = con.cursor()
         rows = execute(cur, query, params=params).fetchall()
         return [
             self._cache_metadata[UUID(x[0])] for x in rows if UUID(x[0]) in self._cache_metadata
         ]
+
+    def list_metadata_with_time_series_uuids(
+        self,
+        time_series_uuids: list[UUID],
+        connection: sqlite3.Connection | None = None,
+    ) -> list[TimeSeriesMetadata]:
+        """Return metadata attached to the given time_series_uuid.
+
+        Parameters
+        ----------
+        time_series_uuid
+            The UUID of the time series.
+        limit
+            The maximum number of metadata to return. If None, all metadata are returned.
+        """
+        query = f"""
+        SELECT DISTINCT
+            metadata_uuid
+        FROM {TIME_SERIES_ASSOCIATIONS_TABLE}
+        WHERE
+            time_series_uuid = ?
+        """
+        con = connection or self._con
+        cur = con.cursor()
+        for uuid in time_series_uuids:
+            execute(cur, query, params=(str(uuid),))
+            for row in cur:
+                metadata_uuid_str = row[0]
+                metadata_uuid_obj = UUID(metadata_uuid_str)
+                if metadata_uuid_obj in self._cache_metadata:
+                    yield self._cache_metadata[metadata_uuid_obj]
 
     def list_rows(
         self,
@@ -393,13 +428,53 @@ class TimeSeriesMetadataStore:
         query = f"DELETE FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE metadata_uuid = ?"
         cur.execute(query, (str(metadata.uuid),))
 
-        if connection is None:
+        if con is None:
             con.commit()
 
         if metadata.uuid in self._cache_metadata:
             return self._cache_metadata.pop(metadata.uuid)
         else:
             return metadata
+
+    def batch_remove_by_metadata(
+        self,
+        metadata_list: list[TimeSeriesMetadata],
+        connection: sqlite3.Connection | None = None,
+        sqlite_max_vars: int = 999,
+    ) -> list[TimeSeriesMetadata]:
+        """Remove multiple associations for a list of metadata."""
+        con = connection or self._con
+        cur = con.cursor()
+        metadata_uuids = [str(meta.uuid) for meta in metadata_list]
+        if not metadata_uuids:  # Should not happen if metadata_list is not empty, but safe check
+            return []
+        effective_batch_size = max(1, sqlite_max_vars)
+
+        cur = con.cursor()
+        try:
+            for i in range(0, len(metadata_uuids), effective_batch_size):
+                chunk = metadata_uuids[i : i + effective_batch_size]
+                chunk_uuid_strings = tuple(meta for meta in chunk)
+
+                if not chunk_uuid_strings:  # Should not happen, but safeguard
+                    continue
+
+                placeholders = ",".join("?" * len(chunk_uuid_strings))
+                query = f"DELETE FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE metadata_uuid IN ({placeholders})"
+
+                cur.execute(query, chunk_uuid_strings)
+        finally:
+            cur.close()
+
+        processed_metadata = []
+        for metadata_obj in metadata_list:
+            uuid_to_remove = metadata_obj.uuid
+            if uuid_to_remove in self._cache_metadata:
+                processed_metadata.append(self._cache_metadata.pop(uuid_to_remove))
+            else:
+                processed_metadata.append(metadata_obj)
+
+        return processed_metadata
 
     def sql(self, query: str, params: Sequence[str] = ()) -> list[tuple]:
         """Run a SQL query on the time series metadata table."""
