@@ -67,4 +67,17 @@ Users can customize time series behavior with these flags passed to the `System`
   is likely to happen on an HPC compute node, set this parameter to an alternate location (such as
   `/tmp/scratch` on NREL's HPC systems).
 
+There are three possible things that will happen
+with the storage class:
+
+1. we create a file on-disk on a temporary location that will be erased (if the
+   user did not serialize the system) once the process
+   exit.
+2. we create a file on a folder that is provided by the user. In this case, we
+   check if the default file name exist in that folder. If so, we raise a warning
+   else we create the file in the provided location.
+3. we create an in-memory representation and it never gets written to disk and it gets wiped once the process exit.
+
+The only time we preserve the storage is when we call `system.to_json` or `system.convert_storage`
+
 Refer to the [Time Series API](#time-series-api) for more information.
