@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 from uuid import UUID
 
-import orjson
 from loguru import logger
 
 from infrasys import (
@@ -54,7 +53,7 @@ class TimeSeriesMetadataStore:
         rows = [dict(zip(columns, row)) for row in rows]
         for row in rows:
             # Features require special handling due to special indexing that we perform.
-            features = orjson.loads(row.get("features")) or {}
+            features = json.loads(row.get("features")) or {}
             if features and isinstance(features[0], dict):
                 features = features[0]
             row["features"] = features
@@ -540,7 +539,7 @@ def _make_features_dict(features: dict[str, Any]) -> dict[str, Any]:
 
 def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
     # data = json.loads(text)
-    metadata = orjson.loads(data.pop("serialization_info"))[TYPE_METADATA]
+    metadata = json.loads(data.pop("serialization_info"))[TYPE_METADATA]
     data.update({k: metadata.pop(k) for k in ["quantity_metadata", "normalization"]})
     validated_metadata = SerializedTypeMetadata.validate_python(metadata)
     metadata = deserialize_value(data, validated_metadata)
