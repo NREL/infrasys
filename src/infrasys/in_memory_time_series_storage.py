@@ -3,17 +3,17 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeAlias
-
-from numpy.typing import NDArray
 from uuid import UUID
+
 from loguru import logger
+from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
-    SingleTimeSeries,
-    SingleTimeSeriesMetadata,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
+    SingleTimeSeries,
+    SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
@@ -104,9 +104,9 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         assert ts_data is not None
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             resolution=metadata.resolution,
-            initial_time=start_time or metadata.initial_time,
+            initial_timestamp=start_time or metadata.initial_timestamp,
             data=ts_data,
             normalization=metadata.normalization,
         )
@@ -132,7 +132,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         assert ts_timestamps is not None
         return NonSequentialTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             data=ts_data,
             timestamps=ts_timestamps,
             normalization=metadata.normalization,

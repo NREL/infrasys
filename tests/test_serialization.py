@@ -1,28 +1,29 @@
 import json
-from pathlib import Path
-import random
 import os
+import random
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Type
 
 import numpy as np
-from numpy._typing import NDArray
 import pint
 import pytest
+from numpy._typing import NDArray
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
 
-from infrasys import Location, SingleTimeSeries, NonSequentialTimeSeries
+from infrasys import Location, NonSequentialTimeSeries, SingleTimeSeries
 from infrasys.component import Component
-from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
-from infrasys.time_series_models import TimeSeriesStorageType, TimeSeriesData
+from infrasys.quantities import ActivePower, Distance
+from infrasys.time_series_models import TimeSeriesData, TimeSeriesStorageType
+
 from .models.simple_system import (
-    SimpleSystem,
     SimpleBus,
     SimpleGenerator,
     SimpleSubsystem,
+    SimpleSystem,
 )
 
 TS_STORAGE_OPTIONS = (
@@ -155,9 +156,7 @@ def test_serialize_nonsequential_time_series(tmp_path, time_series_storage_type)
     timestamps = [
         datetime(year=2030, month=1, day=1) + timedelta(seconds=5 * i) for i in range(length)
     ]
-    ts = NonSequentialTimeSeries.from_array(
-        data=data, variable_name=variable_name, timestamps=timestamps
-    )
+    ts = NonSequentialTimeSeries.from_array(data=data, name=variable_name, timestamps=timestamps)
     system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
     filename = tmp_path / "system.json"
     system.to_json(filename)
@@ -232,7 +231,7 @@ def test_with_single_time_series_quantity(tmp_path):
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == length
     assert ts.resolution == resolution
-    assert ts.initial_time == initial_time
+    assert ts.initial_timestamp == initial_time
     assert isinstance(ts2.data.magnitude, np.ndarray)
     assert np.array_equal(ts2.data.magnitude, np.array(range(length)))
 
@@ -248,9 +247,7 @@ def test_with_nonsequential_time_series_quantity(tmp_path):
     timestamps = [
         datetime(year=2030, month=1, day=1) + timedelta(seconds=100 * i) for i in range(10)
     ]
-    ts = NonSequentialTimeSeries.from_array(
-        data=data, variable_name=variable_name, timestamps=timestamps
-    )
+    ts = NonSequentialTimeSeries.from_array(data=data, name=variable_name, timestamps=timestamps)
     system.add_time_series(ts, gen)
 
     sys_file = tmp_path / "system.json"

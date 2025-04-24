@@ -2,8 +2,8 @@
 
 from datetime import datetime, timedelta
 
-import pytest
 import numpy as np
+import pytest
 
 from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower
@@ -40,7 +40,7 @@ def test_nonsequential_time_series_attributes(data, timestamps, variable_name):
     length = 4
     ts = NonSequentialTimeSeries.from_array(
         data=data,
-        variable_name=variable_name,
+        name=variable_name,
         timestamps=timestamps,
     )
     assert isinstance(ts, NonSequentialTimeSeries)
@@ -53,7 +53,7 @@ def test_invalid_sequence_length(data, timestamps, variable_name):
     """Check that time series has at least 2 elements."""
     with pytest.raises(ValueError, match="length must be at least 2"):
         NonSequentialTimeSeries.from_array(
-            data=[data[0]], variable_name=variable_name, timestamps=[timestamps[0]]
+            data=[data[0]], name=variable_name, timestamps=[timestamps[0]]
         )
 
 
@@ -66,9 +66,7 @@ def test_duplicate_timestamps(data, variable_name):
         datetime(2020, 5, 20),
     ]
     with pytest.raises(ValueError, match="Timestamps must be unique"):
-        NonSequentialTimeSeries.from_array(
-            data=data, variable_name=variable_name, timestamps=timestamps
-        )
+        NonSequentialTimeSeries.from_array(data=data, name=variable_name, timestamps=timestamps)
 
 
 def test_chronological_timestamps(data, variable_name):
@@ -80,9 +78,7 @@ def test_chronological_timestamps(data, variable_name):
         datetime(2020, 5, 20),
     ]
     with pytest.raises(ValueError, match="chronological order"):
-        NonSequentialTimeSeries.from_array(
-            data=data, variable_name=variable_name, timestamps=timestamps
-        )
+        NonSequentialTimeSeries.from_array(data=data, name=variable_name, timestamps=timestamps)
 
 
 def test_nonsequential_time_series_attributes_with_quantity(
@@ -93,7 +89,7 @@ def test_nonsequential_time_series_attributes_with_quantity(
 
     ts = NonSequentialTimeSeries.from_array(
         data=quantity_data,
-        variable_name=variable_name,
+        name=variable_name,
         timestamps=timestamps,
     )
     assert isinstance(ts, NonSequentialTimeSeries)
@@ -109,7 +105,7 @@ def test_normalization(data, timestamps, variable_name):
     ts = NonSequentialTimeSeries.from_array(
         data=data,
         timestamps=timestamps,
-        variable_name=variable_name,
+        name=variable_name,
         normalization=NormalizationMax(),
     )
     assert isinstance(ts, NonSequentialTimeSeries)
@@ -125,7 +121,7 @@ def test_normalization_quantity(quantity_data, timestamps, variable_name):
     ts = NonSequentialTimeSeries.from_array(
         data=quantity_data,
         timestamps=timestamps,
-        variable_name=variable_name,
+        name=variable_name,
         normalization=NormalizationMax(),
     )
     assert isinstance(ts, NonSequentialTimeSeries)

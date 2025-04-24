@@ -1,6 +1,6 @@
 import pytest
 
-from infrasys.db_migrations import needs_migration
+from infrasys.db_migrations import metadata_needs_migration
 from infrasys.time_series_metadata_store import TimeSeriesMetadataStore
 from infrasys.utils.sqlite import create_in_memory_db
 
@@ -17,7 +17,7 @@ def test_metadata_version_detection():
     metadata_store = TimeSeriesMetadataStore(conn, initialize=True)
 
     assert isinstance(metadata_store, TimeSeriesMetadataStore)
-    assert not needs_migration(conn)
+    assert not metadata_needs_migration(conn)
 
 
 def test_migrate_old_system(legacy_system):

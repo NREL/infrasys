@@ -9,11 +9,24 @@ from infrasys.utils.sqlite import execute
 def create_associations_table(
     connection: sqlite3.Connection, table_name=TIME_SERIES_ASSOCIATIONS_TABLE
 ) -> bool:
+    """Create the time series associations table schema on a DB connection.
+
+    Parameters
+    ----------
+    connection: sqlite3.Connection
+        SQLite connection to the metadata store database.
+    table_name: str, default: 'time_series_associations'
+        Name of the table to create.
+
+    Returns
+    -------
+    bool
+        True if the table was created succesfully.
+    """
     schema = [
         "id INTEGER PRIMARY KEY",
         "time_series_uuid TEXT NOT NULL",
         "time_series_type TEXT NOT NULL",
-        "time_series_category TEXT NOT NULL",
         "initial_timestamp TEXT",
         "resolution TEXT NULL",
         "horizon TEXT",
@@ -25,11 +38,13 @@ def create_associations_table(
         "owner_type TEXT NOT NULL",
         "owner_category TEXT NOT NULL",
         "features TEXT NOT NULL",
-        "metadata_uuid TEXT NOT NULL",
+        "scaling_factor_multiplier TEXT NULL",
+        "serialization_info TEXT NOT NULL",
+        "uuid TEXT NOT NULL",
     ]
     schema_text = ",".join(schema)
     cur = connection.cursor()
-    execute(cur, f"CREATE TABLE {TIME_SERIES_ASSOCIATIONS_TABLE}({schema_text})")
+    execute(cur, f"CREATE TABLE {table_name}({schema_text})")
     logger.debug("Created time series associations table")
 
     # Return true if the table creation was succesfull

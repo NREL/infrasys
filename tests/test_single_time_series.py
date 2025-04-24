@@ -2,8 +2,8 @@
 
 from datetime import datetime, timedelta
 
-import pytest
 import numpy as np
+import pytest
 
 from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower
@@ -17,11 +17,11 @@ def test_single_time_series_attributes():
     variable_name = "active_power"
     data = range(length)
     ts = SingleTimeSeries.from_array(
-        data=data, variable_name=variable_name, initial_time=start, resolution=resolution
+        data=data, name=variable_name, initial_timestamp=start, resolution=resolution
     )
     assert ts.length == length
     assert ts.resolution == resolution
-    assert ts.initial_time == start
+    assert ts.initial_timestamp == start
     assert isinstance(ts.data, np.ndarray)
     assert ts.data[-1] == length - 1
 
@@ -37,7 +37,7 @@ def test_from_array_construction():
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == length
     assert ts.resolution == resolution
-    assert ts.initial_time == start
+    assert ts.initial_timestamp == start
     assert isinstance(ts.data, np.ndarray)
     assert ts.data[-1] == length - 1
 
@@ -65,7 +65,7 @@ def test_from_time_array_constructor():
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == length
     assert ts.resolution == resolution
-    assert ts.initial_time == initial_time
+    assert ts.initial_timestamp == initial_time
     assert isinstance(ts.data, np.ndarray)
     assert ts.data[-1] == length - 1
 
@@ -82,7 +82,7 @@ def test_with_quantity():
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == length
     assert ts.resolution == resolution
-    assert ts.initial_time == initial_time
+    assert ts.initial_timestamp == initial_time
     assert isinstance(ts.data, ActivePower)
     assert ts.data[-1].magnitude == length - 1
 

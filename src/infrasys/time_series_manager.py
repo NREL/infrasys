@@ -215,7 +215,7 @@ class TimeSeriesManager:
         """Return a time series array by key."""
         metadata = self._metadata_store.get_metadata(
             owner,
-            variable_name=key.variable_name,
+            variable_name=key.name,
             time_series_type=key.time_series_type.__name__,
             **key.features,
         )
@@ -516,11 +516,11 @@ def make_time_series_key(metadata) -> TimeSeriesKey:
 @make_time_series_key.register(SingleTimeSeriesMetadata)
 def _(metadata: SingleTimeSeriesMetadata) -> TimeSeriesKey:
     return SingleTimeSeriesKey(
-        initial_time=metadata.initial_time,
+        initial_timestamp=metadata.initial_timestamp,
         resolution=metadata.resolution,
         length=metadata.length,
         features=metadata.features,
-        variable_name=metadata.variable_name,
+        name=metadata.name,
         time_series_type=SingleTimeSeries,
     )
 
@@ -530,7 +530,7 @@ def _(metadata: NonSequentialTimeSeriesMetadata) -> TimeSeriesKey:
     return NonSequentialTimeSeriesKey(
         length=metadata.length,
         features=metadata.features,
-        variable_name=metadata.variable_name,
+        name=metadata.name,
         time_series_type=NonSequentialTimeSeries,
     )
 

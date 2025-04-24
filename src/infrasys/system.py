@@ -19,11 +19,15 @@ from infrasys.component import (
     Component,
 )
 from infrasys.component_manager import ComponentManager
-from infrasys.db_migrations import migrate_legacy_schema, needs_migration
+from infrasys.db_migrations import metadata_needs_migration, migrate_legacy_schema
 from infrasys.exceptions import (
     ISConflictingArguments,
     ISFileExists,
     ISOperationNotAllowed,
+)
+from infrasys.migrations.metadata_migration import (
+    migrate_component_metadata,
+    needs_metadata_miration,
 )
 from infrasys.models import make_label
 from infrasys.serialization import (
@@ -307,7 +311,7 @@ class System:
         con = create_in_memory_db()
         restore(con, ts_path / data["time_series"]["directory"] / System.DB_FILENAME)
 
-        if needs_migration(con):
+        if metadata_needs_migration(con):
             migrate_legacy_schema(con)
 
         time_series_manager = TimeSeriesManager.deserialize(
@@ -338,6 +342,9 @@ class System:
                     system.data_format_version,
                 )
         system.deserialize_system_attributes(system_data)
+
+        if needs_metadata_miration(system_data["components"][0]):
+            system_data["components"] = migrate_component_metadata(system_data["components"])
         system._deserialize_components(system_data["components"])
         system._deserialize_supplemental_attributes(system_data["supplemental_attributes"])
         logger.info("Deserialized system {}", system.label)
@@ -856,7 +863,7 @@ class System:
                 self.remove_time_series(
                     component,
                     time_series_type=metadata.get_time_series_data_type(),
-                    variable_name=metadata.variable_name,
+                    variable_name=metadata.name,
                     **metadata.features,
                 )
         self._component_mgr.remove(component, cascade_down=cascade_down, force=force)
@@ -927,7 +934,7 @@ class System:
                 self.remove_time_series(
                     attribute,
                     time_series_type=metadata.get_time_series_data_type(),
-                    variable_name=metadata.variable_name,
+                    variable_name=metadata.name,
                     **metadata.features,
                 )
         return self._supplemental_attr_mgr.remove(attribute)
@@ -1442,9 +1449,9 @@ class System:
         for component_dict in components:
             component = self._try_deserialize_component(component_dict, cached_types)
             if component is None:
-                metadata = SerializedTypeMetadata(**component_dict[TYPE_METADATA])
-                assert isinstance(metadata.fields, SerializedBaseType)
-                component_type = cached_types.get_type(metadata.fields)
+                metadata = SerializedTypeMetadata.validate_python(component_dict[TYPE_METADATA])
+                assert isinstance(metadata, SerializedBaseType)
+                component_type = cached_types.get_type(metadata)
                 skipped_types[component_type].append(component_dict)
             else:
                 deserialized_types.add(type(component))
@@ -1486,8 +1493,8 @@ class System:
         if values is None:
             return None
 
-        metadata = SerializedTypeMetadata(**component[TYPE_METADATA])
-        component_type = cached_types.get_type(metadata.fields)
+        metadata = SerializedTypeMetadata.validate_python(component[TYPE_METADATA])
+        component_type = cached_types.get_type(metadata)
         actual_component = component_type(**values)
         self._components.add(actual_component, deserialization_in_progress=True)
         return actual_component
@@ -1498,16 +1505,14 @@ class System:
         values = {}
         for field, value in component.items():
             if isinstance(value, dict) and TYPE_METADATA in value:
-                metadata = SerializedTypeMetadata(**value[TYPE_METADATA])
-                if isinstance(metadata.fields, SerializedComponentReference):
-                    composed_value = self._deserialize_composed_value(
-                        metadata.fields, cached_types
-                    )
+                metadata = SerializedTypeMetadata.validate_python(value[TYPE_METADATA])
+                if isinstance(metadata, SerializedComponentReference):
+                    composed_value = self._deserialize_composed_value(metadata, cached_types)
                     if composed_value is None:
                         return None
                     values[field] = composed_value
-                elif isinstance(metadata.fields, SerializedQuantityType):
-                    quantity_type = cached_types.get_type(metadata.fields)
+                elif isinstance(metadata, SerializedQuantityType):
+                    quantity_type = cached_types.get_type(metadata)
                     values[field] = quantity_type(value=value["value"], units=value["units"])
                 else:
                     msg = f"Bug: unhandled type: {field=} {value=}"
@@ -1517,11 +1522,11 @@ class System:
                 and value
                 and isinstance(value[0], dict)
                 and TYPE_METADATA in value[0]
-                and value[0][TYPE_METADATA]["fields"]["serialized_type"]
+                and value[0][TYPE_METADATA]["serialized_type"]
                 == SerializedType.COMPOSED_COMPONENT.value
             ):
-                metadata = SerializedTypeMetadata(**value[0][TYPE_METADATA])
-                assert isinstance(metadata.fields, SerializedComponentReference)
+                metadata = SerializedTypeMetadata.validate_python(value[0][TYPE_METADATA])
+                assert isinstance(metadata, SerializedComponentReference)
                 composed_values = self._deserialize_composed_list(value, cached_types)
                 if composed_values is None:
                     return None
@@ -1544,11 +1549,11 @@ class System:
     ) -> list[Any] | None:
         deserialized_components = []
         for component in components:
-            metadata = SerializedTypeMetadata(**component[TYPE_METADATA])
-            assert isinstance(metadata.fields, SerializedComponentReference)
-            component_type = cached_types.get_type(metadata.fields)
+            metadata = SerializedTypeMetadata.validate_python(component[TYPE_METADATA])
+            assert isinstance(metadata, SerializedComponentReference)
+            component_type = cached_types.get_type(metadata)
             if cached_types.allowed_to_deserialize(component_type):
-                deserialized_components.append(self._components.get_by_uuid(metadata.fields.uuid))
+                deserialized_components.append(self._components.get_by_uuid(metadata.uuid))
             else:
                 return None
         return deserialized_components
@@ -1559,8 +1564,8 @@ class System:
         """Deserialize supplemental_attributes from dictionaries and add them to the system."""
         cached_types = CachedTypeHelper()
         for sa_dict in supplemental_attributes:
-            metadata = SerializedTypeMetadata(**sa_dict[TYPE_METADATA])
-            supplemental_attribute_type = cached_types.get_type(metadata.fields)
+            metadata = SerializedTypeMetadata.validate_python(sa_dict[TYPE_METADATA])
+            supplemental_attribute_type = cached_types.get_type(metadata)
             values = self._deserialize_fields(sa_dict, cached_types)
             attr = supplemental_attribute_type(**values)
             self._supplemental_attr_mgr.add(None, attr, deserialization_in_progress=True)

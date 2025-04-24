@@ -9,10 +9,10 @@ from typing import (
     Any,
     Literal,
     Optional,
+    Sequence,
     Type,
     TypeAlias,
     Union,
-    Sequence,
 )
 from uuid import UUID
 
@@ -23,9 +23,9 @@ from numpy.typing import NDArray
 from pydantic import (
     Field,
     WithJsonSchema,
+    computed_field,
     field_serializer,
     field_validator,
-    computed_field,
     model_validator,
 )
 from typing_extensions import Annotated
@@ -33,9 +33,8 @@ from typing_extensions import Annotated
 from infrasys.exceptions import (
     ISConflictingArguments,
 )
-from infrasys.models import InfraSysBaseModelWithIdentifers, InfraSysBaseModel
+from infrasys.models import InfraSysBaseModel, InfraSysBaseModelWithIdentifers
 from infrasys.normalization import NormalizationModel
-
 
 TIME_COLUMN = "timestamp"
 VALUE_COLUMN = "value"
@@ -57,13 +56,13 @@ class TimeSeriesStorageType(StrEnum):
 class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Base class for all time series models"""
 
-    variable_name: str
+    name: str
     normalization: NormalizationModel = None
 
     @property
     def summary(self) -> str:
         """Return the variable_name of the time series array with its type."""
-        return f"{self.__class__.__name__}.{self.variable_name}"
+        return f"{self.__class__.__name__}.{self.name}"
 
     @staticmethod
     @abc.abstractmethod
@@ -76,7 +75,7 @@ class SingleTimeSeries(TimeSeriesData):
 
     data: NDArray | pint.Quantity
     resolution: timedelta
-    initial_time: datetime
+    initial_timestamp: datetime
 
     @computed_field
     def length(self) -> int:
@@ -120,8 +119,8 @@ class SingleTimeSeries(TimeSeriesData):
     def from_array(
         cls,
         data: ISArray,
-        variable_name: str,
-        initial_time: datetime,
+        name: str,
+        initial_timestamp: datetime,
         resolution: timedelta,
         normalization: NormalizationModel = None,
     ) -> "SingleTimeSeries":
@@ -156,8 +155,8 @@ class SingleTimeSeries(TimeSeriesData):
 
         return SingleTimeSeries(
             data=data,  # type: ignore
-            variable_name=variable_name,
-            initial_time=initial_time,
+            name=name,
+            initial_timestamp=initial_timestamp,
             resolution=resolution,
             normalization=normalization,
         )
@@ -166,7 +165,7 @@ class SingleTimeSeries(TimeSeriesData):
     def from_time_array(
         cls,
         data: ISArray,
-        variable_name: str,
+        name: str,
         time_index: Sequence[datetime],
         normalization: NormalizationModel = None,
     ) -> "SingleTimeSeries":
@@ -195,15 +194,15 @@ class SingleTimeSeries(TimeSeriesData):
 
         """
         # Infer initial time from the time_index.
-        initial_time = time_index[0]
+        initial_timestamp = time_index[0]
 
         # This does not cover changes mult-resolution time index.
         resolution = time_index[1] - time_index[0]
 
         return SingleTimeSeries.from_array(
             data,
-            variable_name,
-            initial_time,
+            name,
+            initial_timestamp,
             resolution,
             normalization=normalization,
         )
@@ -211,7 +210,7 @@ class SingleTimeSeries(TimeSeriesData):
     def make_timestamps(self) -> NDArray:
         """Return the timestamps as a numpy array."""
         return pd.date_range(
-            start=self.initial_time, periods=len(self.data), freq=self.resolution
+            start=self.initial_timestamp, periods=len(self.data), freq=self.resolution
         ).values
 
     @staticmethod
@@ -260,7 +259,7 @@ class QuantityMetadata(InfraSysBaseModel):
 class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     """Defines common metadata for all time series."""
 
-    variable_name: str
+    name: str
     time_series_uuid: UUID
     features: dict[str, Any] = {}
     quantity_metadata: Optional[QuantityMetadata] = None
@@ -270,7 +269,7 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     @property
     def label(self) -> str:
         """Return the variable_name of the time series array with its type."""
-        return f"{self.type}.{self.variable_name}"
+        return f"{self.type}.{self.name}"
 
     @staticmethod
     @abc.abstractmethod
@@ -288,7 +287,7 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
     """Base class for SingleTimeSeries metadata."""
 
     length: int
-    initial_time: datetime
+    initial_timestamp: datetime
     resolution: timedelta
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor"]
 
@@ -305,9 +304,9 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
             else None
         )
         return cls(
-            variable_name=time_series.variable_name,
+            name=time_series.name,
             resolution=time_series.resolution,
-            initial_time=time_series.initial_time,
+            initial_timestamp=time_series.initial_timestamp,
             length=time_series.length,  # type: ignore
             time_series_uuid=time_series.uuid,
             features=features,
@@ -326,16 +325,16 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
         if start_time is None:
             index = 0
         else:
-            if start_time < self.initial_time:
+            if start_time < self.initial_timestamp:
                 msg = "{start_time=} is less than {self.initial_time=}"
                 raise ISConflictingArguments(msg)
-            if start_time >= self.initial_time + self.length * self.resolution:
+            if start_time >= self.initial_timestamp + self.length * self.resolution:
                 msg = f"{start_time=} is too large: {self=}"
                 raise ISConflictingArguments(msg)
-            diff = start_time - self.initial_time
+            diff = start_time - self.initial_timestamp
             if (diff % self.resolution).total_seconds() != 0.0:
                 msg = (
-                    f"{start_time=} conflicts with initial_time={self.initial_time} and "
+                    f"{start_time=} conflicts with initial_time={self.initial_timestamp} and "
                     f"resolution={self.resolution}"
                 )
                 raise ISConflictingArguments(msg)
@@ -455,7 +454,7 @@ class NonSequentialTimeSeries(TimeSeriesData):
         cls,
         data: ISArray,
         timestamps: Sequence[datetime] | NDArray,
-        variable_name: str,
+        name: str,
         normalization: NormalizationModel = None,
     ) -> "NonSequentialTimeSeries":
         """Method of NonSequentialTimeSeries that creates an instance from an array and timestamps.
@@ -482,7 +481,7 @@ class NonSequentialTimeSeries(TimeSeriesData):
         return NonSequentialTimeSeries(
             data=data,  # type: ignore
             timestamps=timestamps,  # type: ignore
-            variable_name=variable_name,
+            name=name,
             normalization=normalization,
         )
 
@@ -525,7 +524,7 @@ class NonSequentialTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
             else None
         )
         return cls(
-            variable_name=time_series.variable_name,
+            name=time_series.name,
             length=time_series.length,  # type: ignore
             time_series_uuid=time_series.uuid,
             features=features,
@@ -552,7 +551,7 @@ class NonSequentialTimeSeriesMetadata(NonSequentialTimeSeriesMetadataBase):
 class TimeSeriesKey(InfraSysBaseModel):
     """Base class for time series keys."""
 
-    variable_name: str
+    name: str
     time_series_type: Type[TimeSeriesData]
     features: dict[str, Any] = {}
 
@@ -561,7 +560,7 @@ class SingleTimeSeriesKey(TimeSeriesKey):
     """Keys for SingleTimeSeries."""
 
     length: int
-    initial_time: datetime
+    initial_timestamp: datetime
     resolution: timedelta
 
 

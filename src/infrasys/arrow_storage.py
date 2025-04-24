@@ -3,22 +3,22 @@
 import atexit
 import shutil
 from datetime import datetime
+from functools import singledispatchmethod
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any, Optional
-from functools import singledispatchmethod
 
 import numpy as np
-from numpy.typing import NDArray
 import pyarrow as pa
 from loguru import logger
+from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
-    SingleTimeSeries,
-    SingleTimeSeriesMetadata,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
+    SingleTimeSeries,
+    SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
     TimeSeriesStorageType,
@@ -166,9 +166,9 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             np_array = np.array(data)
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             resolution=metadata.resolution,
-            initial_time=start_time or metadata.initial_time,
+            initial_timestamp=start_time or metadata.initial_timestamp,
             data=np_array,
             normalization=metadata.normalization,
         )
@@ -199,7 +199,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         np_time_array = np.array(timestamps).astype("O")  # convert to datetime object
         return NonSequentialTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             data=np_data_array,
             timestamps=np_time_array,
             normalization=metadata.normalization,

@@ -792,7 +792,7 @@ def test_chronfiy_storage():
 
     for expected_ts in time_series:
         actual_ts = system.get_time_series(
-            gen, time_series_type=SingleTimeSeries, variable_name=expected_ts.variable_name
+            gen, time_series_type=SingleTimeSeries, variable_name=expected_ts.name
         )
         assert np.array_equal(expected_ts.data, actual_ts.data)
 
@@ -826,7 +826,7 @@ def test_bulk_add_time_series():
             actual_ts = system.get_time_series(
                 gen,
                 time_series_type=SingleTimeSeries,
-                variable_name=expected_ts.variable_name,
+                variable_name=expected_ts.name,
                 connection=conn,
             )
             assert np.array_equal(expected_ts.data, actual_ts.data)

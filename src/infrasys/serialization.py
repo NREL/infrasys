@@ -1,14 +1,14 @@
 import enum
 import importlib
-from typing import Any, Literal, Annotated, Type, Union
+from typing import Annotated, Any, Literal, Type, TypeAlias, Union
 from uuid import UUID
 
-from pydantic import Field, field_serializer
+from pydantic import Field, TypeAdapter, field_serializer
 
 from infrasys.models import InfraSysBaseModel
 
-
 TYPE_METADATA = "__metadata__"
+SERIALIZED_FIELDS = {"quantity_metadata", "normalization"}
 
 
 class SerializedType(str, enum.Enum):
@@ -24,6 +24,7 @@ class SerializedTypeBase(InfraSysBaseModel):
 
     module: str
     type: str
+    model_config = {"extra": "ignore"}
 
 
 class SerializedBaseType(SerializedTypeBase):
@@ -47,10 +48,16 @@ class SerializedQuantityType(SerializedTypeBase):
     serialized_type: Literal[SerializedType.QUANTITY] = SerializedType.QUANTITY
 
 
-class SerializedTypeMetadata(InfraSysBaseModel):
-    """Serializes information about a type so that it can be de-serialized."""
-
-    fields: Annotated[
+MetadataType: TypeAlias = Annotated[
+    Union[
+        SerializedBaseType,
+        SerializedComponentReference,
+        SerializedQuantityType,
+    ],
+    Field(discriminator="serialized_type"),
+]
+SerializedTypeMetadata: TypeAdapter[MetadataType] = TypeAdapter(
+    Annotated[
         Union[
             SerializedBaseType,
             SerializedComponentReference,
@@ -58,6 +65,7 @@ class SerializedTypeMetadata(InfraSysBaseModel):
         ],
         Field(discriminator="serialized_type"),
     ]
+)
 
 
 class CachedTypeHelper:
@@ -93,8 +101,8 @@ def serialize_value(obj: InfraSysBaseModel, *args, **kwargs) -> dict[str, Any]:
     """Serialize an infrasys object to a dictionary."""
     cls = type(obj)
     data = obj.model_dump(*args, mode="json", round_trip=True, **kwargs)
-    data[TYPE_METADATA] = SerializedTypeMetadata(
-        fields=SerializedBaseType(
+    data[TYPE_METADATA] = SerializedTypeMetadata.validate_python(
+        SerializedBaseType(
             module=cls.__module__,
             type=cls.__name__,
         ),
@@ -115,4 +123,7 @@ def _deserialize_type(module, obj_type) -> Type:
 def deserialize_value(data: dict[str, Any], metadata: SerializedTypeBase) -> Any:
     """Deserialize the value from a dictionary."""
     ctype = deserialize_type(metadata)
-    return ctype(**data)
+    # We ignore any additional data.
+    return ctype.model_validate(
+        {key: value for key, value in data.items() if key in ctype.model_fields}
+    )
