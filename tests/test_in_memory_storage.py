@@ -78,9 +78,7 @@ def test_convert_storage_single_time_series(
 
     assert isinstance(system._time_series_mgr._storage, new_stype)
 
-    ts2 = system.get_time_series(
-        test_generator, time_series_type=SingleTimeSeries, variable_name="load"
-    )
+    ts2 = system.get_time_series(test_generator, time_series_type=SingleTimeSeries, name="load")
     assert np.array_equal(ts2.data_array, test_time_series_data.data_array)
 
 
@@ -129,7 +127,7 @@ def test_convert_storage_nonsequential_time_series(
 
     assert isinstance(system._time_series_mgr._storage, new_stype)
     ts2 = system.get_time_series(
-        test_generator, time_series_type=NonSequentialTimeSeries, variable_name="load"
+        test_generator, time_series_type=NonSequentialTimeSeries, name="load"
     )
     assert np.array_equal(ts2.data_array, test_time_series_data.data_array)
     assert np.array_equal(ts2.timestamps, test_time_series_data.timestamps)

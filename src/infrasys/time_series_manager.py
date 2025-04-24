@@ -175,7 +175,7 @@ class TimeSeriesManager:
     def get(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
@@ -198,7 +198,7 @@ class TimeSeriesManager:
         """
         metadata = self._metadata_store.get_metadata(
             owner,
-            variable_name=variable_name,
+            variable_name=name,
             time_series_type=time_series_type.__name__,
             **features,
         )
@@ -224,7 +224,7 @@ class TimeSeriesManager:
     def has_time_series(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **features,
     ) -> bool:
@@ -233,7 +233,7 @@ class TimeSeriesManager:
         """
         return self._metadata_store.has_time_series_metadata(
             owner,
-            variable_name=variable_name,
+            variable_name=name,
             time_series_type=time_series_type.__name__,
             **features,
         )
@@ -241,7 +241,7 @@ class TimeSeriesManager:
     def list_time_series(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
@@ -251,7 +251,7 @@ class TimeSeriesManager:
         """Return all time series that match the inputs."""
         metadata = self.list_time_series_metadata(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             **features,
         )
@@ -263,29 +263,27 @@ class TimeSeriesManager:
     def list_time_series_keys(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **features: Any,
     ) -> list[TimeSeriesKey]:
         """Return all time series keys that match the inputs."""
         return [
             make_time_series_key(x)
-            for x in self.list_time_series_metadata(
-                owner, variable_name, time_series_type, **features
-            )
+            for x in self.list_time_series_metadata(owner, name, time_series_type, **features)
         ]
 
     def list_time_series_metadata(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **features: Any,
     ) -> list[TimeSeriesMetadata]:
         """Return all time series metadata that match the inputs."""
         return self._metadata_store.list_metadata(
             owner,
-            variable_name=variable_name,
+            variable_name=name,
             time_series_type=time_series_type.__name__,
             **features,
         )
@@ -293,7 +291,7 @@ class TimeSeriesManager:
     def remove(
         self,
         *owners: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         connection: DatabaseConnection | None = None,
         **features: Any,
@@ -310,7 +308,7 @@ class TimeSeriesManager:
         self._handle_read_only()
         metadata = self._metadata_store.remove(
             *owners,
-            variable_name=variable_name,
+            variable_name=name,
             time_series_type=time_series_type.__name__,
             connection=_get_metadata_connection(connection),
             **features,
@@ -321,7 +319,7 @@ class TimeSeriesManager:
             self._storage.remove_time_series(
                 time_series[uuid], connection=_get_data_connection(connection)
             )
-            logger.info("Removed time series {}.{}", time_series_type, variable_name)
+            logger.info("Removed time series {}.{}", time_series_type, name)
 
     def copy(
         self,

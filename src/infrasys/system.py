@@ -863,7 +863,7 @@ class System:
                 self.remove_time_series(
                     component,
                     time_series_type=metadata.get_time_series_data_type(),
-                    variable_name=metadata.name,
+                    name=metadata.name,
                     **metadata.features,
                 )
         self._component_mgr.remove(component, cascade_down=cascade_down, force=force)
@@ -934,7 +934,7 @@ class System:
                 self.remove_time_series(
                     attribute,
                     time_series_type=metadata.get_time_series_data_type(),
-                    variable_name=metadata.name,
+                    name=metadata.name,
                     **metadata.features,
                 )
         return self._supplemental_attr_mgr.remove(attribute)
@@ -1010,7 +1010,7 @@ class System:
         >>> gen2 = system.get_component(Generator, "gen2")
         >>> ts = SingleTimeSeries.from_array(
             data=[0.86, 0.78, 0.81, 0.85, 0.79],
-            variable_name="active_power",
+            name="active_power",
             start_time=datetime(year=2030, month=1, day=1),
             resolution=timedelta(hours=1),
         )
@@ -1058,7 +1058,7 @@ class System:
     def get_time_series(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
@@ -1071,7 +1071,7 @@ class System:
         ----------
         component : Component
             Component to which the time series must be attached.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
@@ -1109,7 +1109,7 @@ class System:
         """
         return self._time_series_mgr.get(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
@@ -1126,7 +1126,7 @@ class System:
     def has_time_series(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: Optional[str] = None,
+        name: Optional[str] = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **features: str,
     ) -> bool:
@@ -1136,7 +1136,7 @@ class System:
         ----------
         component : Component
             Component to check for matching time series.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
@@ -1145,7 +1145,7 @@ class System:
         """
         return self.time_series.has_time_series(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             **features,
         )
@@ -1153,7 +1153,7 @@ class System:
     def list_time_series(
         self,
         component: Component,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
@@ -1165,7 +1165,7 @@ class System:
         ----------
         component : Component
             Component to which the time series must be attached.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
@@ -1184,7 +1184,7 @@ class System:
         """
         return self._time_series_mgr.list_time_series(
             component,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
@@ -1194,7 +1194,7 @@ class System:
     def list_time_series_keys(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **features: Any,
     ) -> list[TimeSeriesKey]:
@@ -1204,7 +1204,7 @@ class System:
         ----------
         owner : Component | SupplementalAttribute
             Component to which the time series must be attached.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
@@ -1219,7 +1219,7 @@ class System:
         """
         return self.time_series.list_time_series_keys(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             **features,
         )
@@ -1227,7 +1227,7 @@ class System:
     def list_time_series_metadata(
         self,
         component: Component,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **features: Any,
     ) -> list[TimeSeriesMetadata]:
@@ -1237,7 +1237,7 @@ class System:
         ----------
         component : Component
             Component to which the time series must be attached.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
@@ -1252,7 +1252,7 @@ class System:
         """
         return self.time_series.list_time_series_metadata(
             component,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             **features,
         )
@@ -1260,7 +1260,7 @@ class System:
     def remove_time_series(
         self,
         *owners: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         **features: Any,
     ) -> None:
@@ -1271,7 +1271,7 @@ class System:
         ----------
         owners
             Affected components or supplemental attributes
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
@@ -1292,7 +1292,7 @@ class System:
         """
         return self._time_series_mgr.remove(
             *owners,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             **features,
         )

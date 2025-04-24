@@ -220,12 +220,10 @@ def test_single_time_series_attach_from_array():
     resolution = timedelta(hours=1)
     ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     system.add_time_series(ts, gen1, gen2)
-    assert system.has_time_series(gen1, variable_name=variable_name)
-    assert system.has_time_series(gen2, variable_name=variable_name)
+    assert system.has_time_series(gen1, name=variable_name)
+    assert system.has_time_series(gen2, name=variable_name)
     assert np.array_equal(
-        system.get_time_series(
-            gen1, time_series_type=SingleTimeSeries, variable_name=variable_name
-        ).data,
+        system.get_time_series(gen1, time_series_type=SingleTimeSeries, name=variable_name).data,
         ts.data,
     )
 
@@ -248,15 +246,15 @@ def test_single_time_series():
         system.add_time_series(gen1, ts)  # type: ignore
 
     system.add_time_series(ts, gen1, gen2)
-    assert system.has_time_series(gen1, variable_name=variable_name)
-    assert system.has_time_series(gen2, variable_name=variable_name)
-    assert system.get_time_series(gen1, variable_name=variable_name) == ts
-    system.remove_time_series(gen1, gen2, variable_name=variable_name)
+    assert system.has_time_series(gen1, name=variable_name)
+    assert system.has_time_series(gen2, name=variable_name)
+    assert system.get_time_series(gen1, name=variable_name) == ts
+    system.remove_time_series(gen1, gen2, name=variable_name)
     with pytest.raises(ISNotStored):
-        system.get_time_series(gen1, variable_name=variable_name)
+        system.get_time_series(gen1, name=variable_name)
 
-    assert not system.has_time_series(gen1, variable_name=variable_name)
-    assert not system.has_time_series(gen2, variable_name=variable_name)
+    assert not system.has_time_series(gen1, name=variable_name)
+    assert not system.has_time_series(gen2, name=variable_name)
 
 
 TS_STORAGE_OPTIONS = (
@@ -334,22 +332,20 @@ def test_time_series_retrieval(storage_type, use_quantity):
     with pytest.raises(ISAlreadyAttached):
         system.add_time_series(ts4, gen, scenario="low", model_year="2035")
 
-    assert system.has_time_series(gen, variable_name=variable_name)
-    assert system.has_time_series(gen, variable_name=variable_name, scenario="high")
-    assert system.has_time_series(
-        gen, variable_name=variable_name, scenario="high", model_year="2030"
-    )
-    assert not system.has_time_series(gen, variable_name=variable_name, model_year="2036")
+    assert system.has_time_series(gen, name=variable_name)
+    assert system.has_time_series(gen, name=variable_name, scenario="high")
+    assert system.has_time_series(gen, name=variable_name, scenario="high", model_year="2030")
+    assert not system.has_time_series(gen, name=variable_name, model_year="2036")
     with pytest.raises(ISOperationNotAllowed):
-        system.get_time_series(gen, variable_name=variable_name, scenario="high")
+        system.get_time_series(gen, name=variable_name, scenario="high")
     with pytest.raises(ISNotStored):
-        system.get_time_series(gen, variable_name=variable_name, scenario="medium")
-    assert len(system.list_time_series(gen, variable_name=variable_name, scenario="high")) == 2
-    assert len(system.list_time_series(gen, variable_name=variable_name)) == 4
-    system.remove_time_series(gen, variable_name=variable_name, scenario="high")
-    assert len(system.list_time_series(gen, variable_name=variable_name)) == 2
-    system.remove_time_series(gen, variable_name=variable_name)
-    assert not system.has_time_series(gen, variable_name=variable_name)
+        system.get_time_series(gen, name=variable_name, scenario="medium")
+    assert len(system.list_time_series(gen, name=variable_name, scenario="high")) == 2
+    assert len(system.list_time_series(gen, name=variable_name)) == 4
+    system.remove_time_series(gen, name=variable_name, scenario="high")
+    assert len(system.list_time_series(gen, name=variable_name)) == 2
+    system.remove_time_series(gen, name=variable_name)
+    assert not system.has_time_series(gen, name=variable_name)
 
 
 @pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
@@ -370,7 +366,7 @@ def test_open_time_series_store(storage_type: TimeSeriesStorageType):
             time_series_arrays.append(ts)
     with system.open_time_series_store() as conn:
         for i in range(5):
-            ts = system.get_time_series(gen, variable_name=f"ts{i}", connection=conn)
+            ts = system.get_time_series(gen, name=f"ts{i}", connection=conn)
             assert np.array_equal(
                 system.get_time_series(gen, f"ts{i}").data, time_series_arrays[i].data
             )
@@ -398,15 +394,15 @@ def test_time_series_removal():
             system.add_time_series(ts, gen, scenario="low", model_year="2030")
             system.add_time_series(ts, gen, scenario="low", model_year="2035")
 
-    system.remove_time_series(gen1, variable_name="active_power")
-    system.remove_time_series(gen1, variable_name="reactive_power")
-    assert not system.list_time_series(gen1, variable_name="active_power")
-    assert not system.list_time_series(gen1, variable_name="reactive_power")
-    assert system.list_time_series(gen2, variable_name="active_power")
-    assert system.list_time_series(gen2, variable_name="reactive_power")
+    system.remove_time_series(gen1, name="active_power")
+    system.remove_time_series(gen1, name="reactive_power")
+    assert not system.list_time_series(gen1, name="active_power")
+    assert not system.list_time_series(gen1, name="reactive_power")
+    assert system.list_time_series(gen2, name="active_power")
+    assert system.list_time_series(gen2, name="reactive_power")
     system.remove_time_series(gen2)
-    assert not system.list_time_series(gen2, variable_name="active_power")
-    assert not system.list_time_series(gen2, variable_name="reactive_power")
+    assert not system.list_time_series(gen2, name="active_power")
+    assert not system.list_time_series(gen2, name="reactive_power")
 
 
 def test_time_series_read_only():
@@ -446,8 +442,8 @@ def test_serialize_time_series_from_array(tmp_path):
     system2 = SimpleSystem.from_json(filename, time_series_read_only=True)
     gen1b = system2.get_component(SimpleGenerator, gen1.name)
     with pytest.raises(ISOperationNotAllowed):
-        system2.remove_time_series(gen1b, variable_name=variable_name)
-    ts2 = system.get_time_series(gen1b, variable_name=variable_name)
+        system2.remove_time_series(gen1b, name=variable_name)
+    ts2 = system.get_time_series(gen1b, name=variable_name)
     assert ts2.data.tolist() == list(data)
 
 
@@ -471,47 +467,45 @@ def test_time_series_slices(storage_type):
     first_timestamp = start
     second_timestamp = start + resolution
     last_timestamp = start + (length - 1) * resolution
-    ts_tmp = system.time_series.get(gen, variable_name=variable_name)
+    ts_tmp = system.time_series.get(gen, name=variable_name)
     assert isinstance(ts_tmp, SingleTimeSeries)
     assert len(ts_tmp.data) == length
-    ts_tmp = system.time_series.get(gen, variable_name=variable_name, length=10)
+    ts_tmp = system.time_series.get(gen, name=variable_name, length=10)
     assert isinstance(ts_tmp, SingleTimeSeries)
     assert len(ts_tmp.data) == 10
-    ts2 = system.time_series.get(
-        gen, variable_name=variable_name, start_time=second_timestamp, length=5
-    )
+    ts2 = system.time_series.get(gen, name=variable_name, start_time=second_timestamp, length=5)
     assert isinstance(ts2, SingleTimeSeries)
     assert len(ts2.data) == 5
     assert ts2.data.tolist() == data[1:6]
 
-    ts_tmp = system.time_series.get(gen, variable_name=variable_name, start_time=second_timestamp)
+    ts_tmp = system.time_series.get(gen, name=variable_name, start_time=second_timestamp)
     assert isinstance(ts_tmp, SingleTimeSeries)
     assert len(ts_tmp.data) == len(data) - 1
 
     with pytest.raises(ISConflictingArguments, match="is less than"):
         system.time_series.get(
             gen,
-            variable_name=variable_name,
+            name=variable_name,
             start_time=first_timestamp - ts.resolution,
             length=5,
         )
     with pytest.raises(ISConflictingArguments, match="is too large"):
         system.time_series.get(
             gen,
-            variable_name=variable_name,
+            name=variable_name,
             start_time=last_timestamp + ts.resolution,
             length=5,
         )
     with pytest.raises(ISConflictingArguments, match="conflicts with initial_time"):
         system.time_series.get(
             gen,
-            variable_name=variable_name,
+            name=variable_name,
             start_time=first_timestamp + timedelta(minutes=1),
         )
     with pytest.raises(ISConflictingArguments, match=r"start_time.*length.*conflicts with"):
         system.time_series.get(
             gen,
-            variable_name=variable_name,
+            name=variable_name,
             start_time=second_timestamp,
             length=len(data),
         )
@@ -792,7 +786,7 @@ def test_chronfiy_storage():
 
     for expected_ts in time_series:
         actual_ts = system.get_time_series(
-            gen, time_series_type=SingleTimeSeries, variable_name=expected_ts.name
+            gen, time_series_type=SingleTimeSeries, name=expected_ts.name
         )
         assert np.array_equal(expected_ts.data, actual_ts.data)
 
@@ -826,7 +820,7 @@ def test_bulk_add_time_series():
             actual_ts = system.get_time_series(
                 gen,
                 time_series_type=SingleTimeSeries,
-                variable_name=expected_ts.name,
+                name=expected_ts.name,
                 connection=conn,
             )
             assert np.array_equal(expected_ts.data, actual_ts.data)
@@ -847,7 +841,7 @@ def test_bulk_add_time_series_with_rollback(storage_type: TimeSeriesStorageType)
             data = np.random.rand(length)
             ts = SingleTimeSeries.from_array(data, ts_name, initial_time, resolution)
             system.add_time_series(ts, gen, connection=conn)
-            assert system.has_time_series(gen, variable_name=ts_name)
+            assert system.has_time_series(gen, name=ts_name)
             system.add_time_series(ts, gen, connection=conn)
 
-    assert not system.has_time_series(gen, variable_name=ts_name)
+    assert not system.has_time_series(gen, name=ts_name)

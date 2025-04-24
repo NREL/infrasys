@@ -61,7 +61,7 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
 
     @property
     def summary(self) -> str:
-        """Return the variable_name of the time series array with its type."""
+        """Return the name of the time series array with its type."""
         return f"{self.__class__.__name__}.{self.name}"
 
     @staticmethod
@@ -134,7 +134,7 @@ class SingleTimeSeries(TimeSeriesData):
             Start time for the time series (e.g., datetime(2020,1,1))
         resolution
             Resolution of the time series (e.g., 30min, 1hr)
-        variable_name
+        name
             Name assigned to the values of the time series (e.g., active_power)
 
         Returns
@@ -175,7 +175,7 @@ class SingleTimeSeries(TimeSeriesData):
         ----------
         data
             Sequence that contains the values of the time series
-        variable_name
+        name
             Name assigned to the values of the time series (e.g., active_power)
         time_index
             Sequence that contains the index of the time series
@@ -268,7 +268,7 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
 
     @property
     def label(self) -> str:
-        """Return the variable_name of the time series array with its type."""
+        """Return the name of the time series array with its type."""
         return f"{self.type}.{self.name}"
 
     @staticmethod
@@ -465,7 +465,7 @@ class NonSequentialTimeSeries(TimeSeriesData):
             Sequence that contains the values of the time series
         timestamps
             Sequence that contains the non-sequential timestamps
-        variable_name
+        name
             Name assigned to the values of the time series (e.g., active_power)
         normalization
             Normalization model to normalize the data
