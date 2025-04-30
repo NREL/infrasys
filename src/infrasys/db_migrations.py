@@ -13,7 +13,7 @@ from infrasys.serialization import TYPE_METADATA
 from infrasys.time_series_metadata_store import make_features_string
 from infrasys.utils.metadata_utils import create_associations_table
 from infrasys.utils.sqlite import execute
-from infrasys.utils.time_utils import _str_timedelta_to_iso_8601
+from infrasys.utils.time_utils import str_timedelta_to_iso_8601
 
 _LEGACY_METADATA_TABLE = "legacy_metadata_backup"
 
@@ -152,7 +152,7 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
         length = metadata.get("length", 0)
 
         # Old resolution was in timedelta format.
-        resolution = _str_timedelta_to_iso_8601(resolution)
+        resolution = str_timedelta_to_iso_8601(resolution)
 
         # Fix for timestamp from: 2020-01-01 00:00 -> 2020-01-01T00:00
         initial_timestamp = initial_timestamp.replace(" ", "T")

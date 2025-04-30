@@ -51,5 +51,10 @@ def create_associations_table(
     result = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table_name,)
     ).fetchone()
+
+    if not result:
+        msg = "Bug: Could not create the associations table."
+        raise RuntimeError(msg)
+
     connection.commit()
     return bool(result)

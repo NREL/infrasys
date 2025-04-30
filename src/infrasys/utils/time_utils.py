@@ -175,7 +175,7 @@ def to_iso_8601(duration: timedelta | relativedelta) -> str:
     return f"P0DT{total_seconds:.3f}S"
 
 
-def _str_timedelta_to_iso_8601(delta_str: str) -> str:
+def str_timedelta_to_iso_8601(delta_str: str) -> str:
     """Convert a str(timedelta) to ISO 8601 string."""
     pattern = r"(?:(?P<days>\d+) days?, )?(?P<hours>\d+):(?P<minutes>\d+):(?P<seconds>\d+)"
     match = re.fullmatch(pattern, delta_str)

@@ -30,7 +30,7 @@ from infrasys.time_series_models import (
     TimeSeriesMetadata,
 )
 from infrasys.utils.metadata_utils import create_associations_table
-from infrasys.utils.sqlite import execute
+from infrasys.utils.sqlite import backup, execute
 from infrasys.utils.time_utils import to_iso_8601
 
 
@@ -42,6 +42,7 @@ class TimeSeriesMetadataStore:
         if initialize:
             assert create_associations_table(connection=self._con)
             self._create_key_value_store()
+            self._create_indexes()
         self._cache_metadata: dict[UUID, TimeSeriesMetadata] = {}
 
     def _load_metadata_into_memory(self):
@@ -52,11 +53,13 @@ class TimeSeriesMetadataStore:
         columns = [desc[0] for desc in cursor.description]
         rows = [dict(zip(columns, row)) for row in rows]
         for row in rows:
-            # Features require special handling due to special indexing that we perform.
-            features = json.loads(row.get("features")) or {}
+            assert (
+                "features" in row
+            ), f"Bug: Features missing from {TIME_SERIES_ASSOCIATIONS_TABLE} table."
+            features = json.loads(row["features"])
             if features and isinstance(features[0], dict):
                 features = features[0]
-            row["features"] = features
+            row["features"] = features or {}  # If empty return a empty dict for deserialization.
             metadata = _deserialize_time_series_metadata(row)
             self._cache_metadata[metadata.uuid] = metadata
         return
@@ -85,12 +88,12 @@ class TimeSeriesMetadataStore:
         cur = self._con.cursor()
         execute(
             cur,
-            f"CREATE INDEX IF NOT EXISTS by_c_vn_tst_hash ON {TIME_SERIES_ASSOCIATIONS_TABLE} "
+            f"CREATE INDEX by_c_vn_tst_hash ON {TIME_SERIES_ASSOCIATIONS_TABLE} "
             f"(owner_uuid, time_series_type, name, resolution, features)",
         )
         execute(
             cur,
-            f"CREATE INDEX IF NOT EXISTS by_ts_uuid ON {TIME_SERIES_ASSOCIATIONS_TABLE} (time_series_uuid)",
+            f"CREATE INDEX by_ts_uuid ON {TIME_SERIES_ASSOCIATIONS_TABLE} (time_series_uuid)",
         )
 
     def add(
@@ -377,7 +380,7 @@ class TimeSeriesMetadataStore:
 
     def _insert_rows(self, rows: list[dict], cur: sqlite3.Cursor) -> None:
         query = f"""
-        INSERT INTO `{TIME_SERIES_ASSOCIATIONS_TABLE}` (
+        INSERT INTO {TIME_SERIES_ASSOCIATIONS_TABLE} (
             time_series_uuid, time_series_type, initial_timestamp, resolution,
             length, name, owner_uuid, owner_type, owner_category, features,
             serialization_info, uuid
@@ -465,9 +468,18 @@ class TimeSeriesMetadataStore:
         return [UUID(ustr[0]) for ustr in uuid_strings]
 
     def serialize(self, filename: Path | str) -> None:
+        """Serialize SQLite to file."""
         with sqlite3.connect(filename) as dst_con:
-            dst_con.commit()
+            self._con.backup(dst_con)
+            cur = dst_con.cursor()
+            # Drop all index from the database that were created manually (sql not null)
+            index_to_drop = execute(
+                cur, "SELECT name FROM sqlite_master WHERE type ='index' AND sql IS NOT NULL"
+            ).fetchall()
+            for index in index_to_drop:
+                execute(cur, f"DROP INDEX {index[0]}")
         dst_con.close()
+        backup(self._con, filename)
         return
 
     def _get_metadata_uuids_by_filter(
@@ -538,7 +550,6 @@ def _make_features_dict(features: dict[str, Any]) -> dict[str, Any]:
 
 
 def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
-    # data = json.loads(text)
     metadata = json.loads(data.pop("serialization_info"))[TYPE_METADATA]
     data.update({k: metadata.pop(k) for k in ["quantity_metadata", "normalization"]})
     validated_metadata = SerializedTypeMetadata.validate_python(metadata)
