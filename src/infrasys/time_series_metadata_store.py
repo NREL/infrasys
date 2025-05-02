@@ -1,28 +1,26 @@
 """Stores time series metadata in a SQLite database."""
 
-import hashlib
 import itertools
-import json
 import sqlite3
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional, Sequence
 from uuid import UUID
 
+import orjson as json
 from loguru import logger
 
-from infrasys.exceptions import ISAlreadyAttached, ISOperationNotAllowed, ISNotStored
-from infrasys import Component
-from infrasys.supplemental_attribute_manager import SupplementalAttribute
-from infrasys.serialization import (
-    deserialize_value,
-    serialize_value,
-    SerializedTypeMetadata,
-    TYPE_METADATA,
+from infrasys import (
+    Component,
 )
+from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
+from infrasys.serialization import (
+    serialize_value,
+)
+from infrasys.supplemental_attribute_manager import SupplementalAttribute
 from infrasys.time_series_models import (
-    TimeSeriesMetadata,
-    SingleTimeSeriesMetadataBase,
     NonSequentialTimeSeriesMetadataBase,
+    SingleTimeSeriesMetadataBase,
+    TimeSeriesMetadata,
 )
 from infrasys.utils.sqlite import execute
 
@@ -511,22 +509,7 @@ def _make_user_attribute_dict(user_attributes: dict[str, Any]) -> dict[str, Any]
     return {k: user_attributes[k] for k in sorted(user_attributes)}
 
 
-def _compute_user_attribute_hash(user_attributes: dict[str, Any]) -> str | None:
-    if not user_attributes:
-        return None
-
-    attrs = _make_user_attribute_dict(user_attributes)
-    return _compute_hash(bytes(json.dumps(attrs), encoding="utf-8"))
-
-
-def _compute_hash(text: bytes) -> str:
-    hash_obj = hashlib.sha256()
-    hash_obj.update(text)
-    return hash_obj.hexdigest()
-
-
-def _deserialize_time_series_metadata(text: str) -> TimeSeriesMetadata:
-    data = json.loads(text)
-    type_metadata = SerializedTypeMetadata(**data.pop(TYPE_METADATA))
-    metadata = deserialize_value(data, type_metadata.fields)
-    return metadata
+def make_features_string(features: dict[str, Any]) -> str:
+    """Serializes a dictionary of features into a sorted string."""
+    data = [{key: value} for key, value in sorted(features.items())]
+    return json.dumps(data).decode()

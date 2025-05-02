@@ -1,41 +1,41 @@
 """Defines a System"""
 
-from contextlib import contextmanager
-import json
 import shutil
 import sqlite3
-from operator import itemgetter
 from collections import defaultdict
 from datetime import datetime
+from operator import itemgetter
 from pathlib import Path
 from typing import Any, Callable, Generator, Iterable, Optional, Type, TypeVar
 from uuid import UUID, uuid4
 
+import orjson
 from loguru import logger
 from rich import print as _pprint
 from rich.table import Table
 
-from infrasys.exceptions import (
-    ISFileExists,
-    ISConflictingArguments,
-    ISOperationNotAllowed,
-)
-from infrasys.models import make_label
 from infrasys.component import (
     Component,
 )
 from infrasys.component_manager import ComponentManager
+from infrasys.exceptions import (
+    ISConflictingArguments,
+    ISFileExists,
+    ISOperationNotAllowed,
+)
+from infrasys.models import make_label
 from infrasys.serialization import (
+    TYPE_METADATA,
     CachedTypeHelper,
-    SerializedTypeMetadata,
     SerializedBaseType,
     SerializedComponentReference,
     SerializedQuantityType,
     SerializedType,
-    TYPE_METADATA,
+    SerializedTypeMetadata,
 )
 from infrasys.supplemental_attribute import SupplementalAttribute
-from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
+from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
+from infrasys.time_series_manager import TIME_SERIES_KWARGS, TimeSeriesManager
 from infrasys.time_series_models import (
     DatabaseConnection,
     SingleTimeSeries,
@@ -43,7 +43,6 @@ from infrasys.time_series_models import (
     TimeSeriesKey,
     TimeSeriesMetadata,
 )
-from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
 from infrasys.utils.sqlite import backup, create_in_memory_db, restore
 
 T = TypeVar("T", bound="Component")
@@ -193,8 +192,9 @@ class System:
         backup(self._con, time_series_dir / self.DB_FILENAME)
         self._time_series_mgr.serialize(system_data["time_series"], time_series_dir)
 
-        with open(filename, "w", encoding="utf-8") as f_out:
-            json.dump(data, f_out, indent=indent)
+        data_dump = orjson.dumps(data)
+        with open(filename, "wb") as f_out:
+            f_out.write(data_dump)
             logger.info("Wrote system data to {}", filename)
 
     @classmethod
@@ -216,8 +216,8 @@ class System:
         --------
         >>> system = System.from_json("systems/system1.json")
         """
-        with open(filename, encoding="utf-8") as f_in:
-            data = json.load(f_in)
+        with open(filename, "rb") as f_in:
+            data = orjson.loads(f_in.read())
         time_series_parent_dir = Path(filename).parent
         return cls.from_dict(
             data, time_series_parent_dir, upgrade_handler=upgrade_handler, **kwargs
