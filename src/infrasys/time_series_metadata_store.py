@@ -21,7 +21,8 @@ from infrasys.serialization import (
     TYPE_METADATA,
     SerializedBaseType,
     SerializedTypeMetadata,
-    deserialize_value,
+    deserialize_type,
+    serialize_value,
 )
 from infrasys.supplemental_attribute_manager import SupplementalAttribute
 from infrasys.time_series_models import (
@@ -56,10 +57,6 @@ class TimeSeriesMetadataStore:
             assert (
                 "features" in row
             ), f"Bug: Features missing from {TIME_SERIES_ASSOCIATIONS_TABLE} table."
-            features = json.loads(row["features"])
-            if features and isinstance(features[0], dict):
-                features = features[0]
-            row["features"] = features or {}  # If empty return a empty dict for deserialization.
             metadata = _deserialize_time_series_metadata(row)
             self._cache_metadata[metadata.uuid] = metadata
         return
@@ -140,6 +137,10 @@ class TimeSeriesMetadataStore:
         else:
             raise NotImplementedError
 
+        units = None
+        if metadata.units:
+            units = json.dumps(serialize_value(metadata.units))
+
         rows = [
             {
                 "time_series_uuid": str(metadata.time_series_uuid),
@@ -155,8 +156,8 @@ class TimeSeriesMetadataStore:
                 "owner_type": owner.__class__.__name__,
                 "owner_category": "Component",
                 "features": make_features_string(metadata.features),
-                "uuid": str(metadata.uuid),
-                "serialization_info": make_serialization_info(metadata),
+                "units": units,
+                "metadata_uuid": str(metadata.uuid),
             }
             for owner in owners
         ]
@@ -205,7 +206,7 @@ class TimeSeriesMetadataStore:
     def get_metadata(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: Optional[str] = None,
+        name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **features,
     ) -> TimeSeriesMetadata:
@@ -218,7 +219,7 @@ class TimeSeriesMetadataStore:
         """
         metadata_list = self.list_metadata(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             **features,
         )
@@ -271,13 +272,13 @@ class TimeSeriesMetadataStore:
     def list_metadata(
         self,
         *owners: Component | SupplementalAttribute,
-        variable_name: Optional[str] = None,
+        name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **features,
     ) -> list[TimeSeriesMetadata]:
         """Return a list of metadata that match the query."""
         metadata_uuids = self._get_metadata_uuids_by_filter(
-            owners, variable_name, time_series_type, **features
+            owners, name, time_series_type, **features
         )
         return [
             self._cache_metadata[uuid] for uuid in metadata_uuids if uuid in self._cache_metadata
@@ -300,7 +301,7 @@ class TimeSeriesMetadataStore:
         # Use the denormalized view
         query = f"""
         SELECT
-            uuid
+            metadata_uuid
         FROM {TIME_SERIES_ASSOCIATIONS_TABLE}
         WHERE
             time_series_uuid = ? {limit_str}
@@ -344,7 +345,9 @@ class TimeSeriesMetadataStore:
             owners, variable_name, time_series_type, **features
         )
 
-        query = f"SELECT uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE ({where_clause})"
+        query = (
+            f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE ({where_clause})"
+        )
         rows = execute(cur, query, params=params).fetchall()
         matches = len(rows)
         if not matches:
@@ -382,12 +385,12 @@ class TimeSeriesMetadataStore:
         query = f"""
         INSERT INTO {TIME_SERIES_ASSOCIATIONS_TABLE} (
             time_series_uuid, time_series_type, initial_timestamp, resolution,
-            length, name, owner_uuid, owner_type, owner_category, features,
-            serialization_info, uuid
+            length, name, owner_uuid, owner_type, owner_category, features, units,
+            metadata_uuid
         ) VALUES (
             :time_series_uuid, :time_series_type, :initial_timestamp,
             :resolution, :length, :name, :owner_uuid, :owner_type,
-            :owner_category, :features, :serialization_info, :uuid
+            :owner_category, :features, :units, :metadata_uuid
         )
         """
         cur.executemany(query, rows)
@@ -495,7 +498,7 @@ class TimeSeriesMetadataStore:
         where_clause, params = self._make_where_clause(
             owners, variable_name, time_series_type, **features
         )
-        query = f"SELECT uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause}"
+        query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause}"
         rows = execute(cur, query, params=params).fetchall()
 
         if rows or not features:
@@ -503,7 +506,7 @@ class TimeSeriesMetadataStore:
 
         where_clause, params = self._make_where_clause(owners, variable_name, time_series_type)
         features_str = make_features_string(features)
-        query = f"SELECT uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause} AND features = ?"
+        query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause} AND features = ?"
         params.append(features_str)
         rows = execute(cur, query, params=params).fetchall()
 
@@ -522,7 +525,7 @@ class TimeSeriesMetadataStore:
             like_params.append(f'%"{key}":"{value}"%')
 
         if conditions:
-            query = f"SELECT uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause} AND ({' AND '.join(conditions)})"
+            query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause} AND ({' AND '.join(conditions)})"
             rows = execute(cur, query, params=like_params).fetchall()
 
         return [UUID(row[0]) for row in rows]
@@ -550,11 +553,32 @@ def _make_features_dict(features: dict[str, Any]) -> dict[str, Any]:
 
 
 def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
-    metadata = json.loads(data.pop("serialization_info"))[TYPE_METADATA]
-    data.update({k: metadata.pop(k) for k in ["quantity_metadata", "normalization"]})
-    validated_metadata = SerializedTypeMetadata.validate_python(metadata)
-    metadata = deserialize_value(data, validated_metadata)
-    return metadata
+    time_series_type = data.pop("time_series_type")
+    serialized_type = SerializedTypeMetadata.validate_python(
+        {
+            "module": "infrasys",
+            "type": time_series_type,
+            "serialized_type": "base",
+        }
+    )
+    metadata = deserialize_type(serialized_type).get_time_series_metadata_type()
+
+    # Deserialize JSON columns
+    for column in ["features", "scaling_factor_multiplier", "units"]:
+        if data.get(column):
+            data[column] = json.loads(data[column])
+
+    # Features requires special handling since it is a sorter array with key value pairs.
+    if data.get("features"):
+        data["features"] = data["features"][0]
+    else:
+        data["features"] = {}
+
+    data["uuid"] = data.pop("metadata_uuid")
+    metadata_instance = metadata.model_validate(
+        {key: value for key, value in data.items() if key in metadata.model_fields}
+    )
+    return metadata_instance
 
 
 def make_features_string(features: dict[str, Any]) -> str:

@@ -39,8 +39,8 @@ def create_associations_table(
         "owner_category TEXT NOT NULL",
         "features TEXT NOT NULL",
         "scaling_factor_multiplier TEXT NULL",
-        "serialization_info TEXT NOT NULL",
-        "uuid TEXT NOT NULL",
+        "units TEXT NULL",
+        "metadata_uuid TEXT NOT NULL",
     ]
     schema_text = ",".join(schema)
     cur = connection.cursor()
@@ -53,7 +53,7 @@ def create_associations_table(
     ).fetchone()
 
     if not result:
-        msg = "Bug: Could not create the associations table."
+        msg = "Could not create the associations table."
         raise RuntimeError(msg)
 
     connection.commit()

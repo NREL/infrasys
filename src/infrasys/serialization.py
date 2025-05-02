@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field, TypeAdapter, field_serializer
 
 from infrasys.models import InfraSysBaseModel
+from infrasys.time_series_models import TimeSeriesData
 
 TYPE_METADATA = "__metadata__"
 SERIALIZED_FIELDS = {"quantity_metadata", "normalization"}
@@ -110,7 +111,7 @@ def serialize_value(obj: InfraSysBaseModel, *args, **kwargs) -> dict[str, Any]:
     return data
 
 
-def deserialize_type(metadata: SerializedTypeBase) -> Type:
+def deserialize_type(metadata: SerializedTypeBase) -> Type["TimeSeriesData"]:
     """Dynamically import the type and return it."""
     return _deserialize_type(metadata.module, metadata.type)
 

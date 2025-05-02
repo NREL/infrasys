@@ -1,7 +1,7 @@
 from infrasys.serialization import TYPE_METADATA
 
 
-def needs_metadata_miration(component) -> bool:
+def component_needs_metadata_migration(component) -> bool:
     """Check if we need to migrate to new metadata format."""
     metadata = component.get(TYPE_METADATA)
     return "fields" in metadata

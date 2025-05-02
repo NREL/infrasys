@@ -158,10 +158,8 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         # v0.2.1 or later. Earlier versions used the time series variable name.
         column = columns[0]
         data = base_ts[column][index : index + length]
-        if metadata.quantity_metadata is not None:
-            np_array = metadata.quantity_metadata.quantity_type(
-                data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            np_array = metadata.units.quantity_type(data, metadata.units.units)
         else:
             np_array = np.array(data)
         return SingleTimeSeries(
@@ -190,10 +188,8 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             base_ts[data_column],
             base_ts[timestamps_column],
         )
-        if metadata.quantity_metadata is not None:
-            np_data_array = metadata.quantity_metadata.quantity_type(
-                data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            np_data_array = metadata.units.quantity_type(data, metadata.units.units)
         else:
             np_data_array = np.array(data)
         np_time_array = np.array(timestamps).astype("O")  # convert to datetime object

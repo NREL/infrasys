@@ -66,7 +66,7 @@ class TimeSeriesData(InfraSysBaseModelWithIdentifers, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
-    def get_time_series_metadata_type() -> Type:
+    def get_time_series_metadata_type() -> Type["TimeSeriesMetadata"]:
         """Return the metadata type associated with this time series type."""
 
 
@@ -214,7 +214,7 @@ class SingleTimeSeries(TimeSeriesData):
         ).values
 
     @staticmethod
-    def get_time_series_metadata_type() -> Type:
+    def get_time_series_metadata_type() -> Type["SingleTimeSeriesMetadata"]:
         return SingleTimeSeriesMetadata
 
     @property
@@ -262,7 +262,7 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     name: str
     time_series_uuid: UUID
     features: dict[str, Any] = {}
-    quantity_metadata: Optional[QuantityMetadata] = None
+    units: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
     type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor", "NonSequentialTimeSeries"]
 
@@ -282,6 +282,10 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     def get_time_series_type_str() -> str:
         """Return the time series type as a string."""
 
+    @classmethod
+    def from_data(cls, time_series: Any, **features) -> Any:
+        """Construct an instance of TimeSeriesMetadata."""
+
 
 class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
     """Base class for SingleTimeSeries metadata."""
@@ -294,7 +298,7 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
     @classmethod
     def from_data(cls, time_series: SingleTimeSeries, **features) -> Any:
         """Construct a SingleTimeSeriesMetadata from a SingleTimeSeries."""
-        quantity_metadata = (
+        units = (
             QuantityMetadata(
                 module=type(time_series.data).__module__,
                 quantity_type=type(time_series.data),
@@ -310,7 +314,7 @@ class SingleTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
             length=time_series.length,  # type: ignore
             time_series_uuid=time_series.uuid,
             features=features,
-            quantity_metadata=quantity_metadata,
+            units=units,
             normalization=time_series.normalization,
             type=cls.get_time_series_type_str(),  # type: ignore
         )
@@ -486,7 +490,7 @@ class NonSequentialTimeSeries(TimeSeriesData):
         )
 
     @staticmethod
-    def get_time_series_metadata_type() -> Type:
+    def get_time_series_metadata_type() -> Type["NonSequentialTimeSeriesMetadata"]:
         "Get the metadata type of the NonSequentialTimeSeries"
         return NonSequentialTimeSeriesMetadata
 
@@ -514,7 +518,7 @@ class NonSequentialTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
         cls, time_series: NonSequentialTimeSeries, **features
     ) -> "NonSequentialTimeSeriesMetadataBase":
         """Construct a NonSequentialTimeSeriesMetadata from a NonSequentialTimeSeries."""
-        quantity_metadata = (
+        units = (
             QuantityMetadata(
                 module=type(time_series.data).__module__,
                 quantity_type=type(time_series.data),
@@ -528,7 +532,7 @@ class NonSequentialTimeSeriesMetadataBase(TimeSeriesMetadata, abc.ABC):
             length=time_series.length,  # type: ignore
             time_series_uuid=time_series.uuid,
             features=features,
-            quantity_metadata=quantity_metadata,
+            units=units,
             normalization=time_series.normalization,
             type=cls.get_time_series_type_str(),  # type: ignore
         )

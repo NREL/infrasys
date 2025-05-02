@@ -236,10 +236,8 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"Bug: {len(df)=} {length=} {required_len=}"
             raise Exception(msg)
         values = df["value"].values
-        if metadata.quantity_metadata is not None:
-            np_array = metadata.quantity_metadata.quantity_type(
-                values, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            np_array = metadata.units.quantity_type(values, metadata.units.units)
         else:
             np_array = values
         return SingleTimeSeries(

@@ -198,7 +198,7 @@ class TimeSeriesManager:
         """
         metadata = self._metadata_store.get_metadata(
             owner,
-            variable_name=name,
+            name=name,
             time_series_type=time_series_type.__name__,
             **features,
         )
@@ -215,7 +215,7 @@ class TimeSeriesManager:
         """Return a time series array by key."""
         metadata = self._metadata_store.get_metadata(
             owner,
-            variable_name=key.name,
+            name=key.name,
             time_series_type=key.time_series_type.__name__,
             **key.features,
         )
@@ -283,7 +283,7 @@ class TimeSeriesManager:
         """Return all time series metadata that match the inputs."""
         return self._metadata_store.list_metadata(
             owner,
-            variable_name=name,
+            name=name,
             time_series_type=time_series_type.__name__,
             **features,
         )

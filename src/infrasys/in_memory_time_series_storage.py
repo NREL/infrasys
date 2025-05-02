@@ -97,10 +97,8 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             index, length = metadata.get_range(start_time=start_time, length=length)
             ts_data = ts_data[index : index + length]
 
-        if metadata.quantity_metadata is not None:
-            ts_data = metadata.quantity_metadata.quantity_type(
-                ts_data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            ts_data = metadata.units.quantity_type(ts_data, metadata.units.units)
         assert ts_data is not None
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
@@ -124,10 +122,8 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"No time series timestamps with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
 
-        if metadata.quantity_metadata is not None:
-            ts_data = metadata.quantity_metadata.quantity_type(
-                ts_data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            ts_data = metadata.units.quantity_type(ts_data, metadata.units.units)
         assert ts_data is not None
         assert ts_timestamps is not None
         return NonSequentialTimeSeries(

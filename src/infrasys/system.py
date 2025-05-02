@@ -19,15 +19,18 @@ from infrasys.component import (
     Component,
 )
 from infrasys.component_manager import ComponentManager
-from infrasys.db_migrations import metadata_needs_migration, migrate_legacy_schema
 from infrasys.exceptions import (
     ISConflictingArguments,
     ISFileExists,
     ISOperationNotAllowed,
 )
+from infrasys.migrations.db_migrations import (
+    metadata_store_needs_migration,
+    migrate_legacy_metadata_store,
+)
 from infrasys.migrations.metadata_migration import (
+    component_needs_metadata_migration,
     migrate_component_metadata,
-    needs_metadata_miration,
 )
 from infrasys.models import make_label
 from infrasys.serialization import (
@@ -311,8 +314,8 @@ class System:
         con = create_in_memory_db()
         restore(con, ts_path / data["time_series"]["directory"] / System.DB_FILENAME)
 
-        if metadata_needs_migration(con):
-            migrate_legacy_schema(con)
+        if metadata_store_needs_migration(con):
+            migrate_legacy_metadata_store(con)
 
         time_series_manager = TimeSeriesManager.deserialize(
             con, data["time_series"], ts_path, **ts_kwargs
@@ -343,7 +346,7 @@ class System:
                 )
         system.deserialize_system_attributes(system_data)
 
-        if needs_metadata_miration(system_data["components"][0]):
+        if component_needs_metadata_migration(system_data["components"][0]):
             system_data["components"] = migrate_component_metadata(system_data["components"])
         system._deserialize_components(system_data["components"])
         system._deserialize_supplemental_attributes(system_data["supplemental_attributes"])

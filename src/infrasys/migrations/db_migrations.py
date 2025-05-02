@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import uuid
+import warnings
 
 from loguru import logger
 
@@ -9,7 +10,6 @@ from infrasys import (
     TIME_SERIES_ASSOCIATIONS_TABLE,
     TIME_SERIES_METADATA_TABLE,
 )
-from infrasys.serialization import TYPE_METADATA
 from infrasys.time_series_metadata_store import make_features_string
 from infrasys.utils.metadata_utils import create_associations_table
 from infrasys.utils.sqlite import execute
@@ -18,7 +18,7 @@ from infrasys.utils.time_utils import str_timedelta_to_iso_8601
 _LEGACY_METADATA_TABLE = "legacy_metadata_backup"
 
 
-def metadata_needs_migration(conn: sqlite3.Connection, version: str | None = None) -> bool:
+def metadata_store_needs_migration(conn: sqlite3.Connection, version: str | None = None) -> bool:
     """Check if the database schema requires migration to the new format.
 
     Parameters
@@ -37,7 +37,7 @@ def metadata_needs_migration(conn: sqlite3.Connection, version: str | None = Non
     return not cursor.fetchone() is not None
 
 
-def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
+def migrate_legacy_metadata_store(conn: sqlite3.Connection) -> bool:
     """Migrate the database from the legacy schema to the new separated schema.
 
     Handles the transition from an older schema (where time series metadata and
@@ -117,6 +117,7 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
     rows = cursor.fetchall()
 
     sql_data_to_insert = []
+    normalization_in_metadata = []
     for row in rows:
         (
             id_val,
@@ -134,21 +135,17 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
         metadata = json.loads(metadata_json)
 
         # Creating a flatten metadata from legacy schema.
-        serialized_info = {
-            "__metadata__": {
-                **{
-                    "quantity_metadata": metadata.get("quantity_metadata"),
-                    "normalization": metadata.get("normalization"),
-                },
-                **metadata[TYPE_METADATA].pop("fields", {}),
-            }
-        }
+        unit_metadata = metadata.pop("quantity_metadata")
+
+        # Keep track if any metadata had normalization.
+        if "normalization" in metadata and metadata["normalization"]:
+            normalization_in_metadata.append(True)
 
         features_dict = {}
         if metadata.get("user_attributes"):  # We renamed user_attributes to features
             features_dict = metadata.pop("user_attributes")
 
-        owner_category = "Component"
+        owner_category = "Component"  # Legacy system did not had any other category.
         length = metadata.get("length", 0)
 
         # Old resolution was in timedelta format.
@@ -168,10 +165,17 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
                 "owner_type": owner_type,
                 "owner_category": owner_category,
                 "features_json": make_features_string(features_dict),
-                "serialization_info": json.dumps(serialized_info),
-                "uuid": str(uuid.uuid4()),  # metadata_uuid did not exist on tehe legacy
+                "units": json.dumps(unit_metadata),
+                "metadata_uuid": str(uuid.uuid4()),  # metadata_uuid did not exist on tehe legacy
             }
         )
+
+    # Raise warning for users that had normalization
+    if any(normalization_in_metadata):
+        msg = "Normalization of `TimeSeries` was deprecated from infrasys. "
+        msg += "Upgrader will drop this fields."
+        warnings.warn(msg)
+
     # Exit if there is no data to ingest.
     if not sql_data_to_insert:
         execute(cursor, f"DROP TABLE {_LEGACY_METADATA_TABLE}")
@@ -187,12 +191,12 @@ def migrate_legacy_schema(conn: sqlite3.Connection) -> bool:
         f"""
         INSERT INTO `{TIME_SERIES_ASSOCIATIONS_TABLE}` (
             time_series_uuid, time_series_type, initial_timestamp, resolution,
-            length, name, owner_uuid, owner_type, owner_category, features,
-            serialization_info, uuid
+            length, name, owner_uuid, owner_type, owner_category, features, units,
+            metadata_uuid
         ) VALUES (
             :time_series_uuid, :time_series_type, :initial_timestamp, :resolution,
             :length, :name, :owner_uuid, :owner_type, :owner_category,
-            :features_json, :serialization_info, :uuid
+            :features_json, :units, :metadata_uuid
         )
         """,
         sql_data_to_insert,
