@@ -1,13 +1,13 @@
 """Stores time series metadata in a SQLite database."""
 
 import itertools
-import json
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 from uuid import UUID
 
+import orjson as json
 from loguru import logger
 
 from infrasys import (
@@ -18,8 +18,6 @@ from infrasys import (
 )
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infrasys.serialization import (
-    TYPE_METADATA,
-    SerializedBaseType,
     SerializedTypeMetadata,
     deserialize_type,
     serialize_value,
@@ -584,23 +582,4 @@ def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
 def make_features_string(features: dict[str, Any]) -> str:
     """Serializes a dictionary of features into a sorted string."""
     data = [{key: value} for key, value in sorted(features.items())]
-    return json.dumps(data, separators=(",", ":"))
-
-
-def make_serialization_info(metadata: TimeSeriesMetadata) -> str:
-    """Serialize information."""
-    metadata_type = SerializedTypeMetadata.validate_python(
-        SerializedBaseType(
-            module=metadata.__module__,
-            type=metadata.__class__.__name__,
-        )
-    ).model_dump()
-    metadata_seriarlized = metadata.model_dump(mode="json", round_trip=True)
-    serialized_info = {
-        TYPE_METADATA: {
-            "quantity_metadata": metadata_seriarlized.get("quantity_metadata"),
-            "normalization": metadata_seriarlized.get("normalization"),
-            **metadata_type,
-        }
-    }
-    return json.dumps(serialized_info, separators=(",", ":"))
+    return json.dumps(data).decode()
