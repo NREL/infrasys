@@ -366,7 +366,9 @@ class TimeSeriesMetadataStore:
         unique_metadata_uuids = {UUID(row[0]) for row in rows}
         result: list[TimeSeriesMetadata] = []
         for metadata_uuid in unique_metadata_uuids:
-            query_count = f"SELECT COUNT(*) FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE uuid = ?"
+            query_count = (
+                f"SELECT COUNT(*) FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE metadata_uuid = ?"
+            )
             count_association = execute(cur, query_count, params=[str(metadata_uuid)]).fetchone()[
                 0
             ]
