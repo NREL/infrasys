@@ -367,7 +367,7 @@ def test_open_time_series_store(storage_type: TimeSeriesStorageType):
             time_series_arrays.append(ts)
     with system.open_time_series_store():
         for i in range(5):
-            ts = system.get_time_series(gen, variable_name=f"ts{i}")
+            ts = system.get_time_series(gen, name=f"ts{i}")
             assert np.array_equal(
                 system.get_time_series(gen, f"ts{i}").data, time_series_arrays[i].data
             )
@@ -668,7 +668,7 @@ def test_time_series_metadata_list_rows():
     ]
     rows = system.time_series.metadata_store.list_rows(
         gen2,
-        variable_name=variable_name,
+        name=variable_name,
         time_series_type=SingleTimeSeries.__name__,
         columns=columns,
     )
@@ -822,7 +822,7 @@ def test_bulk_add_time_series():
                 gen,
                 time_series_type=SingleTimeSeries,
                 name=expected_ts.name,
-                connection=conn,
+                context=conn,
             )
             assert np.array_equal(expected_ts.data, actual_ts.data)
 

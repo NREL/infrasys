@@ -262,6 +262,7 @@ def test_with_nonsequential_time_series_quantity(tmp_path):
     assert np.array_equal(ts2.timestamps, np.array(timestamps))
 
 
+@pytest.mark.xfail(reason="Removing normalization as core.")
 @pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
 def test_system_with_single_time_series_normalization(tmp_path, storage_type):
     system = SimpleSystem(

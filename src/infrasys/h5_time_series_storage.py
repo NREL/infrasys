@@ -137,7 +137,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             )
 
             group.attrs["type"] = metadata.type
-            group.attrs["initial_timestamp"] = metadata.initial_time.isoformat()
+            group.attrs["initial_timestamp"] = metadata.initial_timestamp.isoformat()
             group.attrs["resolution"] = metadata.resolution.total_seconds()
 
     def get_metadata_store(self) -> sqlite3.Connection:
@@ -205,13 +205,13 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         index, length = metadata.get_range(start_time=start_time, length=length)
         data = dataset[index : index + length]
-        if metadata.quantity_metadata is not None:
-            data = metadata.quantity_metadata.quantity_type(data, metadata.quantity_metadata.units)
+        if metadata.units is not None:
+            data = metadata.units.quantity_type(data, metadata.units.units)
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             resolution=metadata.resolution,
-            initial_time=start_time or metadata.initial_time,
+            initial_timestamp=start_time or metadata.initial_timestamp,
             data=data,
             normalization=metadata.normalization,
         )
@@ -289,7 +289,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
             # Create the main groups
             ts_root = dst_file.create_group(self.HDF5_TS_ROOT_PATH)
-            meta_root = dst_file.create_group(self.HDF5_TS_METADATA_ROOT_PATH)
+            _ = dst_file.create_group(self.HDF5_TS_METADATA_ROOT_PATH)
 
             # Copy attributes
             for attr_name, attr_value in src_file[self.HDF5_TS_ROOT_PATH].attrs.items():

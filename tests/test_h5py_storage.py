@@ -75,8 +75,8 @@ def test_h5_time_series(tmp_path):
 
     ts = SingleTimeSeries.from_array(
         data=range(8784),
-        variable_name="active_power",
-        initial_time=datetime(year=2020, month=1, day=1),
+        name="active_power",
+        initial_timestamp=datetime(year=2020, month=1, day=1),
         resolution=timedelta(hours=1),
     )
     system.add_time_series(ts, gen, scenario="one", model_year="2030")
@@ -99,8 +99,8 @@ def test_h5py_serialization(tmp_path, system_with_h5_storage):
 
     ts = SingleTimeSeries.from_array(
         data=range(8784),
-        variable_name="active_power",
-        initial_time=datetime(year=2020, month=1, day=1),
+        name="active_power",
+        initial_timestamp=datetime(year=2020, month=1, day=1),
         resolution=timedelta(hours=1),
     )
     system.add_time_series(ts, gen, scenario="one", model_year="2030")
@@ -132,8 +132,8 @@ def test_h5_context_manager(system_with_h5_storage):
     ts_name = "test_ts"
     ts = SingleTimeSeries.from_array(
         data=range(8784),
-        variable_name=ts_name,
-        initial_time=datetime(year=2020, month=1, day=1),
+        name=ts_name,
+        initial_timestamp=datetime(year=2020, month=1, day=1),
         resolution=timedelta(hours=1),
     )
     with pytest.raises(ISAlreadyAttached):
@@ -142,4 +142,4 @@ def test_h5_context_manager(system_with_h5_storage):
             system.add_time_series(ts, gen, scenario="one", model_year="2030")
 
     # Not a single time series should have been added.
-    assert not system.has_time_series(gen, variable_name=ts_name)
+    assert not system.has_time_series(gen, name=ts_name)

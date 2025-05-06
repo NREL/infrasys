@@ -4,7 +4,7 @@ import itertools
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Generator, Iterable, Optional, Sequence
 from uuid import UUID
 
 import orjson as json
@@ -269,7 +269,11 @@ class TimeSeriesMetadataStore:
         rows = execute(cur, query).fetchall()
         return {UUID(x[0]) for x in rows}
 
-    def list_missing_time_series(self, time_series_uuids: Iterable[UUID]) -> set[UUID]:
+    def list_missing_time_series(
+        self,
+        time_series_uuids: Iterable[UUID],
+        connection: sqlite3.Connection | None = None,
+    ) -> set[UUID]:
         """Return the time_series_uuids that are no longer referenced by any owner."""
         existing_uuids = self.list_existing_time_series(time_series_uuids)
         return set(time_series_uuids) - existing_uuids
@@ -314,7 +318,6 @@ class TimeSeriesMetadataStore:
             time_series_uuid = ? {limit_str}
         """
         con = connection or self._con
-        breakpoint()
         cur = con.cursor()
         rows = execute(cur, query, params=params).fetchall()
         return [
@@ -325,7 +328,7 @@ class TimeSeriesMetadataStore:
         self,
         time_series_uuids: list[UUID],
         connection: sqlite3.Connection | None = None,
-    ) -> list[TimeSeriesMetadata]:
+    ) -> Generator[TimeSeriesMetadata, None, None]:
         """Return metadata attached to the given time_series_uuid.
 
         Parameters
@@ -355,14 +358,14 @@ class TimeSeriesMetadataStore:
     def list_rows(
         self,
         *components: Component | SupplementalAttribute,
-        variable_name: Optional[str] = None,
+        name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         columns=None,
         **features,
     ) -> list[tuple]:
         """Return a list of rows that match the query."""
         where_clause, params = self._make_where_clause(
-            components, variable_name, time_series_type, **features
+            components, name, time_series_type, **features
         )
         cols = "*" if columns is None else ",".join(columns)
         query = f"SELECT {cols} FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause}"
@@ -406,7 +409,9 @@ class TimeSeriesMetadataStore:
         unique_metadata_uuids = {UUID(row[0]) for row in rows}
         result: list[TimeSeriesMetadata] = []
         for metadata_uuid in unique_metadata_uuids:
-            query_count = f"SELECT COUNT(*) FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE uuid = ?"
+            query_count = (
+                f"SELECT COUNT(*) FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE metadata_uuid = ?"
+            )
             count_association = execute(cur, query_count, params=[str(metadata_uuid)]).fetchone()[
                 0
             ]

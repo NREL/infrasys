@@ -272,7 +272,12 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     features: dict[str, Any] = {}
     units: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
-    type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor", "NonSequentialTimeSeries"]
+    type: Literal[
+        "SingleTimeSeries",
+        "SingleTimeSeriesScalingFactor",
+        "NonSequentialTimeSeries",
+        "DeterministicTimeSeries",
+    ]
 
     @property
     def label(self) -> str:
@@ -403,11 +408,11 @@ class DeterministicMetadataBase(TimeSeriesMetadata, abc.ABC):
 class DeterministicMetadata(DeterministicMetadataBase):
     """Defines the metadata for a SingleTimeSeries."""
 
-    type: Literal["DeterministicMetadata"] = "DeterministicMetadata"
+    type: Literal["DeterministicTimeSeries"] = "DeterministicTimeSeries"
 
     @staticmethod
     def get_time_series_type_str() -> str:
-        return "DeterministicMetadata"
+        return "DeterministicTimeSeries"
 
 
 TimeSeriesMetadataUnion = Annotated[

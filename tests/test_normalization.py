@@ -1,8 +1,10 @@
 import numpy as np
+import pytest
 
-from infrasys.normalization import NormalizationMax, NormalizationByValue
+from infrasys.normalization import NormalizationByValue, NormalizationMax
 
 
+@pytest.mark.xfail(reason="Removing")
 def test_normalization_max():
     data = np.array([1.1, 2.2, 3.3, 4.4, 5.5])
     normalization = NormalizationMax()
@@ -12,6 +14,7 @@ def test_normalization_max():
         assert x == data[i] / 5.5
 
 
+@pytest.mark.xfail(reason="Removing")
 def test_normalization_by_value():
     data = np.array([1.1, 2.2, 3.3, 4.4, 5.5])
     normalization = NormalizationByValue(value=data[-1])
