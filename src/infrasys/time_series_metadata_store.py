@@ -649,7 +649,12 @@ def _make_features_filter(features: dict[str, Any], params: list[str]) -> str:
     conditions = []
     for key, value in features.items():
         conditions.append("features LIKE ?")
-        params.append(f'%"{key}":"{value}"%')
+        if isinstance(value, str):
+            params.append(f'%"{key}":"{value}"%')
+        elif isinstance(value, bool):
+            params.append(f'%"{key}":{str(value).lower()}%')
+        else:
+            params.append(f'%"{key}":{value}%')
     return " AND ".join(conditions)
 
 
