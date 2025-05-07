@@ -393,7 +393,7 @@ class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadataBase):
 class DeterministicMetadataBase(TimeSeriesMetadata, abc.ABC):
     """Base class for SingleTimeSeries metadata."""
 
-    initial_time: datetime
+    initial_timestamp: datetime
     resolution: timedelta
     interval: timedelta
     horizon: timedelta
