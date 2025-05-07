@@ -1,34 +1,41 @@
 """Manages time series arrays"""
 
-from contextlib import contextmanager
+import atexit
 import sqlite3
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from functools import singledispatch
 from pathlib import Path
+from tempfile import mkdtemp
 from typing import Any, Generator, Optional, Type
 
+import h5py
+import numpy as np
 from loguru import logger
 
-from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys import Component
+from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.exceptions import ISInvalidParameter, ISOperationNotAllowed
+from infrasys.h5_time_series_storage import HDF5TimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_metadata_store import TimeSeriesMetadataStore
 from infrasys.time_series_models import (
-    DatabaseConnection,
+    NonSequentialTimeSeries,
+    NonSequentialTimeSeriesKey,
+    NonSequentialTimeSeriesMetadata,
     SingleTimeSeries,
     SingleTimeSeriesKey,
     SingleTimeSeriesMetadata,
-    NonSequentialTimeSeries,
-    NonSequentialTimeSeriesMetadata,
-    NonSequentialTimeSeriesKey,
     TimeSeriesData,
     TimeSeriesKey,
     TimeSeriesMetadata,
+    TimeSeriesStorageContext,
     TimeSeriesStorageType,
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
+from infrasys.utils.path_utils import clean_tmp_folder
 
 try:
     from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
@@ -38,7 +45,17 @@ except ImportError:
     is_chronify_installed = False
 
 
+def is_h5py_installed():
+    try:
+        import h5py  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 TIME_SERIES_KWARGS = {
+    "in_memory": False,
     "time_series_read_only": False,
     "time_series_directory": None,
     "time_series_storage_type": TimeSeriesStorageType.ARROW,
@@ -58,23 +75,31 @@ class TimeSeriesManager:
         con: sqlite3.Connection,
         storage: Optional[TimeSeriesStorageBase] = None,
         initialize: bool = True,
+        metadata_store: TimeSeriesMetadataStore | None = None,
         **kwargs,
     ) -> None:
         self._con = con
-        self._metadata_store = TimeSeriesMetadataStore(con, initialize=initialize)
+        self._metadata_store = metadata_store or TimeSeriesMetadataStore(
+            con, initialize=initialize
+        )
         self._read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
         self._storage = storage or self.create_new_storage(**kwargs)
+        self._context: TimeSeriesStorageContext | None = None
 
         # TODO: create parsing mechanism? CSV, CSV + JSON
 
     @staticmethod
-    def create_new_storage(permanent: bool = False, **kwargs):
+    def create_new_storage(permanent: bool = False, **kwargs):  # noqa: C901
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)
         storage_type = _process_time_series_kwarg("time_series_storage_type", **kwargs)
         if permanent:
             if base_directory is None:
                 msg = "Can't convert to permanent storage without a base directory"
                 raise ISInvalidParameter(msg)
+        if not base_directory:
+            base_directory = Path(mkdtemp(dir=base_directory))
+            logger.debug("Creating tmp folder at {}", base_directory)
+            atexit.register(clean_tmp_folder, base_directory)
 
         match storage_type:
             case TimeSeriesStorageType.ARROW:
@@ -105,6 +130,12 @@ class TimeSeriesManager:
                 )
             case TimeSeriesStorageType.MEMORY:
                 return InMemoryTimeSeriesStorage()
+            case TimeSeriesStorageType.HDF5:
+                if not is_h5py_installed():
+                    msg = f"`{storage_type}` backend requires `h5py` to be installed. "
+                    msg += 'Install it using `pip install "infrasys[h5]".'
+                    raise ImportError(msg)
+                return HDF5TimeSeriesStorage(base_directory, **kwargs)
             case _:
                 msg = f"{storage_type=}"
                 raise NotImplementedError(msg)
@@ -123,8 +154,8 @@ class TimeSeriesManager:
         self,
         time_series: TimeSeriesData,
         *owners: Component | SupplementalAttribute,
-        connection: DatabaseConnection | None = None,
-        **user_attributes: Any,
+        context: TimeSeriesStorageContext | None = None,
+        **features: Any,
     ) -> TimeSeriesKey:
         """Store a time series array for one or more components or supplemental attributes.
 
@@ -136,7 +167,7 @@ class TimeSeriesManager:
             Add the time series to all of these components or supplemental attributes.
         connection
             Optional connection to use for the operation.
-        user_attributes : Any
+        features : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
 
         Raises
@@ -148,6 +179,7 @@ class TimeSeriesManager:
             Raised if the manager was created in read-only mode.
         """
         self._handle_read_only()
+        context = context or self._context
         if not owners:
             msg = "add_time_series requires at least one component or supplemental attribute"
             raise ISOperationNotAllowed(msg)
@@ -157,30 +189,28 @@ class TimeSeriesManager:
             msg = f"The first argument must be an instance of TimeSeriesData: {ts_type}"
             raise ValueError(msg)
         metadata_type = ts_type.get_time_series_metadata_type()
-        metadata = metadata_type.from_data(time_series, **user_attributes)
+        metadata = metadata_type.from_data(time_series, **features)
 
         data_is_stored = self._metadata_store.has_time_series(time_series.uuid)
         # Call this first because it could raise an exception.
-        self._metadata_store.add(
-            metadata, *owners, connection=_get_metadata_connection(connection)
-        )
+        self._metadata_store.add(metadata, *owners, connection=_get_metadata_connection(context))
         if not data_is_stored:
             self._storage.add_time_series(
                 metadata,
                 time_series,
-                connection=_get_data_connection(connection),
+                context=_get_data_context(context),
             )
         return make_time_series_key(metadata)
 
     def get(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: DatabaseConnection | None = None,
-        **user_attributes,
+        context: TimeSeriesStorageContext | None = None,
+        **features,
     ) -> TimeSeriesData:
         """Return a time series array.
 
@@ -198,105 +228,103 @@ class TimeSeriesManager:
         """
         metadata = self._metadata_store.get_metadata(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type.__name__,
-            **user_attributes,
+            **features,
         )
         return self._get_by_metadata(
-            metadata, start_time=start_time, length=length, connection=connection
+            metadata, start_time=start_time, length=length, context=context
         )
 
     def get_by_key(
         self,
         owner: Component | SupplementalAttribute,
         key: TimeSeriesKey,
-        connection: DatabaseConnection | None = None,
+        connection: TimeSeriesStorageContext | None = None,
     ) -> TimeSeriesData:
         """Return a time series array by key."""
         metadata = self._metadata_store.get_metadata(
             owner,
-            variable_name=key.variable_name,
+            name=key.name,
             time_series_type=key.time_series_type.__name__,
-            **key.user_attributes,
+            **key.features,
         )
-        return self._get_by_metadata(metadata, connection=connection)
+        return self._get_by_metadata(metadata, context=connection)
 
     def has_time_series(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
-        **user_attributes,
+        **features,
     ) -> bool:
         """Return True if the component or supplemental atttribute has time series matching the
         inputs.
         """
         return self._metadata_store.has_time_series_metadata(
             owner,
-            variable_name=variable_name,
+            variable_name=name,
             time_series_type=time_series_type.__name__,
-            **user_attributes,
+            **features,
         )
 
     def list_time_series(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: DatabaseConnection | None = None,
-        **user_attributes: Any,
+        connection: TimeSeriesStorageContext | None = None,
+        **features: Any,
     ) -> list[TimeSeriesData]:
         """Return all time series that match the inputs."""
         metadata = self.list_time_series_metadata(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
         return [
-            self._get_by_metadata(x, start_time=start_time, length=length, connection=connection)
+            self._get_by_metadata(x, start_time=start_time, length=length, context=connection)
             for x in metadata
         ]
 
     def list_time_series_keys(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
-        **user_attributes: Any,
+        **features: Any,
     ) -> list[TimeSeriesKey]:
         """Return all time series keys that match the inputs."""
         return [
             make_time_series_key(x)
-            for x in self.list_time_series_metadata(
-                owner, variable_name, time_series_type, **user_attributes
-            )
+            for x in self.list_time_series_metadata(owner, name, time_series_type, **features)
         ]
 
     def list_time_series_metadata(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
-        **user_attributes: Any,
+        **features: Any,
     ) -> list[TimeSeriesMetadata]:
         """Return all time series metadata that match the inputs."""
         return self._metadata_store.list_metadata(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type.__name__,
-            **user_attributes,
+            **features,
         )
 
     def remove(
         self,
         *owners: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
-        connection: DatabaseConnection | None = None,
-        **user_attributes: Any,
+        context: TimeSeriesStorageContext | None = None,
+        **features: Any,
     ):
         """Remove all time series arrays matching the inputs.
 
@@ -308,20 +336,21 @@ class TimeSeriesManager:
             Raised if the manager was created in read-only mode.
         """
         self._handle_read_only()
+        metadata_connection = _get_metadata_connection(context)
         metadata = self._metadata_store.remove(
             *owners,
-            variable_name=variable_name,
+            variable_name=name,
             time_series_type=time_series_type.__name__,
-            connection=_get_metadata_connection(connection),
-            **user_attributes,
+            connection=metadata_connection,
+            **features,
         )
         time_series = {x.time_series_uuid: x for x in metadata}
-        missing_uuids = self._metadata_store.list_missing_time_series(time_series.keys())
+        missing_uuids = self._metadata_store.list_missing_time_series(
+            time_series.keys(), connection=metadata_connection
+        )
         for uuid in missing_uuids:
-            self._storage.remove_time_series(
-                time_series[uuid], connection=_get_data_connection(connection)
-            )
-            logger.info("Removed time series {}.{}", time_series_type, variable_name)
+            self._storage.remove_time_series(time_series[uuid], context=_get_data_context(context))
+            logger.info("Removed time series {}.{}", time_series_type, name)
 
     def copy(
         self,
@@ -355,20 +384,24 @@ class TimeSeriesManager:
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: DatabaseConnection | None = None,
+        context: TimeSeriesStorageContext | None = None,
     ) -> TimeSeriesData:
         return self._storage.get_time_series(
             metadata,
             start_time=start_time,
             length=length,
-            connection=_get_data_connection(connection),
+            context=_get_data_context(context),
         )
 
     def serialize(
-        self, data: dict[str, Any], dst: Path | str, src: Optional[Path | str] = None
+        self,
+        data: dict[str, Any],
+        dst: Path | str,
+        db_name: str,
+        src: Path | str | None = None,
     ) -> None:
         """Serialize the time series data to dst."""
-        if isinstance(self._storage, InMemoryTimeSeriesStorage):
+        if isinstance(self.storage, InMemoryTimeSeriesStorage):
             new_storage = self.convert_storage(
                 time_series_storage_type=TimeSeriesStorageType.ARROW,
                 time_series_directory=dst,
@@ -377,7 +410,22 @@ class TimeSeriesManager:
             )
             assert isinstance(new_storage, ArrowTimeSeriesStorage)
             new_storage.add_serialized_data(data)
+            self._metadata_store.serialize(Path(dst) / db_name)
+        elif isinstance(self.storage, HDF5TimeSeriesStorage):
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                temp_file_path = Path(tmpdirname) / db_name
+                self._metadata_store.serialize(temp_file_path)
+                self._storage.serialize(data, dst, src=src)
+                with open(temp_file_path, "rb") as f:
+                    binary_data = f.read()
+                with h5py.File(self.storage.output_file, "a") as f_out:
+                    f_out.create_dataset(
+                        self.storage.HDF5_TS_METADATA_ROOT_PATH,
+                        data=np.frombuffer(binary_data, dtype=np.uint8),
+                        dtype=np.uint8,
+                    )
         else:
+            self._metadata_store.serialize(Path(dst) / db_name)
             self._storage.serialize(data, dst, src=src)
 
     @classmethod
@@ -391,6 +439,7 @@ class TimeSeriesManager:
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
+        metadata_store = None
         if (
             _process_time_series_kwarg("time_series_storage_type", **kwargs)
             == TimeSeriesStorageType.MEMORY
@@ -437,11 +486,18 @@ class TimeSeriesManager:
                         base_directory=dst_time_series_directory
                     )
                     storage.serialize({}, storage.get_time_series_directory(), src=time_series_dir)
+            case TimeSeriesStorageType.HDF5:
+                storage = HDF5TimeSeriesStorage(directory=time_series_dir, **kwargs)
+                metadata_store = TimeSeriesMetadataStore(
+                    storage.get_metadata_store(), initialize=False
+                )
             case _:
                 msg = f"time_series_storage_type={ts_type} is not supported"
                 raise NotImplementedError(msg)
 
-        mgr = cls(con, storage=storage, initialize=False, **kwargs)
+        mgr = cls(con, storage=storage, metadata_store=metadata_store, initialize=False, **kwargs)
+
+        mgr.metadata_store._load_metadata_into_memory()
         if (
             "time_series_storage_type" in kwargs
             and _process_time_series_kwarg("time_series_storage_type", **kwargs) != ts_type
@@ -450,15 +506,40 @@ class TimeSeriesManager:
         return mgr
 
     @contextmanager
-    def open_time_series_store(self) -> Generator[DatabaseConnection, None, None]:
+    def open_time_series_store(self, mode) -> Generator[TimeSeriesStorageContext, None, None]:
         """Open a connection to the time series metadata and data stores."""
-        with self._storage.open_time_series_store() as data_conn:
+        with self.storage.open_time_series_store(mode=mode) as context:
             try:
-                yield DatabaseConnection(metadata_conn=self._con, data_conn=data_conn)
+                original_uuids = self._metadata_store.list_existing_time_series_uuids()
+                self._context = TimeSeriesStorageContext(
+                    metadata_conn=self._con, data_context=context
+                )
+                yield self._context
                 self._con.commit()
-            except Exception:
+            except Exception as e:
+                # If we fail, we remove any new added time series (if any) and rollback the metadata.
+                logger.error(e)
+                new_uuids = (
+                    set(self._metadata_store.list_existing_time_series_uuids()) - original_uuids
+                )
+
+                all_metadata = []
+                for uuid in new_uuids:
+                    metadata_list = self._metadata_store.list_metadata_with_time_series_uuid(uuid)
+                    for metadata in metadata_list:
+                        self._metadata_store.remove_by_metadata(metadata, connection=self._con)
+                        all_metadata.append(metadata)
+
+                if hasattr(self._storage, "batch_remove_time_series"):
+                    self._storage.batch_remove_time_series(all_metadata, context=context)
+                else:
+                    for metadata in all_metadata:
+                        self._storage.remove_time_series(metadata, context=context)
+
                 self._con.rollback()
                 raise
+            finally:
+                self._context = None
 
     def _handle_read_only(self) -> None:
         if self._read_only:
@@ -509,11 +590,11 @@ def make_time_series_key(metadata) -> TimeSeriesKey:
 @make_time_series_key.register(SingleTimeSeriesMetadata)
 def _(metadata: SingleTimeSeriesMetadata) -> TimeSeriesKey:
     return SingleTimeSeriesKey(
-        initial_time=metadata.initial_time,
+        initial_timestamp=metadata.initial_timestamp,
         resolution=metadata.resolution,
         length=metadata.length,
-        user_attributes=metadata.user_attributes,
-        variable_name=metadata.variable_name,
+        features=metadata.features,
+        name=metadata.name,
         time_series_type=SingleTimeSeries,
     )
 
@@ -522,15 +603,15 @@ def _(metadata: SingleTimeSeriesMetadata) -> TimeSeriesKey:
 def _(metadata: NonSequentialTimeSeriesMetadata) -> TimeSeriesKey:
     return NonSequentialTimeSeriesKey(
         length=metadata.length,
-        user_attributes=metadata.user_attributes,
-        variable_name=metadata.variable_name,
+        features=metadata.features,
+        name=metadata.name,
         time_series_type=NonSequentialTimeSeries,
     )
 
 
-def _get_data_connection(conn: DatabaseConnection | None) -> Any:
-    return None if conn is None else conn.data_conn
+def _get_data_context(conn: TimeSeriesStorageContext | None) -> Any:
+    return None if conn is None else conn.data_context
 
 
-def _get_metadata_connection(conn: DatabaseConnection | None) -> sqlite3.Connection | None:
+def _get_metadata_connection(conn: TimeSeriesStorageContext | None) -> sqlite3.Connection | None:
     return None if conn is None else conn.metadata_conn
