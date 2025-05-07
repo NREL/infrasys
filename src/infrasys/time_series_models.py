@@ -276,7 +276,7 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
         "SingleTimeSeries",
         "SingleTimeSeriesScalingFactor",
         "NonSequentialTimeSeries",
-        "DeterministicTimeSeries",
+        "DeterministicSingleTimeSeries",
     ]
 
     @property
@@ -398,7 +398,7 @@ class DeterministicMetadataBase(TimeSeriesMetadata, abc.ABC):
     interval: timedelta
     horizon: timedelta
     window_count: int
-    type: Literal["DeterministicTimeSeries"]
+    type: Literal["DeterministicSingleTimeSeries"]
 
     @staticmethod
     def get_time_series_data_type() -> Type:
@@ -408,11 +408,11 @@ class DeterministicMetadataBase(TimeSeriesMetadata, abc.ABC):
 class DeterministicMetadata(DeterministicMetadataBase):
     """Defines the metadata for a SingleTimeSeries."""
 
-    type: Literal["DeterministicTimeSeries"] = "DeterministicTimeSeries"
+    type: Literal["DeterministicSingleTimeSeries"] = "DeterministicSingleTimeSeries"
 
     @staticmethod
     def get_time_series_type_str() -> str:
-        return "DeterministicTimeSeries"
+        return "DeterministicSingleTimeSeries"
 
 
 TimeSeriesMetadataUnion = Annotated[
