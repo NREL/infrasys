@@ -233,7 +233,7 @@ class DeterministicTimeSeries(TimeSeriesData):
 
     data: NDArray | pint.Quantity
     resolution: timedelta
-    initial_time: datetime
+    initial_timestamp: datetime
 
 
 # TODO:
