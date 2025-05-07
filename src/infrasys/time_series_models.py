@@ -228,7 +228,7 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
 
 
-class DeterministicTimeSeries(TimeSeriesData):
+class DeterministicSingleTimeSeries(TimeSeriesData):
     """Defines a time array with a single dimension of floats."""
 
     data: NDArray | pint.Quantity
