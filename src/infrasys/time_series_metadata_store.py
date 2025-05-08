@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 from uuid import UUID
 
+import orjson
 from loguru import logger
 
 from infrasys import (
@@ -137,7 +138,7 @@ class TimeSeriesMetadataStore:
 
         units = None
         if metadata.units:
-            units = json.dumps(serialize_value(metadata.units))
+            units = orjson.dumps(serialize_value(metadata.units))
 
         rows = [
             {
@@ -506,8 +507,9 @@ class TimeSeriesMetadataStore:
 
         where_clause, params = self._make_where_clause(owners, variable_name, time_series_type)
         features_str = make_features_string(features)
+        if features_str:
+            params.append(features_str.decode())
         query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause} AND features = ?"
-        params.append(features_str)
         rows = execute(cur, query, params=params).fetchall()
 
         if rows:
@@ -586,7 +588,7 @@ def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
     return metadata_instance
 
 
-def make_features_string(features: dict[str, Any]) -> str:
+def make_features_string(features: dict[str, Any]) -> bytes:
     """Serializes a dictionary of features into a sorted string."""
     data = [{key: value} for key, value in sorted(features.items())]
-    return json.dumps(data, separators=(",", ":"))
+    return orjson.dumps(data)
