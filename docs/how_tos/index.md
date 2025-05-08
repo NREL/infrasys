@@ -1,6 +1,7 @@
 ```{eval-rst}
 .. _how-tos-page:
 ```
+
 # How Tos
 
 ```{eval-rst}
@@ -9,4 +10,5 @@
     :caption: Contents:
 
     list_time_series
+    benchmark
 ```
