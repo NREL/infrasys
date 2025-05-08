@@ -29,7 +29,6 @@ from infrasys.time_series_models import (
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 from infrasys.utils.path_utils import delete_if_exists
 
-
 _SINGLE_TIME_SERIES_BASE_NAME = "single_time_series"
 _TIME_SERIES_FILENAME = "time_series_data.db"
 
@@ -237,17 +236,15 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"Bug: {len(df)=} {length=} {required_len=}"
             raise Exception(msg)
         values = df["value"].values
-        if metadata.quantity_metadata is not None:
-            np_array = metadata.quantity_metadata.quantity_type(
-                values, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            np_array = metadata.units.quantity_type(values, metadata.units.units)
         else:
             np_array = values
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             resolution=metadata.resolution,
-            initial_time=start_time or metadata.initial_time,
+            initial_timestamp=start_time or metadata.initial_timestamp,
             data=np_array,
             normalization=metadata.normalization,
         )
@@ -283,31 +280,31 @@ def _get_table_name(time_series) -> str:
 @_get_table_name.register(SingleTimeSeries)
 def _(time_series) -> str:
     return _get_single_time_series_table_name(
-        time_series.initial_time, time_series.resolution, time_series.length
+        time_series.initial_timestamp, time_series.resolution, time_series.length
     )
 
 
 @_get_table_name.register(SingleTimeSeriesMetadata)
 def _(metadata) -> str:
     return _get_single_time_series_table_name(
-        metadata.initial_time, metadata.resolution, metadata.length
+        metadata.initial_timestamp, metadata.resolution, metadata.length
     )
 
 
 @_get_table_name.register(SingleTimeSeriesKey)
 def _(key) -> str:
-    return _get_single_time_series_table_name(key.initial_time, key.resolution, key.length)
+    return _get_single_time_series_table_name(key.initial_timestamp, key.resolution, key.length)
 
 
 def _get_single_time_series_table_name(
-    initial_time: datetime,
+    initial_timestamp: datetime,
     resolution: timedelta,
     length: int,
 ) -> str:
     return "_".join(
         (
             _SINGLE_TIME_SERIES_BASE_NAME,
-            initial_time.isoformat().replace("-", "_").replace(":", "_"),
+            initial_timestamp.isoformat().replace("-", "_").replace(":", "_"),
             str(resolution.seconds),
             str(length),
         )
@@ -334,7 +331,7 @@ def _make_time_config(time_series) -> Any:
 @_make_time_config.register(SingleTimeSeries)
 def _(time_series: SingleTimeSeries) -> DatetimeRange:
     return DatetimeRange(
-        start=time_series.initial_time,
+        start=time_series.initial_timestamp,
         resolution=time_series.resolution,
         length=len(time_series.data),
         time_column="timestamp",

@@ -3,17 +3,17 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeAlias
-
-from numpy.typing import NDArray
 from uuid import UUID
+
 from loguru import logger
+from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
-    SingleTimeSeries,
-    SingleTimeSeriesMetadata,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
+    SingleTimeSeries,
+    SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
@@ -97,16 +97,14 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             index, length = metadata.get_range(start_time=start_time, length=length)
             ts_data = ts_data[index : index + length]
 
-        if metadata.quantity_metadata is not None:
-            ts_data = metadata.quantity_metadata.quantity_type(
-                ts_data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            ts_data = metadata.units.quantity_type(ts_data, metadata.units.units)
         assert ts_data is not None
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             resolution=metadata.resolution,
-            initial_time=start_time or metadata.initial_time,
+            initial_timestamp=start_time or metadata.initial_timestamp,
             data=ts_data,
             normalization=metadata.normalization,
         )
@@ -124,15 +122,13 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"No time series timestamps with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
 
-        if metadata.quantity_metadata is not None:
-            ts_data = metadata.quantity_metadata.quantity_type(
-                ts_data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            ts_data = metadata.units.quantity_type(ts_data, metadata.units.units)
         assert ts_data is not None
         assert ts_timestamps is not None
         return NonSequentialTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             data=ts_data,
             timestamps=ts_timestamps,
             normalization=metadata.normalization,

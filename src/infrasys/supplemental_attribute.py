@@ -36,8 +36,8 @@ class SupplementalAttribute(InfraSysBaseModelWithIdentifers):
         val = getattr(self, field)
         if isinstance(val, BaseQuantity):
             data = val.to_dict()
-            data[TYPE_METADATA] = SerializedTypeMetadata(
-                fields=SerializedQuantityType(
+            data[TYPE_METADATA] = SerializedTypeMetadata.validate_python(
+                SerializedQuantityType(
                     module=val.__module__,
                     type=val.__class__.__name__,
                 ),

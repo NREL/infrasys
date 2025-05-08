@@ -11,10 +11,10 @@ from infrasys.models import (
     InfraSysBaseModelWithIdentifers,
 )
 from infrasys.serialization import (
-    SerializedTypeMetadata,
+    TYPE_METADATA,
     SerializedComponentReference,
     SerializedQuantityType,
-    TYPE_METADATA,
+    SerializedTypeMetadata,
     serialize_value,
 )
 
@@ -49,8 +49,8 @@ class Component(InfraSysBaseModelWithIdentifers):
             val = [{TYPE_METADATA: serialize_component_reference(x)} for x in val]
         elif isinstance(val, BaseQuantity):
             data = val.to_dict()
-            data[TYPE_METADATA] = SerializedTypeMetadata(
-                fields=SerializedQuantityType(
+            data[TYPE_METADATA] = SerializedTypeMetadata.validate_python(
+                SerializedQuantityType(
                     module=val.__module__,
                     type=val.__class__.__name__,
                 ),
@@ -68,8 +68,8 @@ class Component(InfraSysBaseModelWithIdentifers):
 
 def serialize_component_reference(component: Component) -> dict[str, Any]:
     """Make a JSON serializable reference to a component."""
-    return SerializedTypeMetadata(
-        fields=SerializedComponentReference(
+    return SerializedTypeMetadata.validate_python(
+        SerializedComponentReference(
             module=component.__module__,
             type=component.__class__.__name__,
             uuid=component.uuid,
