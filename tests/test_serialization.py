@@ -1,28 +1,29 @@
 import json
-from pathlib import Path
-import random
 import os
+import random
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Type
 
 import numpy as np
-from numpy._typing import NDArray
 import pint
 import pytest
+from numpy._typing import NDArray
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
 
-from infrasys import Location, SingleTimeSeries, NonSequentialTimeSeries
+from infrasys import Location, NonSequentialTimeSeries, SingleTimeSeries
 from infrasys.component import Component
-from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
-from infrasys.time_series_models import TimeSeriesStorageType, TimeSeriesData
+from infrasys.quantities import ActivePower, Distance
+from infrasys.time_series_models import TimeSeriesData, TimeSeriesStorageType
+
 from .models.simple_system import (
-    SimpleSystem,
     SimpleBus,
     SimpleGenerator,
     SimpleSubsystem,
+    SimpleSystem,
 )
 
 TS_STORAGE_OPTIONS = (
@@ -130,11 +131,9 @@ def check_deserialize_with_read_only_time_series(
     assert system_ts_dir == SimpleSystem._make_time_series_directory(filename)
     gen1b = system.get_component(SimpleGenerator, gen1_name)
     with pytest.raises(ISOperationNotAllowed):
-        system.remove_time_series(gen1b, variable_name=variable_name)
+        system.remove_time_series(gen1b, name=variable_name)
 
-    ts2 = system.get_time_series(
-        gen1b, time_series_type=time_series_type, variable_name=variable_name
-    )
+    ts2 = system.get_time_series(gen1b, time_series_type=time_series_type, name=variable_name)
     assert np.array_equal(ts2.data, expected_ts_data)
     if expected_ts_timestamps is not None:
         assert np.array_equal(ts2.timestamps, expected_ts_timestamps)
@@ -155,9 +154,7 @@ def test_serialize_nonsequential_time_series(tmp_path, time_series_storage_type)
     timestamps = [
         datetime(year=2030, month=1, day=1) + timedelta(seconds=5 * i) for i in range(length)
     ]
-    ts = NonSequentialTimeSeries.from_array(
-        data=data, variable_name=variable_name, timestamps=timestamps
-    )
+    ts = NonSequentialTimeSeries.from_array(data=data, name=variable_name, timestamps=timestamps)
     system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
     filename = tmp_path / "system.json"
     system.to_json(filename)
@@ -226,13 +223,11 @@ def test_with_single_time_series_quantity(tmp_path):
 
     system2 = SimpleSystem.from_json(sys_file)
     gen2 = system2.get_component(SimpleGenerator, gen.name)
-    ts2 = system2.get_time_series(
-        gen2, time_series_type=SingleTimeSeries, variable_name=variable_name
-    )
+    ts2 = system2.get_time_series(gen2, time_series_type=SingleTimeSeries, name=variable_name)
     assert isinstance(ts, SingleTimeSeries)
     assert ts.length == length
     assert ts.resolution == resolution
-    assert ts.initial_time == initial_time
+    assert ts.initial_timestamp == initial_time
     assert isinstance(ts2.data.magnitude, np.ndarray)
     assert np.array_equal(ts2.data.magnitude, np.array(range(length)))
 
@@ -248,9 +243,7 @@ def test_with_nonsequential_time_series_quantity(tmp_path):
     timestamps = [
         datetime(year=2030, month=1, day=1) + timedelta(seconds=100 * i) for i in range(10)
     ]
-    ts = NonSequentialTimeSeries.from_array(
-        data=data, variable_name=variable_name, timestamps=timestamps
-    )
+    ts = NonSequentialTimeSeries.from_array(data=data, name=variable_name, timestamps=timestamps)
     system.add_time_series(ts, gen)
 
     sys_file = tmp_path / "system.json"
@@ -259,7 +252,7 @@ def test_with_nonsequential_time_series_quantity(tmp_path):
     system2 = SimpleSystem.from_json(sys_file)
     gen2 = system2.get_component(SimpleGenerator, gen.name)
     ts2 = system2.get_time_series(
-        gen2, time_series_type=NonSequentialTimeSeries, variable_name=variable_name
+        gen2, time_series_type=NonSequentialTimeSeries, name=variable_name
     )
     assert isinstance(ts, NonSequentialTimeSeries)
     assert ts.length == length
@@ -269,6 +262,7 @@ def test_with_nonsequential_time_series_quantity(tmp_path):
     assert np.array_equal(ts2.timestamps, np.array(timestamps))
 
 
+@pytest.mark.xfail(reason="Removing normalization from metadata store.")
 @pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
 def test_system_with_single_time_series_normalization(tmp_path, storage_type):
     system = SimpleSystem(
@@ -292,9 +286,7 @@ def test_system_with_single_time_series_normalization(tmp_path, storage_type):
 
     system2 = SimpleSystem.from_json(filename)
     gen2 = system2.get_component(SimpleGenerator, gen.name)
-    ts2 = system2.get_time_series(
-        gen2, time_series_type=SingleTimeSeries, variable_name=variable_name
-    )
+    ts2 = system2.get_time_series(gen2, time_series_type=SingleTimeSeries, name=variable_name)
     assert ts2.normalization.max_value == length - 1
 
 
