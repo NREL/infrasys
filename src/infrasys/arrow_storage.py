@@ -3,22 +3,22 @@
 import atexit
 import shutil
 from datetime import datetime
+from functools import singledispatchmethod
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any, Optional
-from functools import singledispatchmethod
 
 import numpy as np
-from numpy.typing import NDArray
 import pyarrow as pa
 from loguru import logger
+from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
-    SingleTimeSeries,
-    SingleTimeSeriesMetadata,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
+    SingleTimeSeries,
+    SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
     TimeSeriesStorageType,
@@ -165,17 +165,15 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         # v0.2.1 or later. Earlier versions used the time series variable name.
         column = columns[0]
         data = base_ts[column][index : index + length]
-        if metadata.quantity_metadata is not None:
-            np_array = metadata.quantity_metadata.quantity_type(
-                data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            np_array = metadata.units.quantity_type(data, metadata.units.units)
         else:
             np_array = np.array(data)
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             resolution=metadata.resolution,
-            initial_time=start_time or metadata.initial_time,
+            initial_timestamp=start_time or metadata.initial_timestamp,
             data=np_array,
             normalization=metadata.normalization,
         )
@@ -197,16 +195,14 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             base_ts[data_column],
             base_ts[timestamps_column],
         )
-        if metadata.quantity_metadata is not None:
-            np_data_array = metadata.quantity_metadata.quantity_type(
-                data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            np_data_array = metadata.units.quantity_type(data, metadata.units.units)
         else:
             np_data_array = np.array(data)
         np_time_array = np.array(timestamps).astype("O")  # convert to datetime object
         return NonSequentialTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             data=np_data_array,
             timestamps=np_time_array,
             normalization=metadata.normalization,
