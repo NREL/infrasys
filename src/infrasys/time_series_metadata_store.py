@@ -18,8 +18,6 @@ from infrasys import (
 )
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infrasys.serialization import (
-    TYPE_METADATA,
-    SerializedBaseType,
     SerializedTypeMetadata,
     deserialize_type,
     serialize_value,
@@ -546,7 +544,12 @@ def _make_features_filter(features: dict[str, Any], params: list[str]) -> str:
     conditions = []
     for key, value in features.items():
         conditions.append("features LIKE ?")
-        params.append(f'%"{key}":"{value}"%')
+        if isinstance(value, str):
+            params.append(f'%"{key}":"{value}"%')
+        elif isinstance(value, bool):
+            params.append(f'%"{key}":{str(value).lower()}%')
+        else:
+            params.append(f'%"{key}":{value}%')
     return " AND ".join(conditions)
 
 
@@ -570,7 +573,7 @@ def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
         if data.get(column):
             data[column] = json.loads(data[column])
 
-    # Features requires special handling since it is a sorter array with key value pairs.
+    # Features requires special handling since it is a sorted array with key value pairs.
     if data.get("features"):
         data["features"] = data["features"][0]
     else:
@@ -587,22 +590,3 @@ def make_features_string(features: dict[str, Any]) -> str:
     """Serializes a dictionary of features into a sorted string."""
     data = [{key: value} for key, value in sorted(features.items())]
     return json.dumps(data, separators=(",", ":"))
-
-
-def make_serialization_info(metadata: TimeSeriesMetadata) -> str:
-    """Serialize information."""
-    metadata_type = SerializedTypeMetadata.validate_python(
-        SerializedBaseType(
-            module=metadata.__module__,
-            type=metadata.__class__.__name__,
-        )
-    ).model_dump()
-    metadata_seriarlized = metadata.model_dump(mode="json", round_trip=True)
-    serialized_info = {
-        TYPE_METADATA: {
-            "quantity_metadata": metadata_seriarlized.get("quantity_metadata"),
-            "normalization": metadata_seriarlized.get("normalization"),
-            **metadata_type,
-        }
-    }
-    return json.dumps(serialized_info, separators=(",", ":"))
