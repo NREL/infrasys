@@ -10,5 +10,4 @@
     :caption: Contents:
 
     list_time_series
-    benchmark
 ```
