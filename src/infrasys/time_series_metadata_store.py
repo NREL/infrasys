@@ -511,25 +511,6 @@ class TimeSeriesMetadataStore:
         )
         query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause}"
         rows = execute(cur, query, params=params).fetchall()
-
-        if rows or not features:
-            return [UUID(row[0]) for row in rows]
-
-        conditions = []
-        like_params = []
-        where_clause, base_params = self._make_where_clause(
-            owners, variable_name, time_series_type
-        )
-        like_params.extend(base_params)
-
-        for key, value in features.items():
-            conditions.append("features LIKE ?")
-            like_params.append(f'%"{key}":"{value}"%')
-
-        if conditions:
-            query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause} AND ({' AND '.join(conditions)})"
-            rows = execute(cur, query, params=like_params).fetchall()
-
         return [UUID(row[0]) for row in rows]
 
 
