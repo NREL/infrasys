@@ -1,4 +1,3 @@
-import json
 import os
 import random
 from datetime import datetime, timedelta
@@ -6,6 +5,7 @@ from pathlib import Path
 from typing import Type
 
 import numpy as np
+import orjson
 import pint
 import pytest
 from numpy._typing import NDArray
@@ -292,7 +292,7 @@ def test_system_with_single_time_series_normalization(tmp_path, storage_type):
 
 def test_json_schema():
     schema = ComponentWithPintQuantity.model_json_schema()
-    assert isinstance(json.loads(json.dumps(schema)), dict)
+    assert isinstance(orjson.loads(orjson.dumps(schema)), dict)
 
 
 def test_system_save(tmp_path, simple_system_with_time_series):
