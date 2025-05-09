@@ -496,6 +496,16 @@ class TimeSeriesMetadataStore:
         """Get metadata UUIDs that match the filter criteria using progressive filtering."""
         cur = self._con.cursor()
 
+        where_clause, params = self._make_where_clause(owners, variable_name, time_series_type)
+        features_str = make_features_string(features)
+        if features_str:
+            params.append(features_str)
+        query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause} AND features = ?"
+        rows = execute(cur, query, params=params).fetchall()
+
+        if rows:
+            return [UUID(row[0]) for row in rows]
+
         where_clause, params = self._make_where_clause(
             owners, variable_name, time_series_type, **features
         )
@@ -503,16 +513,6 @@ class TimeSeriesMetadataStore:
         rows = execute(cur, query, params=params).fetchall()
 
         if rows or not features:
-            return [UUID(row[0]) for row in rows]
-
-        where_clause, params = self._make_where_clause(owners, variable_name, time_series_type)
-        features_str = make_features_string(features)
-        if features_str:
-            params.append(features_str.decode())
-        query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause} AND features = ?"
-        rows = execute(cur, query, params=params).fetchall()
-
-        if rows:
             return [UUID(row[0]) for row in rows]
 
         conditions = []
@@ -588,7 +588,7 @@ def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
     return metadata_instance
 
 
-def make_features_string(features: dict[str, Any]) -> bytes:
+def make_features_string(features: dict[str, Any]) -> str:
     """Serializes a dictionary of features into a sorted string."""
     data = [{key: value} for key, value in sorted(features.items())]
-    return orjson.dumps(data)
+    return orjson.dumps(data).decode()
