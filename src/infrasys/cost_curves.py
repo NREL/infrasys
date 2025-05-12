@@ -58,6 +58,6 @@ class FuelCurve(ProductionVariableCostCurve):
     startup_fuel_offtake: Annotated[
         InputOutputCurve,
         Field(
-            description="Fuel consumption at the unit startup proceedure. Additional cost to the startup costs and related only to the initial fuel required to start the unit."
+            description="Fuel consumption at the unit startup procedure. Additional cost to the startup costs and related only to the initial fuel required to start the unit."
         ),
     ] = LinearCurve(0.0)
