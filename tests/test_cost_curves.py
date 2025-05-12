@@ -1,6 +1,6 @@
 from infrasys.cost_curves import CostCurve, FuelCurve, ProductionVariableCostCurve, UnitSystem
 from infrasys.function_data import LinearFunctionData
-from infrasys.value_curves import InputOutputCurve
+from infrasys.value_curves import InputOutputCurve, LinearCurve
 from infrasys import Component
 from .models.simple_system import SimpleSystem
 
@@ -45,6 +45,7 @@ def test_fuel_curve():
             function_data=LinearFunctionData(proportional_term=2.0, constant_term=1.0)
         ),
         fuel_cost=2.5,
+        startup_fuel_offtake=LinearCurve(3.0),
         power_units=UnitSystem.NATURAL_UNITS,
     )
 
@@ -52,6 +53,8 @@ def test_fuel_curve():
     assert fuel_curve.value_curve.function_data.proportional_term == 1.0
     assert isinstance(fuel_curve.vom_cost.function_data, LinearFunctionData)
     assert fuel_curve.vom_cost.function_data.proportional_term == 2.0
+    assert isinstance(fuel_curve.startup_fuel_offtake.function_data, LinearFunctionData)
+    assert fuel_curve.startup_fuel_offtake.function_data.proportional_term == 3.0
     assert fuel_curve.fuel_cost == 2.5
 
 
