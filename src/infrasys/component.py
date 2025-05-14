@@ -2,19 +2,20 @@
 
 from typing import Any
 
+import pint
 from pydantic import Field
 from rich import print as _pprint
 from typing_extensions import Annotated
 
-from infrasys.base_quantity import BaseQuantity
 from infrasys.models import (
     InfraSysBaseModelWithIdentifers,
 )
+from infrasys.quantities import BaseQuantity
 from infrasys.serialization import (
-    SerializedTypeMetadata,
+    TYPE_METADATA,
     SerializedComponentReference,
     SerializedQuantityType,
-    TYPE_METADATA,
+    SerializedTypeMetadata,
     serialize_value,
 )
 
@@ -47,7 +48,7 @@ class Component(InfraSysBaseModelWithIdentifers):
             val = {TYPE_METADATA: serialize_component_reference(val)}
         elif isinstance(val, list) and val and isinstance(val[0], Component):
             val = [{TYPE_METADATA: serialize_component_reference(x)} for x in val]
-        elif isinstance(val, BaseQuantity):
+        elif isinstance(val, BaseQuantity | pint.Quantity):
             data = val.to_dict()
             data[TYPE_METADATA] = SerializedTypeMetadata(
                 fields=SerializedQuantityType(
