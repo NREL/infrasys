@@ -8,9 +8,9 @@ from uuid import UUID
 from loguru import logger
 
 from infrasys import Component
+from infrasys.exceptions import ISAlreadyAttached
 from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.utils.sqlite import execute
-from infrasys.exceptions import ISAlreadyAttached
 
 TABLE_NAME = "supplemental_attribute_associations"
 
@@ -24,7 +24,7 @@ class SupplementalAttributeAssociationsStore:
         self._con = con
         if initialize:
             self._create_association_table()
-        self._create_indexes()
+            self._create_indexes()
 
     def _create_association_table(self):
         schema = [
@@ -44,12 +44,12 @@ class SupplementalAttributeAssociationsStore:
         cur = self._con.cursor()
         execute(
             cur,
-            f"CREATE INDEX IF NOT EXISTS by_attribute ON {self.TABLE_NAME} "
+            f"CREATE INDEX by_attribute ON {self.TABLE_NAME} "
             f"(attribute_uuid, component_uuid, component_type)",
         )
         execute(
             cur,
-            f"CREATE INDEX IF NOT EXISTS by_component ON {self.TABLE_NAME} "
+            f"CREATE INDEX by_component ON {self.TABLE_NAME} "
             f"(component_uuid, attribute_uuid, attribute_type)",
         )
 
