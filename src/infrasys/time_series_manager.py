@@ -409,18 +409,18 @@ class TimeSeriesManager:
             new_storage.add_serialized_data(data)
             self._metadata_store.serialize(Path(dst) / db_name)
         elif isinstance(self.storage, HDF5TimeSeriesStorage):
+            self.storage.serialize(data, dst, src=src)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 temp_file_path = Path(tmpdirname) / db_name
                 self._metadata_store.serialize(temp_file_path)
-                self._storage.serialize(data, dst, src=src)
                 with open(temp_file_path, "rb") as f:
                     binary_data = f.read()
-                with h5py.File(self.storage.output_file, "a") as f_out:
-                    f_out.create_dataset(
-                        self.storage.HDF5_TS_METADATA_ROOT_PATH,
-                        data=np.frombuffer(binary_data, dtype=np.uint8),
-                        dtype=np.uint8,
-                    )
+            with h5py.File(self.storage.output_file, "a") as f_out:
+                f_out.create_dataset(
+                    self.storage.HDF5_TS_METADATA_ROOT_PATH,
+                    data=np.frombuffer(binary_data, dtype=np.uint8),
+                    dtype=np.uint8,
+                )
         else:
             self._metadata_store.serialize(Path(dst) / db_name)
             self._storage.serialize(data, dst, src=src)
