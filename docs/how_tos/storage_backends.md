@@ -38,7 +38,7 @@ If you don't specify a storage type, Arrow storage is used by default.
 
 ## Storage Directory Configuration
 
-For disk-based storage backends (Arrow and Chronify), you can specify where the time series data will be stored:
+For file-based storage backends (Arrow and Chronify), you can specify where the time series data will be stored:
 
 ```python
 from pathlib import Path
@@ -51,6 +51,10 @@ system = System(time_series_directory=custom_dir)
 
 ```{tip}
 If `time_series_directory` is not specified, a temporary directory will be created automatically. This directory will be cleaned up when the Python process exits.
+```
+
+```{warning}
+If your time series data is in the range of GBs, you may need to specify an alternate location because the tmp filesystem may be too small.
 ```
 
 ## Converting Between Storage Types
@@ -143,6 +147,11 @@ system = System(time_series_storage_type=TimeSeriesStorageType.MEMORY)
 - Datasets of any size
 - Persistence across program runs
 - Efficient file-based storage and retrieval
+- Creates one file per time series array.
+
+```{warning}
+This can be problematic on HPC shared filesystems if the number of arrays is is greater than 10,000.
+```
 
 **Characteristics:**
 
@@ -176,16 +185,17 @@ system = System(time_series_storage_type=TimeSeriesStorageType.CHRONIFY)
 
 **Best for:**
 
-- Scientific datasets with high-dimensional data
-- Applications requiring hierarchical data organization
+- Scientific datasets with three or more dimensions
 - Data that benefits from HDF5's compression capabilities
+- Systems with tens or hundreds of thousands of time series arrays
+- Stores all time series arrays in one file.
 
 **Characteristics:**
 
 - Uses HDF5 file format, popular in scientific computing
 - Supports hierarchical organization of data
 - Good compression capabilities
-- Compatibility with PSY
+- Compatible with [PowerSystems.jl](https://github.com/NREL-Sienna/PowerSystems.jl)
 
 ```python
 system = System(time_series_storage_type=TimeSeriesStorageType.HDF5)
@@ -240,7 +250,12 @@ retrieved_ts = system.get_time_series(
 
 ## Read-Only Mode
 
-For any storage backend, you can set it to read-only mode, which is useful when you're working with existing data that shouldn't be modified:
+For any storage backend, you can set it to read-only mode, which is useful when
+you're working with existing data that won't or shouldn't be modified. For
+example, suppose you want to load a system with GBs of time series data. By
+default, infrasys will make a copy of the time series data during
+de-serialization. If you set `time_series_read_only=True`, infrasys will skip
+that copy operation.
 
 ```python
 system = System(time_series_read_only=True)
@@ -275,7 +290,7 @@ Each storage backend offers different trade-offs in terms of performance:
 
 - **Memory Usage**: In-memory storage keeps all data in RAM, which can be a limitation for large datasets
 - **Disk Space**: Arrow, Chronify, and HDF5 storage use disk space, with different compression characteristics
-- **Access Speed**: In-memory is fastest, followed by Arrow, then Chronify and HDF5 (depending on the specific operation)
+- **Access Speed**: In-memory is fastest, followed by Arrow/HDF5, then Chronify (depending on the specific operation)
 - **Query Flexibility**: Chronify offers the most complex query capabilities through SQL
 - **Serialization/Deserialization Speed**: Arrow typically offers the fastest serialization for time series data
 
@@ -287,7 +302,7 @@ The table below gives a general comparison of the different storage backends (sc
 | ------------ | ---------- | ----------- | ------------ | ---------- | ------------------ |
 | In-Memory    | 5          | 5           | 1            | N/A        | 2                  |
 | Arrow        | 4          | 4           | 4            | 3          | 3                  |
-| Chronify     | 3          | 3           | 4            | 3          | 5                  |
+| Chronify     | 2          | 3           | 4            | 3          | 5                  |
 | HDF5         | 3          | 3           | 4            | 4          | 3                  |
 
 ```{note}
@@ -353,7 +368,7 @@ The Infrasys library provides multiple storage backends for time series data, ea
 
 1. **In-Memory Storage**: Fastest but limited by RAM and lacks persistence
 2. **Arrow Storage**: Good balance of speed and persistence, using Apache Arrow files
-3. **Chronify Storage**: SQL-based storage with powerful query capabilities
-4. **HDF5 Storage**: Hierarchical storage format popular in scientific computing (development version)
+3. **Chronify Storage**: SQL-based storage with powerful query capabilities and time mappings.
+4. **HDF5 Storage**: Hierarchical storage format compatible with [PowerSystems.jl](https://github.com/NREL-Sienna/PowerSystems.jl)
 
 All storage backends implement the same interface, making it easy to switch between them as your needs change. The choice of storage backend doesn't affect how you interact with the time series data through the Infrasys API, but it can significantly impact performance and resource utilization.
