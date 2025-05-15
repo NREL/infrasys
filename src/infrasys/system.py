@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
-from typing import Any, Callable, Generator, Iterable, Optional, Type, TypeVar
+from typing import Any, Callable, Generator, Iterable, Literal, Optional, Type, TypeAlias, TypeVar
 from uuid import UUID, uuid4
 
 import orjson
@@ -46,17 +46,18 @@ from .supplemental_attribute import SupplementalAttribute
 from .supplemental_attribute_manager import SupplementalAttributeManager
 from .time_series_manager import TIME_SERIES_KWARGS, TimeSeriesManager
 from .time_series_models import (
-    DatabaseConnection,
     SingleTimeSeries,
     TimeSeriesData,
     TimeSeriesKey,
     TimeSeriesMetadata,
+    TimeSeriesStorageContext,
 )
 from .utils.sqlite import backup, create_in_memory_db, restore
 from .utils.time_utils import from_iso_8601
 
 T = TypeVar("T", bound="Component")
 U = TypeVar("U", bound="SupplementalAttribute")
+FileMode: TypeAlias = Literal["r", "r+", "a"]
 
 
 class System:
@@ -981,7 +982,7 @@ class System:
         self,
         time_series: TimeSeriesData,
         *owners: Component | SupplementalAttribute,
-        connection: DatabaseConnection | None = None,
+        context: TimeSeriesStorageContext | None = None,
         **features: Any,
     ) -> TimeSeriesKey:
         """Store a time series array for one or more components or supplemental attributes.
@@ -1023,7 +1024,7 @@ class System:
         return self._time_series_mgr.add(
             time_series,
             *owners,
-            connection=connection,
+            context=context,
             **features,
         )
 
@@ -1066,7 +1067,7 @@ class System:
         time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: DatabaseConnection | None = None,
+        context: TimeSeriesStorageContext | None = None,
         **features: str,
     ) -> Any:
         """Return a time series array.
@@ -1087,7 +1088,7 @@ class System:
             If not None, take a slice of the time series with this length.
         features : str
             Optional, search for time series with these attributes.
-        connection
+        context: TimeSeriesStorageContext
             Optional, connection returned by :meth:`open_time_series_store`
 
         Raises
@@ -1119,7 +1120,7 @@ class System:
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
-            connection=connection,
+            context=context,
             **features,
         )
 
@@ -1304,7 +1305,9 @@ class System:
         )
 
     @contextmanager
-    def open_time_series_store(self) -> Generator[DatabaseConnection, None, None]:
+    def open_time_series_store(
+        self, mode: FileMode = "r+"
+    ) -> Generator[TimeSeriesStorageContext, None, None]:
         """Open a connection to the time series store. This can improve performance when
         reading or writing many time series arrays for specific backends (chronify and HDF5).
         It will also rollback any changes if an exception is raised.
@@ -1318,10 +1321,10 @@ class System:
         Examples
         --------
         >>> with system.open_time_series_store() as conn:
-        ...     system.add_time_series(ts1, gen1, connection=conn)
-        ...     system.add_time_series(ts2, gen1, connection=conn)
+        ...     system.add_time_series(ts1, gen1)
+        ...     system.add_time_series(ts2, gen1)
         """
-        with self._time_series_mgr.open_time_series_store() as conn:
+        with self._time_series_mgr.open_time_series_store(mode=mode) as conn:
             yield conn
 
     def serialize_system_attributes(self) -> dict[str, Any]:

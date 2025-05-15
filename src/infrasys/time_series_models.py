@@ -574,8 +574,8 @@ class NonSequentialTimeSeriesKey(TimeSeriesKey):
     length: int
 
 
-class DatabaseConnection(InfraSysBaseModel):
+class TimeSeriesStorageContext(InfraSysBaseModel):
     """Stores connections to the metadata and data databases during transactions."""
 
     metadata_conn: sqlite3.Connection
-    data_conn: Any = None
+    data_context: Any = None

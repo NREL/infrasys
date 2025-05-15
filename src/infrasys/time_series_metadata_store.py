@@ -242,15 +242,18 @@ class TimeSeriesMetadataStore:
     def has_time_series_metadata(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: Optional[str] = None,
+        name: Optional[str] = None,
         time_series_type: Optional[str] = None,
         **features: Any,
     ) -> bool:
         """Return True if there is time series metadata matching the inputs."""
-        uuids = self._get_metadata_uuids_by_filter(
-            (owner,), variable_name, time_series_type, **features
+        where_clause, params = self._make_where_clause(
+            (owner,), name, time_series_type, **features
         )
-        return bool(uuids)
+        query = f"SELECT 1 FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause}"
+        cur = self._con.cursor()
+        res = execute(cur, query, params=params).fetchone()
+        return bool(res)
 
     def list_existing_time_series(self, time_series_uuids: Iterable[UUID]) -> set[UUID]:
         """Return the UUIDs that are present in the database with at least one reference."""
@@ -261,6 +264,13 @@ class TimeSeriesMetadataStore:
         uuids = ",".join(itertools.repeat("?", len(params)))
         query = f"SELECT DISTINCT time_series_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE time_series_uuid IN ({uuids})"
         rows = execute(cur, query, params=params).fetchall()
+        return {UUID(x[0]) for x in rows}
+
+    def list_existing_time_series_uuids(self) -> set[UUID]:
+        """Return the UUIDs that are present."""
+        cur = self._con.cursor()
+        query = f"SELECT DISTINCT time_series_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE}"
+        rows = execute(cur, query).fetchall()
         return {UUID(x[0]) for x in rows}
 
     def list_missing_time_series(self, time_series_uuids: Iterable[UUID]) -> set[UUID]:
@@ -332,17 +342,15 @@ class TimeSeriesMetadataStore:
     def remove(
         self,
         *owners: Component | SupplementalAttribute,
-        variable_name: str | None = None,
-        time_series_type: str | None = None,
+        name: str | None = None,
+        time_series_type: Optional[str] = None,
         connection: sqlite3.Connection | None = None,
         **features,
     ) -> list[TimeSeriesMetadata]:
         """Remove all matching rows and return the metadata."""
         con = connection or self._con
         cur = con.cursor()
-        where_clause, params = self._make_where_clause(
-            owners, variable_name, time_series_type, **features
-        )
+        where_clause, params = self._make_where_clause(owners, name, time_series_type, **features)
 
         query = (
             f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE ({where_clause})"
@@ -376,6 +384,26 @@ class TimeSeriesMetadataStore:
             else:
                 result.append(self._cache_metadata[metadata_uuid])
         return result
+
+    def remove_by_metadata(
+        self,
+        metadata: TimeSeriesMetadata,
+        connection: sqlite3.Connection | None = None,
+    ) -> TimeSeriesMetadata:
+        """Remove all associations for a given metadata and return the metadata."""
+        con = connection or self._con
+        cur = con.cursor()
+
+        query = f"DELETE FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE metadata_uuid = ?"
+        cur.execute(query, (str(metadata.uuid),))
+
+        if connection is None:
+            con.commit()
+
+        if metadata.uuid in self._cache_metadata:
+            return self._cache_metadata.pop(metadata.uuid)
+        else:
+            return metadata
 
     def sql(self, query: str, params: Sequence[str] = ()) -> list[tuple]:
         """Run a SQL query on the time series metadata table."""
