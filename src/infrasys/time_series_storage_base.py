@@ -4,10 +4,9 @@ import abc
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Generator, Optional
 
 from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
-from typing import Generator
 
 
 class TimeSeriesStorageBase(abc.ABC):
@@ -18,7 +17,7 @@ class TimeSeriesStorageBase(abc.ABC):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Any = None,
+        context: Any = None,
     ) -> None:
         """Store a time series array."""
 
@@ -34,12 +33,12 @@ class TimeSeriesStorageBase(abc.ABC):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Any = None,
+        context: Any = None,
     ) -> TimeSeriesData:
         """Return a time series array."""
 
     @abc.abstractmethod
-    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+    def remove_time_series(self, metadata: TimeSeriesMetadata, context: Any = None) -> None:
         """Remove a time series array."""
 
     @abc.abstractmethod
@@ -49,6 +48,6 @@ class TimeSeriesStorageBase(abc.ABC):
         """Serialize all time series to the destination directory."""
 
     @contextmanager
-    def open_time_series_store(self) -> Generator[Any, None, None]:
+    def open_time_series_store(self, mode: str) -> Generator[Any, None, None]:
         """Open a connection to the time series store."""
         yield None
