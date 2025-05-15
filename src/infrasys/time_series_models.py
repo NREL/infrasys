@@ -228,6 +228,14 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
 
 
+class DeterministicSingleTimeSeries(TimeSeriesData):
+    """Defines a time array with a single dimension of floats."""
+
+    data: NDArray | pint.Quantity
+    resolution: timedelta
+    initial_timestamp: datetime
+
+
 # TODO:
 # read CSV and Parquet and convert each column to a SingleTimeSeries
 
@@ -264,7 +272,12 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     features: dict[str, Any] = {}
     units: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
-    type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor", "NonSequentialTimeSeries"]
+    type: Literal[
+        "SingleTimeSeries",
+        "SingleTimeSeriesScalingFactor",
+        "NonSequentialTimeSeries",
+        "DeterministicSingleTimeSeries",
+    ]
 
     @property
     def label(self) -> str:
@@ -377,8 +390,33 @@ class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadataBase):
         return "SingleTimeSeriesScalingFactor"
 
 
+class DeterministicMetadataBase(TimeSeriesMetadata, abc.ABC):
+    """Base class for SingleTimeSeries metadata."""
+
+    initial_timestamp: datetime
+    resolution: timedelta
+    interval: timedelta
+    horizon: timedelta
+    window_count: int
+    type: Literal["DeterministicSingleTimeSeries"]
+
+    @staticmethod
+    def get_time_series_data_type() -> Type:
+        return DeterministicMetadata
+
+
+class DeterministicMetadata(DeterministicMetadataBase):
+    """Defines the metadata for a SingleTimeSeries."""
+
+    type: Literal["DeterministicSingleTimeSeries"] = "DeterministicSingleTimeSeries"
+
+    @staticmethod
+    def get_time_series_type_str() -> str:
+        return "DeterministicSingleTimeSeries"
+
+
 TimeSeriesMetadataUnion = Annotated[
-    Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata],
+    Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata, DeterministicMetadata],
     Field(discriminator="type"),
 ]
 
