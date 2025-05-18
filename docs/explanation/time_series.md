@@ -1,12 +1,12 @@
 # Time Series
 
 Infrastructure systems supports time series data expressed as a one-dimensional array of floats
-using the class [SingleTimeSeries](#singe-time-series-api). Users must provide a `name`
+using the class {py:class}`infrasys.time_series_models.SingleTimeSeries`. Users must provide a `name`
 that is typically the field of a component being modeled. For example, if the user has a time array
 associated with the active power of a generator, they would assign
 `name = "active_power"`.
 
-Here is an example of how to create an instance of `SingleTimeSeries`:
+Here is an example of how to create an instance of {py:class}`infrasys.time_series_models.SingleTimeSeries`:
 
 ```python
     import random
@@ -31,6 +31,77 @@ there might be different profiles for different scenarios or model years.
         model_year="2035",
     )
 ```
+
+## Deterministic Time Series
+
+In addition to `SingleTimeSeries`, infrasys also supports deterministic time series,
+which are used to represent forecasts or scenarios with a known future. There are two main types of
+deterministic time series:
+
+- {py:class}`infrasys.time_series_models.DeterministicTimeSeries`: Represents a time series where the data is explicitly stored as a 2D array, with each row representing a forecast window and each column representing a time step within that window.
+- {py:class}`infrasys.time_series_models.DeterministicSingleTimeSeries`: Represents a deterministic forecast that wraps a `SingleTimeSeries`. Instead of storing the forecast data explicitly, it provides a view into the existing `SingleTimeSeries` at incrementing offsets. This is useful when you want to create a "perfect forecast" based on historical data or avoid data duplication when there are overlapping forecast windows.
+
+### DeterministicTimeSeries
+
+This class is used when you have explicit forecast data available. Each forecast window is stored as a row in a 2D array.
+
+Example:
+
+```python
+import numpy as np
+from datetime import datetime, timedelta
+from infrasys.time_series_models import DeterministicTimeSeries
+from infrasys.quantities import ActivePower
+
+initial_time = datetime(year=2020, month=9, day=1)
+resolution = timedelta(hours=1)
+horizon = timedelta(hours=8)  # 8 hours horizon (8 values per forecast)
+interval = timedelta(hours=1)  # 1 hour between forecasts
+window_count = 3  # 3 forecast windows
+
+# Create forecast data as a 2D array where:
+# - Each row is a forecast window
+# - Each column is a time step in the forecast horizon
+forecast_data = [
+    [100.0, 101.0, 101.3, 90.0, 98.0, 87.0, 88.0, 67.0],  # 2020-09-01T00 forecast
+    [101.0, 101.3, 99.0, 98.0, 88.9, 88.3, 67.1, 89.4],  # 2020-09-01T01 forecast
+    [99.0, 67.0, 89.0, 99.9, 100.0, 101.0, 112.0, 101.3],  # 2020-09-01T02 forecast
+]
+
+# Create the data with units
+data = ActivePower(np.array(forecast_data), "watts")
+name = "active_power_forecast"
+ts = DeterministicTimeSeries.from_array(
+    data, name, initial_time, resolution, horizon, interval, window_count
+)
+```
+
+### DeterministicSingleTimeSeries
+
+This class is useful when you want to create a "perfect forecast" based on historical data or avoid data duplication. It wraps a `SingleTimeSeries` and provides a view into it at incrementing offsets.
+
+Example:
+
+```python
+from datetime import datetime, timedelta
+from infrasys.time_series_models import DeterministicSingleTimeSeries, SingleTimeSeries
+
+initial_timestamp = datetime(year=2020, month=1, day=1)
+name = "active_power"
+ts = SingleTimeSeries.from_array(
+    data=range(8784),
+    name=name,
+    resolution=timedelta(hours=1),
+    initial_timestamp=initial_timestamp,
+)
+horizon = timedelta(hours=8)
+interval = timedelta(hours=1)
+ts_deterministic = DeterministicSingleTimeSeries.from_single_time_series(
+    ts, interval=interval, horizon=horizon
+)
+```
+
+In this example, `ts_deterministic` provides a forecast for `active_power` by looking at the original `SingleTimeSeries` `ts` at different offsets determined by `interval` and `horizon`.
 
 ## Resolution
 
