@@ -5,8 +5,9 @@ import pytest
 from loguru import logger
 
 from infrasys.location import Location
-from infrasys.time_series_models import SingleTimeSeries, NonSequentialTimeSeries
-from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator, SimpleSubsystem
+from infrasys.time_series_models import NonSequentialTimeSeries, SingleTimeSeries
+
+from .models.simple_system import SimpleBus, SimpleGenerator, SimpleSubsystem, SimpleSystem
 
 
 @pytest.fixture
@@ -44,9 +45,7 @@ def simple_system_with_nonsequential_time_series(simple_system) -> SimpleSystem:
     timestamps = [
         datetime(year=2030, month=1, day=1) + timedelta(seconds=5 * i) for i in range(length)
     ]
-    ts = NonSequentialTimeSeries.from_array(
-        data=df, variable_name=variable_name, timestamps=timestamps
-    )
+    ts = NonSequentialTimeSeries.from_array(data=df, name=variable_name, timestamps=timestamps)
     gen = simple_system.get_component(SimpleGenerator, "test-gen")
     simple_system.add_time_series(ts, gen)
     return simple_system

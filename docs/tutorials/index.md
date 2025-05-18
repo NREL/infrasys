@@ -1,6 +1,7 @@
 ```{eval-rst}
 .. _tutorials-page:
 ```
+
 # Tutorials
 
 ```{eval-rst}
@@ -9,3 +10,5 @@
     :caption: Contents:
 
     custom_system
+    benchmark
+```

@@ -1,22 +1,22 @@
 """Test related to the pyarrow storage manager."""
 
-import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+import pytest
 from loguru import logger
 
 from infrasys.arrow_storage import ArrowTimeSeriesStorage
 from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
 from infrasys.system import System
 from infrasys.time_series_models import (
-    SingleTimeSeries,
     NonSequentialTimeSeries,
+    SingleTimeSeries,
     TimeSeriesStorageType,
 )
 
-from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
+from .models.simple_system import SimpleBus, SimpleGenerator, SimpleSystem
 
 
 @pytest.fixture(scope="session")
@@ -32,8 +32,8 @@ def test_file_creation_with_single_time_series(test_system: System):
     gen1 = test_system.get_component(SimpleGenerator, "gen1")
     ts = SingleTimeSeries.from_array(
         data=range(8784),
-        variable_name="active_power",
-        initial_time=datetime(year=2020, month=1, day=1),
+        name="active_power",
+        initial_timestamp=datetime(year=2020, month=1, day=1),
         resolution=timedelta(hours=1),
     )
     test_system.time_series.add(ts, gen1, scenario="one", model_year="2030")
@@ -53,7 +53,7 @@ def test_file_creation_with_nonsequential_time_series(test_system: System):
     ts = NonSequentialTimeSeries.from_array(
         data=range(10),
         timestamps=timestamps,
-        variable_name="active_power",
+        name="active_power",
     )
     test_system.time_series.add(ts, gen1, scenario="one", model_year="2030")
     time_series = test_system.time_series.get(gen1, time_series_type=NonSequentialTimeSeries)
@@ -72,8 +72,8 @@ def test_copy_files_with_single_time_series(tmp_path):
     system.add_components(bus, gen1)
     ts = SingleTimeSeries.from_array(
         data=range(8784),
-        variable_name="active_power",
-        initial_time=datetime(year=2020, month=1, day=1),
+        name="active_power",
+        initial_timestamp=datetime(year=2020, month=1, day=1),
         resolution=timedelta(hours=1),
     )
     system.time_series.add(ts, gen1, scenario="two", model_year="2030")
@@ -103,7 +103,7 @@ def test_copy_files_with_nonsequential_timeseries(tmp_path):
     ts = NonSequentialTimeSeries.from_array(
         data=range(10),
         timestamps=timestamps,
-        variable_name="active_power",
+        name="active_power",
     )
     system.time_series.add(ts, gen1, scenario="two", model_year="2030")
     filename = tmp_path / "system.json"
@@ -128,8 +128,8 @@ def test_read_deserialize_single_time_series(tmp_path):
     system.add_components(bus, gen1)
     ts = SingleTimeSeries.from_array(
         data=range(8784),
-        variable_name="active_power",
-        initial_time=datetime(year=2020, month=1, day=1),
+        name="active_power",
+        initial_timestamp=datetime(year=2020, month=1, day=1),
         resolution=timedelta(hours=1),
     )
     system.time_series.add(ts, gen1, scenario="high", model_year="2030")
@@ -141,7 +141,7 @@ def test_read_deserialize_single_time_series(tmp_path):
     deserialize_ts = system2.time_series.get(gen1b)
     assert isinstance(deserialize_ts, SingleTimeSeries)
     assert deserialize_ts.resolution == ts.resolution
-    assert deserialize_ts.initial_time == ts.initial_time
+    assert deserialize_ts.initial_timestamp == ts.initial_timestamp
     assert isinstance(deserialize_ts.data, np.ndarray)
     length = ts.length
     assert isinstance(length, int)
@@ -160,7 +160,7 @@ def test_read_deserialize_nonsequential_time_series(tmp_path):
     ts = NonSequentialTimeSeries.from_array(
         data=range(10),
         timestamps=timestamps,
-        variable_name="active_power",
+        name="active_power",
     )
     system.time_series.add(ts, gen1, scenario="high", model_year="2030")
     filename = tmp_path / "system.json"
