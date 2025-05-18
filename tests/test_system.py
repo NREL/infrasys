@@ -667,7 +667,7 @@ def test_time_series_metadata_list_rows():
     ]
     rows = system.time_series.metadata_store.list_rows(
         gen2,
-        variable_name=variable_name,
+        name=variable_name,
         time_series_type=SingleTimeSeries.__name__,
         columns=columns,
     )
