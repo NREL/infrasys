@@ -2,9 +2,12 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pytest
+import uuid
 
+from infrasys.exceptions import ISConflictingArguments
 from infrasys.quantities import ActivePower
 from infrasys.time_series_models import (
+    DeterministicMetadata,
     DeterministicSingleTimeSeries,
     DeterministicTimeSeries,
     SingleTimeSeries,
@@ -87,3 +90,129 @@ def test_with_deterministic_single_time_series_quantity(tmp_path, storage_type):
     assert isinstance(ts_deterministic, DeterministicSingleTimeSeries)
     assert ts2.horizon == horizon
     assert ts2.initial_timestamp == initial_timestamp
+
+
+def test_deterministic_metadata_get_range():
+    """Test the get_range method of DeterministicMetadata."""
+    # Set up the deterministic time series parameters
+    initial_time = datetime(year=2020, month=9, day=1)
+    resolution = timedelta(hours=1)
+    horizon = timedelta(hours=8)
+    interval = timedelta(hours=4)
+    window_count = 3
+
+    # Create a metadata object for testing
+    metadata = DeterministicMetadata(
+        name="test_ts",
+        initial_timestamp=initial_time,
+        resolution=resolution,
+        interval=interval,
+        horizon=horizon,
+        window_count=window_count,
+        time_series_uuid=uuid.uuid4(),
+        type="DeterministicTimeSeries",
+    )
+
+    start_idx, length = metadata.get_range()
+    # The total length should be: interval_steps * (window_count - 1) + horizon_steps
+    # interval_steps = 4, window_count = 3, horizon_steps = 8
+    # So total_steps = 4 * (3 - 1) + 8 = 16
+    assert start_idx == 0
+    assert length == 16
+
+    start_time = initial_time + timedelta(hours=5)
+    start_idx, length_val = metadata.get_range(start_time=start_time)
+    assert start_idx == 5
+    assert length_val == 11  # 16 - 5 = 11
+
+    start_idx, length_val = metadata.get_range(length=10)
+    assert start_idx == 0
+    assert length_val == 10
+
+    start_time = initial_time + timedelta(hours=5)
+    start_idx, length_val = metadata.get_range(start_time=start_time, length=5)
+    assert start_idx == 5
+    assert length_val == 5
+
+    # Test 5: error cases
+    # Start time too early
+    with pytest.raises(ISConflictingArguments):
+        metadata.get_range(start_time=initial_time - timedelta(hours=1))
+
+    # Start time too late
+    last_valid_time = initial_time + (window_count - 1) * interval + horizon
+    with pytest.raises(ISConflictingArguments):
+        metadata.get_range(start_time=last_valid_time + timedelta(hours=1))
+
+    # Start time not aligned with resolution
+    with pytest.raises(ISConflictingArguments):
+        metadata.get_range(start_time=initial_time + timedelta(minutes=30))
+
+    # Length too large
+    with pytest.raises(ISConflictingArguments):
+        metadata.get_range(start_time=initial_time + timedelta(hours=10), length=10)
+
+
+def test_from_single_time_series():
+    initial_timestamp = datetime(year=2020, month=1, day=1)
+    data = np.array(range(100))
+    name = "test_ts"
+    resolution = timedelta(hours=1)
+
+    ts = SingleTimeSeries.from_array(
+        data=data,
+        name=name,
+        resolution=resolution,
+        initial_timestamp=initial_timestamp,
+    )
+
+    horizon = timedelta(hours=8)
+    interval = timedelta(hours=4)
+    window_count = 5
+
+    deterministic_ts = DeterministicSingleTimeSeries.from_single_time_series(
+        ts,
+        interval=interval,
+        horizon=horizon,
+        window_count=window_count,
+    )
+
+    # Verify properties were correctly set
+    assert deterministic_ts.name == name
+    assert deterministic_ts.resolution == resolution
+    assert deterministic_ts.initial_timestamp == initial_timestamp
+    assert deterministic_ts.horizon == horizon
+    assert deterministic_ts.interval == interval
+    assert deterministic_ts.window_count == window_count
+
+    # Verify data was correctly extracted
+    original_data = ts.data
+    expected_shape = (window_count, int(horizon / resolution))
+    assert deterministic_ts.data.shape == expected_shape
+
+    # Check specific values
+    for w in range(window_count):
+        start_idx = w * int(interval / resolution)
+        end_idx = start_idx + int(horizon / resolution)
+        np.testing.assert_array_equal(deterministic_ts.data[w], original_data[start_idx:end_idx])
+
+    # Verify default window count calculation
+    # Max windows = (total_duration - horizon) // interval + 1
+    # For 100 hours with 8 hour horizon and 4 hour interval:
+    # (100 - 8) // 4 + 1 = 24 windows
+    auto_window_ts = DeterministicSingleTimeSeries.from_single_time_series(
+        ts, interval=interval, horizon=horizon
+    )
+    assert auto_window_ts.window_count == 24
+
+    # Verify error when time series is too short
+    short_ts = SingleTimeSeries.from_array(
+        data=range(10),
+        name=name,
+        resolution=resolution,
+        initial_timestamp=initial_timestamp,
+    )
+    with pytest.raises(ValueError):
+        DeterministicSingleTimeSeries.from_single_time_series(
+            short_ts, interval=interval, horizon=horizon, window_count=5
+        )

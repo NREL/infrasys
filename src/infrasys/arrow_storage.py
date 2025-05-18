@@ -279,68 +279,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
     def add_serialized_data(data: dict[str, Any]) -> None:
         data["time_series_storage_type"] = TimeSeriesStorageType.ARROW.value
 
-    def _get_single_time_series(
-        self,
-        metadata: SingleTimeSeriesMetadata,
-        start_time: datetime | None = None,
-        length: int | None = None,
-    ) -> SingleTimeSeries:
-        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
-        with pa.memory_map(str(fpath), "r") as source:
-            base_ts = pa.ipc.open_file(source).get_record_batch(0)
-            logger.trace("Reading time series from {}", fpath)
-        index, length = metadata.get_range(start_time=start_time, length=length)
-        columns = base_ts.column_names
-        if len(columns) != 1:
-            msg = f"Bug: expected a single column: {columns=}"
-            raise Exception(msg)
-        # This should be equal to metadata.time_series_uuid in versions
-        # v0.2.1 or later. Earlier versions used the time series variable name.
-        column = columns[0]
-        data = base_ts[column][index : index + length]
-        if metadata.units is not None:
-            np_array = metadata.units.quantity_type(data, metadata.units.units)
-        else:
-            np_array = np.array(data)
-        return SingleTimeSeries(
-            uuid=metadata.time_series_uuid,
-            name=metadata.name,
-            resolution=metadata.resolution,
-            initial_timestamp=start_time or metadata.initial_timestamp,
-            data=np_array,
-            normalization=metadata.normalization,
-        )
-
-    def _get_nonsequential_time_series(
-        self,
-        metadata: NonSequentialTimeSeriesMetadata,
-    ) -> NonSequentialTimeSeries:
-        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
-        with pa.memory_map(str(fpath), "r") as source:
-            base_ts = pa.ipc.open_file(source).get_record_batch(0)
-            logger.trace("Reading time series from {}", fpath)
-        columns = base_ts.column_names
-        if len(columns) != 2:
-            msg = f"Bug: expected two columns: {columns=}"
-            raise Exception(msg)
-        data_column, timestamps_column = columns[0], columns[1]
-        data, timestamps = (
-            base_ts[data_column],
-            base_ts[timestamps_column],
-        )
-        if metadata.units is not None:
-            np_data_array = metadata.units.quantity_type(data, metadata.units.units)
-        else:
-            np_data_array = np.array(data)
-        np_time_array = np.array(timestamps).astype("O")  # convert to datetime object
-        return NonSequentialTimeSeries(
-            uuid=metadata.time_series_uuid,
-            name=metadata.name,
-            data=np_data_array,
-            timestamps=np_time_array,
-            normalization=metadata.normalization,
-        )
-
     def _convert_to_record_batch_single_time_series(
         self, time_series_array: NDArray, column: str
     ) -> pa.RecordBatch:
