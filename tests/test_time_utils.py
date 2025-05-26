@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 from dateutil.relativedelta import relativedelta
 
-from infrasys.utils.time_utils import from_iso_8601, to_iso_8601
+from infrasys.utils.time_utils import from_iso_8601, str_timedelta_to_iso_8601, to_iso_8601
 
 
 def test_to_iso_8601():
@@ -71,6 +71,21 @@ def test_duration_with_relative_delta():
     result = to_iso_8601(delta)
     assert isinstance(result, str)
     assert result == "P1Y"
+
+
+def test_str_timedelta_to_iso_8601():
+    str_delta = str(timedelta(hours=1))
+    result = str_timedelta_to_iso_8601(str_delta)
+    assert result
+    assert result == "P0DT1H"
+
+    str_delta = str(timedelta(minutes=30))
+    result = str_timedelta_to_iso_8601(str_delta)
+    assert result
+    assert result == "P0DT30M"
+
+    with pytest.raises(ValueError):
+        _ = str_timedelta_to_iso_8601("test")
 
 
 @pytest.mark.parametrize(

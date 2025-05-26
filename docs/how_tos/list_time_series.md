@@ -24,9 +24,9 @@ system.add_components(bus, gen)
 length = 10
 initial_time = datetime(year=2020, month=1, day=1)
 timestamps = [initial_time + timedelta(hours=i) for i in range(length)]
-variable_name = "active_power"
-ts1 = SingleTimeSeries.from_time_array(np.random.rand(length), variable_name, timestamps)
-ts2 = SingleTimeSeries.from_time_array(np.random.rand(length), variable_name, timestamps)
+name = "active_power"
+ts1 = SingleTimeSeries.from_time_array(np.random.rand(length), name, timestamps)
+ts2 = SingleTimeSeries.from_time_array(np.random.rand(length), name, timestamps)
 key1 = system.add_time_series(ts1, gen, scenario="low")
 key2 = system.add_time_series(ts2, gen, scenario="high")
 
@@ -38,17 +38,19 @@ ts2_b = system.get_time_series_by_key(gen, key2)
 for key in system.list_time_series_keys(gen):
     print(f"{gen.label}: {key}")
 ```
+
 ```
-SimpleGenerator.gen: variable_name='active_power' initial_time=datetime.datetime(2020, 1, 1, 0, 0) resolution=datetime.timedelta(seconds=3600) time_series_type=<class 'infrasys.time_series_models.SingleTimeSeries'> user_attributes={'scenario': 'high'} length=10
-SimpleGenerator.gen: variable_name='active_power' initial_time=datetime.datetime(2020, 1, 1, 0, 0) resolution=datetime.timedelta(seconds=3600) time_series_type=<class 'infrasys.time_series_models.SingleTimeSeries'> user_attributes={'scenario': 'low'} length=10
+SimpleGenerator.gen: name='active_power' initial_time=datetime.datetime(2020, 1, 1, 0, 0) resolution=datetime.timedelta(seconds=3600) time_series_type=<class 'infrasys.time_series_models.SingleTimeSeries'> user_attributes={'scenario': 'high'} length=10
+SimpleGenerator.gen: name='active_power' initial_time=datetime.datetime(2020, 1, 1, 0, 0) resolution=datetime.timedelta(seconds=3600) time_series_type=<class 'infrasys.time_series_models.SingleTimeSeries'> user_attributes={'scenario': 'low'} length=10
 ```
 
 You can also retrieve time series by specifying the parameters as shown here:
 
 ```python
-system.time_series.get(gen, variable_name="active_power", scenario="high")
+system.time_series.get(gen, name="active_power", scenario="high")
 ```
+
 ```
-SingleTimeSeries(variable_name='active_power', normalization=None, data=array([0.29276233, 0.97400382, 0.76499075, 0.95080431, 0.61749027,
+SingleTimeSeries(name='active_power', normalization=None, data=array([0.29276233, 0.97400382, 0.76499075, 0.95080431, 0.61749027,
        0.73899945, 0.57877704, 0.3411286 , 0.80701393, 0.53051773]), resolution=datetime.timedelta(seconds=3600), initial_time=datetime.datetime(2020, 1, 1, 0, 0), length=10)
 ```
