@@ -122,7 +122,7 @@ class TimeSeriesMetadataStore:
         # Will probably need to refactor if we introduce more metadata classes.
         if isinstance(metadata, SingleTimeSeriesMetadataBase):
             resolution = to_iso_8601(metadata.resolution)
-            initial_time = str(metadata.initial_timestamp)
+            initial_time = str(metadata.initial_timestamp.isoformat())
             horizon = None
             interval = None
             window_count = None

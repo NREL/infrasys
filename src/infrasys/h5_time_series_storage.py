@@ -97,7 +97,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         with self.open_time_series_store() as file_handle:
             root = file_handle[self.HDF5_TS_ROOT_PATH]
             root.attrs["compression_enabled"] = False
-            root.attrs["compression_type"] = "CompressionTypes.DEFLATE"
+            root.attrs["compression_type"] = "DEFLATE"
             root.attrs["compression_level"] = 3
             root.attrs["compression_shuffle"] = True
         return None
@@ -139,6 +139,8 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             group.attrs["type"] = metadata.type
             group.attrs["initial_timestamp"] = metadata.initial_timestamp.isoformat()
             group.attrs["resolution"] = metadata.resolution.total_seconds()
+            group.attrs["module"] = "InfrastructureSystems"
+            group.attrs["data_type"] = "Float64"
 
     def get_metadata_store(self) -> sqlite3.Connection:
         """Get the metadata store.
@@ -329,6 +331,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         """
         dst_path = Path(dst) / self.STORAGE_FILE if Path(dst).is_dir() else Path(dst)
         self.output_file = dst_path
+        self._serialize_compression_settings()
         with self.open_time_series_store() as f:
             f.flush()
             with h5py.File(dst_path, "a") as dst_file:
