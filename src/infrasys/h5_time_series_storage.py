@@ -11,8 +11,8 @@ import h5py
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
+    Deterministic,
     DeterministicMetadata,
-    DeterministicTimeSeries,
     DeterministicTimeSeriesType,
     SingleTimeSeries,
     SingleTimeSeriesMetadata,
@@ -229,12 +229,12 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
     def _(
         self,
         metadata: DeterministicMetadata,
-        time_series: DeterministicTimeSeries,
+        time_series: Deterministic,
         context: Any = None,
         compression_level: int = 5,
         **kwargs: Any,
     ) -> None:
-        """Store a DeterministicTimeSeries array.
+        """Store a Deterministic array.
 
         Parameters
         ----------
@@ -358,7 +358,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         length: Optional[int] = None,
         context: Any = None,
     ) -> DeterministicTimeSeriesType:
-        """Return a DeterministicTimeSeries array."""
+        """Return a Deterministic time series array."""
         assert context is not None
 
         root = context[self.HDF5_TS_ROOT_PATH]
@@ -377,7 +377,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         if metadata.units is not None:
             data = metadata.units.quantity_type(data, metadata.units.units)
 
-        return DeterministicTimeSeries(
+        return Deterministic(
             uuid=metadata.time_series_uuid,
             name=metadata.name,
             resolution=metadata.resolution,

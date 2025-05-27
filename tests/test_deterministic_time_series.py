@@ -1,20 +1,19 @@
+import uuid
 from datetime import datetime, timedelta
 
 import numpy as np
 import pytest
-import uuid
 
 from infrasys.exceptions import ISConflictingArguments
 from infrasys.quantities import ActivePower
 from infrasys.time_series_models import (
+    Deterministic,
     DeterministicMetadata,
     DeterministicSingleTimeSeries,
-    DeterministicTimeSeries,
     SingleTimeSeries,
     TimeSeriesStorageType,
 )
 from tests.models.simple_system import SimpleGenerator, SimpleSystem
-
 
 TS_STORAGE_OPTIONS = (
     TimeSeriesStorageType.ARROW,
@@ -43,7 +42,7 @@ def test_with_deterministic_time_series_quantity(tmp_path, storage_type):
 
     data = ActivePower(np.array(forecast_data), "watts")
     name = "active_power_forecast"
-    ts = DeterministicTimeSeries.from_array(
+    ts = Deterministic.from_array(
         data, name, initial_time, resolution, horizon, interval, window_count
     )
     system.add_time_series(ts, gen)
@@ -54,7 +53,7 @@ def test_with_deterministic_time_series_quantity(tmp_path, storage_type):
     system2 = SimpleSystem.from_json(sys_file)
     gen2 = system2.get_component(SimpleGenerator, gen.name)
     ts2 = system2.get_time_series(gen2, name=name)
-    assert isinstance(ts, DeterministicTimeSeries)
+    assert isinstance(ts, Deterministic)
     assert ts2.resolution == resolution
     assert ts2.initial_timestamp == initial_time
 
@@ -110,7 +109,7 @@ def test_deterministic_metadata_get_range():
         horizon=horizon,
         window_count=window_count,
         time_series_uuid=uuid.uuid4(),
-        type="DeterministicTimeSeries",
+        type="Deterministic",
     )
 
     start_idx, length = metadata.get_range()

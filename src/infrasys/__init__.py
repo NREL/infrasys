@@ -18,8 +18,8 @@ from .normalization import NormalizationModel
 from .supplemental_attribute import SupplementalAttribute
 from .system import System
 from .time_series_models import (
+    Deterministic,
     DeterministicSingleTimeSeries,
-    DeterministicTimeSeries,
     NonSequentialTimeSeries,
     SingleTimeSeries,
     SingleTimeSeriesKey,
@@ -31,7 +31,7 @@ __all__ = (
     "BaseQuantity",
     "Component",
     "DeterministicSingleTimeSeries",
-    "DeterministicTimeSeries",
+    "Deterministic",
     "GeographicInfo",
     "Location",
     "NonSequentialTimeSeries",

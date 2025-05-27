@@ -229,7 +229,34 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
 
 
-class DeterministicTimeSeries(TimeSeriesData):
+class Forecast(TimeSeriesData):
+    """Defines the time series types for forecast."""
+
+    ...
+
+
+class AbstractDeterministic(TimeSeriesData):
+    """Defines the abstric type for deterministic time series forecast."""
+
+    data: NDArray | pint.Quantity
+    resolution: timedelta
+    initial_timestamp: datetime
+    horizon: timedelta
+    interval: timedelta
+    window_count: int
+
+    @staticmethod
+    def get_time_series_metadata_type() -> Type["DeterministicMetadata"]:
+        return DeterministicMetadata
+
+    @property
+    def data_array(self) -> NDArray:
+        if isinstance(self.data, pint.Quantity):
+            return self.data.magnitude
+        return self.data
+
+
+class Deterministic(AbstractDeterministic):
     """A deterministic forecast for a particular data field in a Component.
 
     This is a Pydantic model used to represent deterministic forecasts where the forecast
@@ -262,19 +289,6 @@ class DeterministicTimeSeries(TimeSeriesData):
         based on an existing SingleTimeSeries.
     """
 
-    data: NDArray | pint.Quantity
-    resolution: timedelta
-    initial_timestamp: datetime
-    horizon: timedelta
-    interval: timedelta
-    window_count: int
-
-    @property
-    def data_array(self) -> NDArray:
-        if isinstance(self.data, pint.Quantity):
-            return self.data.magnitude
-        return self.data
-
     @classmethod
     def from_array(
         cls,
@@ -285,8 +299,8 @@ class DeterministicTimeSeries(TimeSeriesData):
         horizon: timedelta,
         interval: timedelta,
         window_count: int,
-    ) -> "DeterministicTimeSeries":
-        """Constructor for DeterministicTimeSeries that creates an instance from a sequence.
+    ) -> "Deterministic":
+        """Constructor for `Deterministic` time series that creates an instance from a sequence.
 
         Parameters
         ----------
@@ -305,10 +319,10 @@ class DeterministicTimeSeries(TimeSeriesData):
 
         Returns
         -------
-        DeterministicTimeSeries
+        Deterministic
         """
 
-        return DeterministicTimeSeries(
+        return Deterministic(
             data=data,  # type: ignore
             name=name,
             initial_timestamp=initial_timestamp,
@@ -318,12 +332,8 @@ class DeterministicTimeSeries(TimeSeriesData):
             window_count=window_count,
         )
 
-    @staticmethod
-    def get_time_series_metadata_type() -> Type["DeterministicMetadata"]:
-        return DeterministicMetadata
 
-
-class DeterministicSingleTimeSeries(DeterministicTimeSeries):
+class DeterministicSingleTimeSeries(AbstractDeterministic):
     """A deterministic forecast that wraps a SingleTimeSeries.
 
     This Pydantic model creates a deterministic forecast by deriving forecast windows
@@ -348,15 +358,11 @@ class DeterministicSingleTimeSeries(DeterministicTimeSeries):
 
     See Also
     --------
-    DeterministicTimeSeries : The model for explicit 2D deterministic forecasts.
+    Deterministic : The model for explicit 2D deterministic forecasts.
     SingleTimeSeries : The underlying time series model that is wrapped.
     """
 
     single_time_series: SingleTimeSeries
-
-    @staticmethod
-    def get_time_series_metadata_type() -> Type["DeterministicMetadata"]:
-        return DeterministicMetadata
 
     @classmethod
     def from_single_time_series(
@@ -456,7 +462,7 @@ class DeterministicSingleTimeSeries(DeterministicTimeSeries):
         )
 
 
-DeterministicTimeSeriesType: TypeAlias = DeterministicSingleTimeSeries | DeterministicTimeSeries
+DeterministicTimeSeriesType: TypeAlias = DeterministicSingleTimeSeries | Deterministic
 
 
 # TODO:
@@ -499,7 +505,7 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
         "SingleTimeSeries",
         "SingleTimeSeriesScalingFactor",
         "NonSequentialTimeSeries",
-        "DeterministicTimeSeries",
+        "Deterministic",
         "DeterministicSingleTimeSeries",
     ]
 
@@ -615,30 +621,30 @@ class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadataBase):
 
 
 class DeterministicMetadata(TimeSeriesMetadata):
-    """Defines the metadata for DeterministicTimeSeries and DeterministicSingleTimeSeries."""
+    """Defines the metadata for Deterministic and DeterministicSingleTimeSeries."""
 
     initial_timestamp: datetime
     resolution: timedelta
     interval: timedelta
     horizon: timedelta
     window_count: int
-    type: Literal["DeterministicTimeSeries", "DeterministicSingleTimeSeries"]
+    type: Literal["Deterministic", "DeterministicSingleTimeSeries"]
 
     @staticmethod
     def get_time_series_data_type() -> Type[TimeSeriesData]:
         """Return the data type associated with this metadata type."""
-        return DeterministicTimeSeries
+        return Deterministic
 
     @staticmethod
     def get_time_series_type_str() -> str:
         """Return the time series type as a string."""
-        return "DeterministicTimeSeries"
+        return "Deterministic"
 
     @classmethod
     def from_data(
         cls, time_series: DeterministicTimeSeriesType, **features: Any
     ) -> "DeterministicMetadata":
-        """Construct a DeterministicMetadata from a DeterministicTimeSeries."""
+        """Construct a DeterministicMetadata from a Deterministic time series."""
         units = (
             QuantityMetadata(
                 module=type(time_series.data).__module__,
@@ -650,10 +656,10 @@ class DeterministicMetadata(TimeSeriesMetadata):
         )
 
         # I am not sure if this is the right way to do this.
-        type_str: Literal["DeterministicSingleTimeSeries", "DeterministicTimeSeries"] = (
+        type_str: Literal["Deterministic", "DeterministicSingleTimeSeries"] = (
             "DeterministicSingleTimeSeries"
             if isinstance(time_series, DeterministicSingleTimeSeries)
-            else "DeterministicTimeSeries"
+            else "Deterministic"
         )
 
         return cls(
@@ -920,7 +926,7 @@ class NonSequentialTimeSeriesKey(TimeSeriesKey):
 
 
 class DeterministicTimeSeriesKey(TimeSeriesKey):
-    """Keys for DeterministicTimeSeries."""
+    """Keys for Deterministic time series."""
 
     initial_timestamp: datetime
     resolution: timedelta

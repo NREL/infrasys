@@ -15,8 +15,9 @@ from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
+    AbstractDeterministic,
+    Deterministic,
     DeterministicMetadata,
-    DeterministicTimeSeries,
     DeterministicTimeSeriesType,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
@@ -102,7 +103,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         else:
             logger.debug("{} was already stored", time_series_uuid)
 
-    @_add_time_series.register(DeterministicTimeSeries)
+    @_add_time_series.register(AbstractDeterministic)
     def _(self, time_series):
         """Store deterministic forecast time series data as a 2D matrix.
 
@@ -244,7 +245,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         else:
             np_array = np.array(data)
 
-        return DeterministicTimeSeries(
+        return Deterministic(
             uuid=metadata.time_series_uuid,
             name=metadata.name,
             resolution=metadata.resolution,
