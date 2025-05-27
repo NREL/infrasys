@@ -17,7 +17,10 @@ from infrasys.component import Component
 from infrasys.exceptions import ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower, Distance
-from infrasys.time_series_models import TimeSeriesData, TimeSeriesStorageType
+from infrasys.time_series_models import (
+    TimeSeriesData,
+    TimeSeriesStorageType,
+)
 
 from .models.simple_system import (
     SimpleBus,
