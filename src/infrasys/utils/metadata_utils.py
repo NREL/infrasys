@@ -46,8 +46,8 @@ def create_associations_table(
         "owner_category TEXT NOT NULL",
         "features TEXT NOT NULL",
         "scaling_factor_multiplier TEXT NULL",
-        "units TEXT NULL",
         "metadata_uuid TEXT NOT NULL",
+        "units TEXT NULL",
     ]
     schema_text = ",".join(schema)
     cur = connection.cursor()
