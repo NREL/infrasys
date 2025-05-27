@@ -125,9 +125,9 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         Parameters
         ----------
-        metadata : :class:`~infrasys.time_series_models.TimeSeriesMetadata`
+        metadata : infrasys.time_series_models.TimeSeriesMetadata
             Metadata for the time series
-        time_series : :class:`~infrasys.time_series_models.TimeSeriesData`
+        time_series : infrasys.time_series_models.TimeSeriesData
             Time series data to store
         context : Any, optional
             Optional context parameter, by default None
@@ -136,7 +136,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         See Also
         --------
-        :meth:`_add_time_series_dispatch` : Dispatches the call to the correct handler based on metadata type.
+        _add_time_series_dispatch : Dispatches the call to the correct handler based on metadata type.
         """
         if context is not None:
             self._add_time_series_dispatch(
@@ -160,9 +160,9 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         Parameters
         ----------
-        metadata : :class:`~infrasys.time_series_models.TimeSeriesMetadata`
+        metadata : infrasys.time_series_models.TimeSeriesMetadata
             Metadata for the time series
-        time_series : :class:`~infrasys.time_series_models.TimeSeriesData`
+        time_series : infrasys.time_series_models.TimeSeriesData
             Time series data to store
         context : Any, optional
             Optional context parameter, by default None
@@ -190,9 +190,9 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         Parameters
         ----------
-        metadata : :class:`~infrasys.time_series_models.SingleTimeSeriesMetadata`
+        metadata : infrasys.time_series_models.SingleTimeSeriesMetadata
             Metadata for the single time series
-        time_series : :class:`~infrasys.time_series_models.SingleTimeSeries`
+        time_series : infrasys.time_series_models.SingleTimeSeries
             Single time series data to store
         context : Any
             HDF5 file handle
@@ -201,7 +201,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         See Also
         --------
-        :meth:`add_time_series` : Public method for adding time series.
+        add_time_series : Public method for adding time series.
         """
         assert context is not None
 
@@ -238,9 +238,9 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         Parameters
         ----------
-        metadata : :class:`~infrasys.time_series_models.DeterministicMetadata`
+        metadata : infrasys.time_series_models.DeterministicMetadata
             Metadata for the deterministic time series
-        time_series : :class:`~infrasys.time_series_models.DeterministicTimeSeries`
+        time_series : infrasys.time_series_models.DeterministicTimeSeries
             Deterministic time series data to store
         context : Any
             HDF5 file handle
@@ -249,7 +249,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         See Also
         --------
-        :meth:`add_time_series` : Public method for adding time series.
+        add_time_series : Public method for adding time series.
         """
         assert context is not None
 
@@ -395,7 +395,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
 
         Parameters
         ----------
-        metadata : :class:`~infrasys.time_series_models.TimeSeriesMetadata`
+        metadata : infrasys.time_series_models.TimeSeriesMetadata
             Metadata for the time series to remove.
         context : Any, optional
             Optional HDF5 file handle; if not provided, one is opened.
