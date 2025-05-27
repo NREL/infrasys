@@ -88,13 +88,13 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
                 file_handle.create_group(self.HDF5_TS_METADATA_ROOT_PATH)
         return
 
-    def _serialize_compression_settings(self) -> None:
+    def _serialize_compression_settings(self, compression_level: int = 5) -> None:
         """Add default compression settings."""
         with self.open_time_series_store() as file_handle:
             root = file_handle[self.HDF5_TS_ROOT_PATH]
             root.attrs["compression_enabled"] = False
-            root.attrs["compression_type"] = "CompressionTypes.DEFLATE"
-            root.attrs["compression_level"] = 3
+            root.attrs["compression_type"] = "DEFLATE"
+            root.attrs["compression_level"] = compression_level
             root.attrs["compression_shuffle"] = True
         return None
 
@@ -119,6 +119,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
         context: Any = None,
+        compression_level: int = 5,
     ) -> None:
         """Store a time series array.
 
@@ -130,16 +131,22 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             Time series data to store
         context : Any, optional
             Optional context parameter, by default None
+        compression_level: int, defaults to 5
+            Optional compression level for `gzip` (0 for no compression, 10, for max compression)
 
         See Also
         --------
         :meth:`_add_time_series_dispatch` : Dispatches the call to the correct handler based on metadata type.
         """
         if context is not None:
-            self._add_time_series_dispatch(metadata, time_series, context=context)
+            self._add_time_series_dispatch(
+                metadata, time_series, context=context, compression_level=compression_level
+            )
         else:
             with self.open_time_series_store() as file_handle:
-                self._add_time_series_dispatch(metadata, time_series, context=file_handle)
+                self._add_time_series_dispatch(
+                    metadata, time_series, context=file_handle, compression_level=compression_level
+                )
 
     @singledispatchmethod
     def _add_time_series_dispatch(
@@ -147,6 +154,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
         context: Any = None,
+        compression_level: int = 5,
     ) -> None:
         """Dispatches the call to the correct handler based on metadata type.
 
@@ -158,6 +166,8 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             Time series data to store
         context : Any, optional
             Optional context parameter, by default None
+        compression_level: int, defaults to 5
+            Optional compression level for `gzip` (0 for no compression, 10, for max compression)
 
         Raises
         ------
@@ -173,6 +183,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         metadata: SingleTimeSeriesMetadata,
         time_series: SingleTimeSeries,
         context: Any = None,
+        compression_level: int = 5,
         **kwargs: Any,
     ) -> None:
         """Store a SingleTimeSeries array.
@@ -185,6 +196,8 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             Single time series data to store
         context : Any
             HDF5 file handle
+        compression_level: int, defaults to 5
+            Optional compression level for `gzip` (0 for no compression, 10, for max compression)
 
         See Also
         --------
@@ -199,12 +212,18 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             group = root.create_group(uuid)
 
             group.create_dataset(
-                "data", data=time_series.data_array, compression="gzip", compression_opts=5
+                "data", data=time_series.data_array, compression=compression_level
             )
 
             group.attrs["type"] = metadata.type
             group.attrs["initial_timestamp"] = metadata.initial_timestamp.isoformat()
             group.attrs["resolution"] = metadata.resolution.total_seconds()
+
+            # NOTE: This was added for compatibility with
+            # InfrastructureSystems. In reality, this should not affect any
+            # other implementation
+            group.attrs["module"] = "InfrastructureSystems"
+            group.attrs["data_type"] = "Float64"
 
     @_add_time_series_dispatch.register(DeterministicMetadata)
     def _(
@@ -212,6 +231,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         metadata: DeterministicMetadata,
         time_series: DeterministicTimeSeries,
         context: Any = None,
+        compression_level: int = 5,
         **kwargs: Any,
     ) -> None:
         """Store a DeterministicTimeSeries array.
@@ -224,6 +244,8 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             Deterministic time series data to store
         context : Any
             HDF5 file handle
+        compression_level: int, defaults to 5
+            Optional compression level for `gzip` (0 for no compression, 10, for max compression)
 
         See Also
         --------
@@ -238,7 +260,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             group = root.create_group(uuid)
 
             group.create_dataset(
-                "data", data=time_series.data_array, compression="gzip", compression_opts=5
+                "data", data=time_series.data_array, compression=compression_level
             )
 
             group.attrs["type"] = metadata.type
