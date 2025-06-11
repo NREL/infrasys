@@ -719,7 +719,7 @@ def test_system_counts():
             (
                 "SimpleGenerator",
                 "SingleTimeSeries",
-                "2020-01-01 02:00:00",
+                "2020-01-01T02:00:00",
                 to_iso_8601(timedelta(hours=1)),
             )
         ]
@@ -730,7 +730,7 @@ def test_system_counts():
             (
                 "SimpleBus",
                 "SingleTimeSeries",
-                "2020-02-01 00:10:00",
+                "2020-02-01T00:10:00",
                 to_iso_8601(timedelta(minutes=5)),
             )
         ]

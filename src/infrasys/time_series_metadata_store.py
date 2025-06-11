@@ -139,7 +139,9 @@ class TimeSeriesMetadataStore:
             {
                 "time_series_uuid": str(metadata.time_series_uuid),
                 "time_series_type": metadata.type,
-                "initial_timestamp": initial_time,
+                "initial_timestamp": initial_time.replace(" ", "T")
+                if initial_time is not None
+                else initial_time,
                 "resolution": resolution,
                 "horizon": horizon,
                 "interval": interval,
