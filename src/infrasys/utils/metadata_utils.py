@@ -93,14 +93,14 @@ def get_initial_timestamp(metadata: TimeSeriesMetadata) -> str | None:
 
 @get_initial_timestamp.register
 def _(metadata: SingleTimeSeriesMetadataBase) -> str:
-    """Get initial_timestamp from SingleTimeSeriesMetadataBase."""
-    return str(metadata.initial_timestamp)
+    """Get initial_timestamp from SingleTimeSeriesMetadataBase. Format for initial_timestamp is YYYY-MM-DDThh:mm:ss."""
+    return metadata.initial_timestamp.isoformat(sep="T")
 
 
 @get_initial_timestamp.register
 def _(metadata: DeterministicMetadata) -> str:
-    """Get initial_timestamp from DeterministicMetadata."""
-    return str(metadata.initial_timestamp)
+    """Get initial_timestamp from DeterministicMetadata. Format for initial_timestamp is YYYY-MM-DDThh:mm:ss"""
+    return metadata.initial_timestamp.isoformat(sep="T")
 
 
 @singledispatch
