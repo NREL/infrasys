@@ -13,7 +13,7 @@ from infrasys.exceptions import (
     ISOperationNotAllowed,
     ISConflictingArguments,
 )
-from infrasys import Component, Location, SingleTimeSeries
+from infrasys import Component, Location, SingleTimeSeries, NonSequentialTimeSeries
 from infrasys.quantities import ActivePower
 from infrasys.time_series_models import TimeSeriesKey, TimeSeriesStorageType
 from .models.simple_system import (
@@ -839,3 +839,40 @@ def test_bulk_add_time_series_with_rollback(storage_type: TimeSeriesStorageType)
             system.add_time_series(ts, gen, connection=conn)
 
     assert not system.has_time_series(gen, variable_name=ts_name)
+
+
+def test_time_series_uniqueness_queries(simple_system: SimpleSystem):
+    system = SimpleSystem(time_series_in_memory=True)
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
+    system.add_components(bus, gen)
+    variable_name = "active_power"
+    length = 24
+    data = range(length)
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts1 = SingleTimeSeries.from_array(data, variable_name, start, resolution)
+    system.add_time_series(ts1, gen)
+
+    # This works because there is only one match.
+    assert isinstance(system.get_time_series(gen), SingleTimeSeries)
+
+    length = 10
+    data = range(length)
+    timestamps = [
+        datetime(year=2030, month=1, day=1) + timedelta(seconds=5 * i) for i in range(length)
+    ]
+    ts2 = NonSequentialTimeSeries.from_array(
+        data=data, variable_name=variable_name, timestamps=timestamps
+    )
+    system.add_time_series(ts2, gen)
+    with pytest.raises(ISOperationNotAllowed):
+        system.get_time_series(gen)
+
+    assert isinstance(
+        system.get_time_series(gen, time_series_type=SingleTimeSeries), SingleTimeSeries
+    )
+    assert isinstance(
+        system.get_time_series(gen, time_series_type=NonSequentialTimeSeries),
+        NonSequentialTimeSeries,
+    )

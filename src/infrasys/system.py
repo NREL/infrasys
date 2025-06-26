@@ -38,7 +38,6 @@ from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
 from infrasys.time_series_models import (
     DatabaseConnection,
-    SingleTimeSeries,
     TimeSeriesData,
     TimeSeriesKey,
     TimeSeriesMetadata,
@@ -1044,7 +1043,7 @@ class System:
         self,
         owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         start_time: datetime | None = None,
         length: int | None = None,
         connection: DatabaseConnection | None = None,
@@ -1058,8 +1057,10 @@ class System:
             Component to which the time series must be attached.
         variable_name : str | None
             Optional, search for time series with this name.
-        time_series_type : Type[TimeSeriesData]
-            Optional, search for time series with this type.
+            Required if the name if the other inputs will match more than one time series.
+        time_series_type : Type[TimeSeriesData] | None
+            Optional if the owner only has one time series type.
+            Required if the name if the other inputs will match more than one time series.
         start_time : datetime | None
             If not None, take a slice of the time series starting at this time.
         length : int | None
@@ -1112,7 +1113,7 @@ class System:
         self,
         owner: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         **user_attributes: str,
     ) -> bool:
         """Return True if the component has time series matching the inputs.
@@ -1139,7 +1140,7 @@ class System:
         self,
         component: Component,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         start_time: datetime | None = None,
         length: int | None = None,
         **user_attributes: Any,
@@ -1152,7 +1153,7 @@ class System:
             Component to which the time series must be attached.
         variable_name : str | None
             Optional, search for time series with this name.
-        time_series_type : Type[TimeSeriesData]
+        time_series_type : Type[TimeSeriesData] | None
             Optional, search for time series with this type.
         start_time : datetime | None
             If not None, take a slice of the time series starting at this time.
@@ -1180,7 +1181,7 @@ class System:
         self,
         owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         **user_attributes: Any,
     ) -> list[TimeSeriesKey]:
         """Return all time series keys that match the inputs.
@@ -1191,7 +1192,7 @@ class System:
             Component to which the time series must be attached.
         variable_name : str | None
             Optional, search for time series with this name.
-        time_series_type : Type[TimeSeriesData]
+        time_series_type : Type[TimeSeriesData] | None
             Optional, search for time series with this type.
         user_attributes : str
             Optional, search for time series with these attributes.
@@ -1213,7 +1214,7 @@ class System:
         self,
         component: Component,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         **user_attributes: Any,
     ) -> list[TimeSeriesMetadata]:
         """Return all time series metadata that match the inputs.
@@ -1224,7 +1225,7 @@ class System:
             Component to which the time series must be attached.
         variable_name : str | None
             Optional, search for time series with this name.
-        time_series_type : Type[TimeSeriesData]
+        time_series_type : Type[TimeSeriesData] | None
             Optional, search for time series with this type.
         user_attributes : str
             Optional, search for time series with these attributes.
@@ -1246,7 +1247,7 @@ class System:
         self,
         *owners: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         **user_attributes: Any,
     ) -> None:
         """Remove all time series arrays attached to the components or supplemental attributes
@@ -1258,8 +1259,8 @@ class System:
             Affected components or supplemental attributes
         variable_name : str | None
             Optional, search for time series with this name.
-        time_series_type : Type[TimeSeriesData]
-            Optional, search for time series with this type.
+        time_series_type : Type[TimeSeriesData] | None
+            Optional, only remove time series with this type.
         user_attributes : str
             Optional, search for time series with these attributes.
 
