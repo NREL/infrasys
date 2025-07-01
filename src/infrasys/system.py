@@ -1057,10 +1057,10 @@ class System:
             Component to which the time series must be attached.
         variable_name : str | None
             Optional, search for time series with this name.
-            Required if the name if the other inputs will match more than one time series.
+            Required if the other inputs will match more than one time series.
         time_series_type : Type[TimeSeriesData] | None
-            Optional if the owner only has one time series type.
-            Required if the name if the other inputs will match more than one time series.
+            Optional, search for time series of this type.
+            Required if the other inputs will match more than one time series.
         start_time : datetime | None
             If not None, take a slice of the time series starting at this time.
         length : int | None
