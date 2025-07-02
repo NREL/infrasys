@@ -176,7 +176,7 @@ class TimeSeriesManager:
         self,
         owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         start_time: datetime | None = None,
         length: int | None = None,
         connection: DatabaseConnection | None = None,
@@ -199,7 +199,7 @@ class TimeSeriesManager:
         metadata = self._metadata_store.get_metadata(
             owner,
             variable_name=variable_name,
-            time_series_type=time_series_type.__name__,
+            time_series_type=time_series_type.__name__ if time_series_type else None,
             **user_attributes,
         )
         return self._get_by_metadata(
@@ -225,7 +225,7 @@ class TimeSeriesManager:
         self,
         owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         **user_attributes,
     ) -> bool:
         """Return True if the component or supplemental atttribute has time series matching the
@@ -234,7 +234,7 @@ class TimeSeriesManager:
         return self._metadata_store.has_time_series_metadata(
             owner,
             variable_name=variable_name,
-            time_series_type=time_series_type.__name__,
+            time_series_type=time_series_type.__name__ if time_series_type else None,
             **user_attributes,
         )
 
@@ -242,7 +242,7 @@ class TimeSeriesManager:
         self,
         owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         start_time: datetime | None = None,
         length: int | None = None,
         connection: DatabaseConnection | None = None,
@@ -264,7 +264,7 @@ class TimeSeriesManager:
         self,
         owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         **user_attributes: Any,
     ) -> list[TimeSeriesKey]:
         """Return all time series keys that match the inputs."""
@@ -279,14 +279,14 @@ class TimeSeriesManager:
         self,
         owner: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         **user_attributes: Any,
     ) -> list[TimeSeriesMetadata]:
         """Return all time series metadata that match the inputs."""
         return self._metadata_store.list_metadata(
             owner,
             variable_name=variable_name,
-            time_series_type=time_series_type.__name__,
+            time_series_type=time_series_type.__name__ if time_series_type else None,
             **user_attributes,
         )
 
@@ -294,7 +294,7 @@ class TimeSeriesManager:
         self,
         *owners: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         connection: DatabaseConnection | None = None,
         **user_attributes: Any,
     ):
@@ -311,7 +311,7 @@ class TimeSeriesManager:
         metadata = self._metadata_store.remove(
             *owners,
             variable_name=variable_name,
-            time_series_type=time_series_type.__name__,
+            time_series_type=time_series_type.__name__ if time_series_type else None,
             connection=_get_metadata_connection(connection),
             **user_attributes,
         )
@@ -321,7 +321,7 @@ class TimeSeriesManager:
             self._storage.remove_time_series(
                 time_series[uuid], connection=_get_data_connection(connection)
             )
-            logger.info("Removed time series {}.{}", time_series_type, variable_name)
+            logger.info("Removed time series {}", uuid)
 
     def copy(
         self,

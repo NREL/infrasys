@@ -260,7 +260,7 @@ class TimeSeriesMetadataStore:
         self,
         *owners: Component | SupplementalAttribute,
         variable_name: Optional[str] = None,
-        time_series_type: Optional[str] = None,
+        time_series_type: str | None = None,
         **user_attributes,
     ) -> list[TimeSeriesMetadata]:
         """Return a list of metadata that match the query."""
@@ -313,7 +313,7 @@ class TimeSeriesMetadataStore:
         self,
         *components: Component | SupplementalAttribute,
         variable_name: str | None = None,
-        time_series_type: Optional[str] = None,
+        time_series_type: str | None = None,
         connection: sqlite3.Connection | None = None,
         **user_attributes,
     ) -> list[TimeSeriesMetadata]:
