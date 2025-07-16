@@ -1,12 +1,11 @@
 import enum
 import importlib
-from typing import Any, Literal, Annotated, Type, Union
+from typing import Annotated, Any, Literal, Type, Union
 from uuid import UUID
 
 from pydantic import Field, field_serializer
 
 from infrasys.models import InfraSysBaseModel
-
 
 TYPE_METADATA = "__metadata__"
 
