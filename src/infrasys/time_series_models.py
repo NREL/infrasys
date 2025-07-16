@@ -77,7 +77,8 @@ class SingleTimeSeries(TimeSeriesData):
     resolution: timedelta
     initial_timestamp: datetime
 
-    @computed_field
+    @computed_field  # type: ignore
+    @property
     def length(self) -> int:
         """Return the length of the data."""
         return len(self.data)
@@ -228,6 +229,242 @@ class SingleTimeSeriesScalingFactor(SingleTimeSeries):
     """Defines a time array with a single dimension of floats that are 0-1 scaling factors."""
 
 
+class Forecast(TimeSeriesData):
+    """Defines the time series types for forecast."""
+
+    ...
+
+
+class AbstractDeterministic(TimeSeriesData):
+    """Defines the abstric type for deterministic time series forecast."""
+
+    data: NDArray | pint.Quantity
+    resolution: timedelta
+    initial_timestamp: datetime
+    horizon: timedelta
+    interval: timedelta
+    window_count: int
+
+    @staticmethod
+    def get_time_series_metadata_type() -> Type["DeterministicMetadata"]:
+        return DeterministicMetadata
+
+    @property
+    def data_array(self) -> NDArray:
+        if isinstance(self.data, pint.Quantity):
+            return self.data.magnitude
+        return self.data
+
+
+class Deterministic(AbstractDeterministic):
+    """A deterministic forecast for a particular data field in a Component.
+
+    This is a Pydantic model used to represent deterministic forecasts where the forecast
+    data is explicitly stored as a 2D array. Each row in the array represents a forecast window,
+    and each column represents a time step within the forecast horizon.
+
+    Parameters
+    ----------
+    data : NDArray | pint.Quantity
+        The normalized forecast data as a 2D array.
+    resolution : timedelta
+        The resolution of the forecast time series.
+    initial_timestamp : datetime
+        The starting timestamp for the forecast.
+    horizon : timedelta
+        The forecast horizon, indicating the duration of each forecast window.
+    interval : timedelta
+        The time interval between consecutive forecast windows.
+    window_count : int
+        The number of forecast windows.
+
+    Attributes
+    ----------
+    data_array : NDArray
+        Returns the underlying numpy array (stripping any Pint units if present).
+
+    See Also
+    --------
+    DeterministicSingleTimeSeries : A wrapper that creates a deterministic forecast view
+        based on an existing SingleTimeSeries.
+    """
+
+    @classmethod
+    def from_array(
+        cls,
+        data: ISArray,
+        name: str,
+        initial_timestamp: datetime,
+        resolution: timedelta,
+        horizon: timedelta,
+        interval: timedelta,
+        window_count: int,
+    ) -> "Deterministic":
+        """Constructor for `Deterministic` time series that creates an instance from a sequence.
+
+        Parameters
+        ----------
+        data
+            Sequence that contains the values of the time series
+        name
+            Name assigned to the values of the time series (e.g., active_power)
+        initial_time
+            Start time for the time series (e.g., datetime(2020,1,1))
+        resolution
+            Resolution of the time series (e.g., 30min, 1hr)
+        horizon
+            Horizon of the time series (e.g., 30min, 1hr)
+        window_count
+            Number of windows that the time series represent
+
+        Returns
+        -------
+        Deterministic
+        """
+
+        return Deterministic(
+            data=data,  # type: ignore
+            name=name,
+            initial_timestamp=initial_timestamp,
+            resolution=resolution,
+            horizon=horizon,
+            interval=interval,
+            window_count=window_count,
+        )
+
+
+class DeterministicSingleTimeSeries(AbstractDeterministic):
+    """A deterministic forecast that wraps a SingleTimeSeries.
+
+    This Pydantic model creates a deterministic forecast by deriving forecast windows
+    from an existing SingleTimeSeries. Instead of storing forecast data explicitly, it
+    provides a dynamic view into the original time series by accessing data at incrementing
+    offsets determined by the forecast parameters. This approach minimizes data duplication
+    when forecast windows overlap.
+
+    Parameters
+    ----------
+    single_time_series : SingleTimeSeries
+        The base time series from which to derive the forecast.
+    interval : timedelta
+        The time interval between consecutive forecast windows.
+    horizon : timedelta
+        The duration of each forecast window.
+    name : str, optional
+        The name assigned to the forecast. Defaults to the name of the wrapped SingleTimeSeries.
+    window_count : int, optional
+        The number of forecast windows to generate. If omitted, the maximum number of windows
+        possible will be used based on the length of the base time series.
+
+    See Also
+    --------
+    Deterministic : The model for explicit 2D deterministic forecasts.
+    SingleTimeSeries : The underlying time series model that is wrapped.
+    """
+
+    single_time_series: SingleTimeSeries
+
+    @classmethod
+    def from_single_time_series(
+        cls,
+        single_time_series: SingleTimeSeries,
+        interval: timedelta,
+        horizon: timedelta,
+        name: str | None = None,
+        window_count: int | None = None,
+    ) -> "DeterministicSingleTimeSeries":
+        """Create a DeterministicSingleTimeSeries from a SingleTimeSeries.
+
+        Parameters
+        ----------
+        single_time_series
+            The SingleTimeSeries to wrap
+        name
+            Name assigned to the forecast (defaults to the same name as the SingleTimeSeries)
+        interval
+            Time between forecast windows (e.g., 1h for hourly forecasts)
+        horizon
+            Length of each forecast window (e.g., 6h for 6-hour forecasts)
+        window_count
+            Number of forecast windows to provide. If None, maximum possible windows will be used.
+
+        Returns
+        -------
+        DeterministicSingleTimeSeries
+
+        Notes
+        -----
+        This creates a perfect forecast by wrapping the original SingleTimeSeries
+        and accessing its data at the appropriate offsets for each window.
+        """
+        # Use defaults if parameters aren't provided
+        name = name if name is not None else single_time_series.name
+        resolution = single_time_series.resolution
+
+        # Calculate maximum possible window count if not provided
+        if window_count is None:
+            total_duration = single_time_series.length * resolution
+            usable_duration = total_duration - horizon
+            max_windows = (usable_duration // interval) + 1
+            window_count = int(max_windows)
+            if window_count < 1:
+                msg = (
+                    f"Cannot create any forecast windows with horizon={horizon} "
+                    f"from time series of length {total_duration}"
+                )
+                raise ValueError(msg)
+
+        # Ensure the base time series is long enough to support the requested forecast windows
+        horizon_steps = int(horizon / resolution)
+        interval_steps = int(interval / resolution)
+        total_steps_needed = interval_steps * (window_count - 1) + horizon_steps
+
+        if total_steps_needed > single_time_series.length:
+            msg = (
+                f"Base time series length ({single_time_series.length}) is insufficient "
+                f"for the requested forecast parameters (need {total_steps_needed} points)"
+            )
+            raise ValueError(msg)
+
+        # Create a 2D forecast matrix where each row is a forecast window
+        # and each column is a time step in the forecast horizon
+        if isinstance(single_time_series.data, pint.Quantity):
+            forecast_matrix = (
+                np.zeros((window_count, horizon_steps)) * single_time_series.data.units
+            )
+        else:
+            forecast_matrix = np.zeros((window_count, horizon_steps))
+
+        # Fill the forecast matrix with data from the original time series
+        original_data = single_time_series.data_array
+
+        for window_idx in range(window_count):
+            start_idx = window_idx * interval_steps
+            end_idx = start_idx + horizon_steps
+            forecast_matrix[window_idx, :] = original_data[start_idx:end_idx]
+
+        # If original data was a pint.Quantity, wrap the result in a pint.Quantity too
+        if isinstance(single_time_series.data, pint.Quantity):
+            forecast_matrix = type(single_time_series.data)(
+                forecast_matrix, units=single_time_series.data.units
+            )
+
+        # Create a deterministic forecast with the structured forecast windows
+        return cls(
+            name=name,
+            single_time_series=single_time_series,
+            data=forecast_matrix,
+            resolution=resolution,
+            initial_timestamp=single_time_series.initial_timestamp,
+            interval=interval,
+            horizon=horizon,
+            window_count=window_count,
+        )
+
+
+DeterministicTimeSeriesType: TypeAlias = DeterministicSingleTimeSeries | Deterministic
+
+
 # TODO:
 # read CSV and Parquet and convert each column to a SingleTimeSeries
 
@@ -264,7 +501,13 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
     features: dict[str, Any] = {}
     units: Optional[QuantityMetadata] = None
     normalization: NormalizationModel = None
-    type: Literal["SingleTimeSeries", "SingleTimeSeriesScalingFactor", "NonSequentialTimeSeries"]
+    type: Literal[
+        "SingleTimeSeries",
+        "SingleTimeSeriesScalingFactor",
+        "NonSequentialTimeSeries",
+        "Deterministic",
+        "DeterministicSingleTimeSeries",
+    ]
 
     @property
     def label(self) -> str:
@@ -377,8 +620,116 @@ class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadataBase):
         return "SingleTimeSeriesScalingFactor"
 
 
+class DeterministicMetadata(TimeSeriesMetadata):
+    """Defines the metadata for Deterministic and DeterministicSingleTimeSeries."""
+
+    initial_timestamp: datetime
+    resolution: timedelta
+    interval: timedelta
+    horizon: timedelta
+    window_count: int
+    type: Literal["Deterministic", "DeterministicSingleTimeSeries"]
+
+    @staticmethod
+    def get_time_series_data_type() -> Type[TimeSeriesData]:
+        """Return the data type associated with this metadata type."""
+        return Deterministic
+
+    @staticmethod
+    def get_time_series_type_str() -> str:
+        """Return the time series type as a string."""
+        return "Deterministic"
+
+    @classmethod
+    def from_data(
+        cls, time_series: DeterministicTimeSeriesType, **features: Any
+    ) -> "DeterministicMetadata":
+        """Construct a DeterministicMetadata from a Deterministic time series."""
+        units = (
+            QuantityMetadata(
+                module=type(time_series.data).__module__,
+                quantity_type=type(time_series.data),
+                units=str(time_series.data.units),
+            )
+            if isinstance(time_series.data, pint.Quantity)
+            else None
+        )
+
+        # I am not sure if this is the right way to do this.
+        type_str: Literal["Deterministic", "DeterministicSingleTimeSeries"] = (
+            "DeterministicSingleTimeSeries"
+            if isinstance(time_series, DeterministicSingleTimeSeries)
+            else "Deterministic"
+        )
+
+        return cls(
+            name=time_series.name,
+            initial_timestamp=time_series.initial_timestamp,
+            resolution=time_series.resolution,
+            interval=time_series.interval,
+            horizon=time_series.horizon,
+            window_count=time_series.window_count,
+            time_series_uuid=time_series.uuid,
+            features=features,
+            units=units,
+            normalization=time_series.normalization,
+            type=type_str,
+        )
+
+    def get_range(
+        self, start_time: datetime | None = None, length: int | None = None
+    ) -> tuple[int, int]:
+        """Return the range to be used to index into the dataframe."""
+        horizon_steps = int(self.horizon / self.resolution)
+        interval_steps = int(self.interval / self.resolution)
+        total_steps = interval_steps * (self.window_count - 1) + horizon_steps
+
+        if start_time is None and length is None:
+            return (0, total_steps)
+
+        if start_time is None:
+            index = 0
+        else:
+            if start_time < self.initial_timestamp:
+                msg = "{start_time=} is less than {self.initial_timestamp=}"
+                raise ISConflictingArguments(msg)
+
+            last_valid_time = (
+                self.initial_timestamp + (self.window_count - 1) * self.interval + self.horizon
+            )
+            if start_time > last_valid_time:
+                msg = f"{start_time=} is too large: {self=}"
+                raise ISConflictingArguments(msg)
+
+            diff = start_time - self.initial_timestamp
+            if (diff % self.resolution).total_seconds() != 0.0:
+                msg = (
+                    f"{start_time=} conflicts with initial_timestamp={self.initial_timestamp} and "
+                    f"resolution={self.resolution}"
+                )
+                raise ISConflictingArguments(msg)
+
+            index = int(diff / self.resolution)
+
+        if length is None:
+            length = total_steps - index
+
+        if index + length > total_steps:
+            msg = f"{start_time=} {length=} conflicts with {self=}"
+            raise ISConflictingArguments(msg)
+
+        return (index, length)
+
+    @property
+    def length(self) -> int:
+        """Return the total length of the deterministic time series."""
+        horizon_steps = int(self.horizon / self.resolution)
+        interval_steps = int(self.interval / self.resolution)
+        return interval_steps * (self.window_count - 1) + horizon_steps
+
+
 TimeSeriesMetadataUnion = Annotated[
-    Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata],
+    Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata, DeterministicMetadata],
     Field(discriminator="type"),
 ]
 
@@ -572,6 +923,16 @@ class NonSequentialTimeSeriesKey(TimeSeriesKey):
     """Keys for SingleTimeSeries."""
 
     length: int
+
+
+class DeterministicTimeSeriesKey(TimeSeriesKey):
+    """Keys for Deterministic time series."""
+
+    initial_timestamp: datetime
+    resolution: timedelta
+    interval: timedelta
+    horizon: timedelta
+    window_count: int
 
 
 class TimeSeriesStorageContext(InfraSysBaseModel):
