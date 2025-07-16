@@ -17,10 +17,14 @@ from loguru import logger
 from .arrow_storage import ArrowTimeSeriesStorage
 from .component import Component
 from .exceptions import ISInvalidParameter, ISOperationNotAllowed
+from .h5_time_series_storage import HDF5TimeSeriesStorage
 from .in_memory_time_series_storage import InMemoryTimeSeriesStorage
+from .path_utils import clean_tmp_folder
 from .supplemental_attribute import SupplementalAttribute
 from .time_series_metadata_store import TimeSeriesMetadataStore
 from .time_series_models import (
+    DeterministicMetadata,
+    DeterministicTimeSeriesKey,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesKey,
     NonSequentialTimeSeriesMetadata,
@@ -204,7 +208,7 @@ class TimeSeriesManager:
         self,
         owner: Component | SupplementalAttribute,
         name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         start_time: datetime | None = None,
         length: int | None = None,
         context: TimeSeriesStorageContext | None = None,
@@ -227,7 +231,7 @@ class TimeSeriesManager:
         metadata = self._metadata_store.get_metadata(
             owner,
             name=name,
-            time_series_type=time_series_type.__name__,
+            time_series_type=time_series_type.__name__ if time_series_type else None,
             **features,
         )
         return self._get_by_metadata(
@@ -592,6 +596,20 @@ def _(metadata: NonSequentialTimeSeriesMetadata) -> TimeSeriesKey:
         features=metadata.features,
         name=metadata.name,
         time_series_type=NonSequentialTimeSeries,
+    )
+
+
+@make_time_series_key.register(DeterministicMetadata)
+def _(metadata: DeterministicMetadata) -> TimeSeriesKey:
+    return DeterministicTimeSeriesKey(
+        initial_timestamp=metadata.initial_timestamp,
+        resolution=metadata.resolution,
+        interval=metadata.interval,
+        horizon=metadata.horizon,
+        window_count=metadata.window_count,
+        features=metadata.features,
+        name=metadata.name,
+        time_series_type=metadata.get_time_series_data_type(),
     )
 
 

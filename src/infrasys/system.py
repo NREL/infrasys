@@ -1064,7 +1064,7 @@ class System:
         self,
         owner: Component | SupplementalAttribute,
         name: str | None = None,
-        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        time_series_type: Type[TimeSeriesData] | None = None,
         start_time: datetime | None = None,
         length: int | None = None,
         context: TimeSeriesStorageContext | None = None,

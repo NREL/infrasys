@@ -11,6 +11,8 @@ from uuid import UUID
 import orjson
 from loguru import logger
 
+from infrasys.utils.sqlite import backup, execute
+
 from . import (
     KEY_VALUE_STORE_TABLE,
     TIME_SERIES_ASSOCIATIONS_TABLE,
@@ -25,13 +27,16 @@ from .serialization import (
 )
 from .supplemental_attribute_manager import SupplementalAttribute
 from .time_series_models import (
-    NonSequentialTimeSeriesMetadataBase,
-    SingleTimeSeriesMetadataBase,
     TimeSeriesMetadata,
 )
-from .utils.metadata_utils import create_associations_table
-from .utils.sqlite import backup, execute
-from .utils.time_utils import to_iso_8601
+from .utils.metadata_utils import (
+    create_associations_table,
+    get_horizon,
+    get_initial_timestamp,
+    get_interval,
+    get_resolution,
+    get_window_count,
+)
 
 
 class TimeSeriesMetadataStore:
@@ -121,20 +126,11 @@ class TimeSeriesMetadataStore:
             raise ISAlreadyAttached(msg)
 
         # Will probably need to refactor if we introduce more metadata classes.
-        if isinstance(metadata, SingleTimeSeriesMetadataBase):
-            resolution = to_iso_8601(metadata.resolution)
-            initial_time = str(metadata.initial_timestamp)
-            horizon = None
-            interval = None
-            window_count = None
-        elif isinstance(metadata, NonSequentialTimeSeriesMetadataBase):
-            resolution = None
-            initial_time = None
-            horizon = None
-            interval = None
-            window_count = None
-        else:
-            raise NotImplementedError
+        resolution = get_resolution(metadata)
+        initial_time = get_initial_timestamp(metadata)
+        horizon = get_horizon(metadata)
+        interval = get_interval(metadata)
+        window_count = get_window_count(metadata)
 
         units = None
         if metadata.units:
@@ -243,7 +239,7 @@ class TimeSeriesMetadataStore:
         self,
         owner: Component | SupplementalAttribute,
         name: Optional[str] = None,
-        time_series_type: Optional[str] = None,
+        time_series_type: str | None = None,
         **features: Any,
     ) -> bool:
         """Return True if there is time series metadata matching the inputs."""
@@ -282,7 +278,7 @@ class TimeSeriesMetadataStore:
         self,
         *owners: Component | SupplementalAttribute,
         name: Optional[str] = None,
-        time_series_type: Optional[str] = None,
+        time_series_type: str | None = None,
         **features,
     ) -> list[TimeSeriesMetadata]:
         """Return a list of metadata that match the query."""
@@ -324,14 +320,14 @@ class TimeSeriesMetadataStore:
     def list_rows(
         self,
         *components: Component | SupplementalAttribute,
-        variable_name: Optional[str] = None,
-        time_series_type: Optional[str] = None,
+        name: Optional[str] = None,
+        time_series_type: str | None = None,
         columns=None,
         **features,
     ) -> list[tuple]:
         """Return a list of rows that match the query."""
         where_clause, params = self._make_where_clause(
-            components, variable_name, time_series_type, **features
+            components, name, time_series_type, **features
         )
         cols = "*" if columns is None else ",".join(columns)
         query = f"SELECT {cols} FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause}"
@@ -343,7 +339,7 @@ class TimeSeriesMetadataStore:
         self,
         *owners: Component | SupplementalAttribute,
         name: str | None = None,
-        time_series_type: Optional[str] = None,
+        time_series_type: str | None = None,
         connection: sqlite3.Connection | None = None,
         **features,
     ) -> list[TimeSeriesMetadata]:
@@ -414,12 +410,13 @@ class TimeSeriesMetadataStore:
         query = f"""
         INSERT INTO {TIME_SERIES_ASSOCIATIONS_TABLE} (
             time_series_uuid, time_series_type, initial_timestamp, resolution,
-            length, name, owner_uuid, owner_type, owner_category, features, units,
-            metadata_uuid
+            horizon, interval, window_count, length, name, owner_uuid,
+            owner_type, owner_category, features, units, metadata_uuid
         ) VALUES (
             :time_series_uuid, :time_series_type, :initial_timestamp,
-            :resolution, :length, :name, :owner_uuid, :owner_type,
-            :owner_category, :features, :units, :metadata_uuid
+            :resolution, :horizon, :interval, :window_count, :length, :name,
+            :owner_uuid, :owner_type, :owner_category, :features, :units,
+            :metadata_uuid
         )
         """
         cur.executemany(query, rows)
@@ -441,18 +438,18 @@ class TimeSeriesMetadataStore:
     def _make_where_clause(
         self,
         owners: tuple[Component | SupplementalAttribute, ...],
-        variable_name: Optional[str],
-        time_series_type: Optional[str],
+        name: str | None,
+        time_series_type: str | None,
         **features: str,
     ) -> tuple[str, list[str]]:
         params: list[str] = []
         component_str = self._make_components_str(params, *owners)
 
-        if variable_name is None:
+        if name is None:
             var_str = ""
         else:
             var_str = "AND name = ?"
-            params.append(variable_name)
+            params.append(name)
 
         if time_series_type is None:
             ts_str = ""
@@ -467,31 +464,6 @@ class TimeSeriesMetadataStore:
             feat_str = ""
 
         return f"({component_str} {var_str} {ts_str}) {feat_str}", params
-
-    def _try_time_series_metadata_by_full_params(
-        self,
-        owner: Component | SupplementalAttribute,
-        variable_name: str,
-        time_series_type: str,
-        column: str,
-        **features: str,
-    ) -> list[tuple] | None:
-        assert variable_name is not None
-        assert time_series_type is not None
-        where_clause, params = self._make_where_clause(
-            (owner,),
-            variable_name,
-            time_series_type,
-            **features,
-        )
-        # Use the denormalized view
-        query = f"SELECT {column} FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause}"
-        cur = self._con.cursor()
-        rows = execute(cur, query, params=params).fetchall()
-        if not rows:
-            return None
-
-        return rows
 
     def unique_uuids_by_type(self, time_series_type: str):
         query = f"SELECT DISTINCT time_series_uuid from {TIME_SERIES_ASSOCIATIONS_TABLE} where time_series_type = ?"
@@ -517,14 +489,14 @@ class TimeSeriesMetadataStore:
     def _get_metadata_uuids_by_filter(
         self,
         owners: tuple[Component | SupplementalAttribute, ...],
-        variable_name: Optional[str] = None,
-        time_series_type: Optional[str] = None,
+        name: Optional[str] = None,
+        time_series_type: str | None = None,
         **features: Any,
     ) -> list[UUID]:
         """Get metadata UUIDs that match the filter criteria using progressive filtering."""
         cur = self._con.cursor()
 
-        where_clause, params = self._make_where_clause(owners, variable_name, time_series_type)
+        where_clause, params = self._make_where_clause(owners, name, time_series_type)
         features_str = make_features_string(features)
         if features_str:
             params.append(features_str)
@@ -534,9 +506,7 @@ class TimeSeriesMetadataStore:
         if rows:
             return [UUID(row[0]) for row in rows]
 
-        where_clause, params = self._make_where_clause(
-            owners, variable_name, time_series_type, **features
-        )
+        where_clause, params = self._make_where_clause(owners, name, time_series_type, **features)
         query = f"SELECT metadata_uuid FROM {TIME_SERIES_ASSOCIATIONS_TABLE} WHERE {where_clause}"
         rows = execute(cur, query, params=params).fetchall()
         return [UUID(row[0]) for row in rows]
@@ -591,6 +561,7 @@ def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
         data["features"] = {}
 
     data["uuid"] = data.pop("metadata_uuid")
+    data["type"] = time_series_type
     metadata_instance = metadata.model_validate(
         {key: value for key, value in data.items() if key in metadata.model_fields}
     )

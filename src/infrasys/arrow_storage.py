@@ -15,6 +15,10 @@ from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
+    AbstractDeterministic,
+    Deterministic,
+    DeterministicMetadata,
+    DeterministicTimeSeriesType,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
     SingleTimeSeries,
@@ -99,58 +103,63 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         else:
             logger.debug("{} was already stored", time_series_uuid)
 
+    @_add_time_series.register(AbstractDeterministic)
+    def _(self, time_series):
+        """Store deterministic forecast time series data as a 2D matrix.
+
+        Each row represents a forecast window, and each column represents a time step
+        in the forecast horizon. The data is stored as a single array of arrays.
+        """
+        time_series_uuid = time_series.uuid
+        fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
+
+        if not fpath.exists():
+            forecast_data = time_series.data_array
+
+            forecast_list = forecast_data.tolist()
+
+            schema = pa.schema([pa.field(str(time_series_uuid), pa.list_(pa.list_(pa.float64())))])
+
+            arrow_batch = pa.record_batch([pa.array([forecast_list])], schema=schema)
+
+            # Write to disk
+            with pa.OSFile(str(fpath), "wb") as sink:  # type: ignore
+                with pa.ipc.new_file(sink, arrow_batch.schema) as writer:
+                    writer.write(arrow_batch)
+
+            logger.trace("Saving deterministic time series to {}", fpath)
+            logger.debug("Added {} to time series storage", time_series_uuid)
+        else:
+            logger.debug("{} was already stored", time_series_uuid)
+
     def get_time_series(
         self,
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
         context: Any = None,
-    ) -> Any:
-        if isinstance(metadata, SingleTimeSeriesMetadata):
-            return self._get_single_time_series(
-                metadata=metadata, start_time=start_time, length=length
-            )
+    ) -> TimeSeriesData:
+        """Return a time series array using the appropriate handler based on metadata type."""
+        return self._get_time_series_dispatch(metadata, start_time, length, context)
 
-        elif isinstance(metadata, NonSequentialTimeSeriesMetadata):
-            return self._get_nonsequential_time_series(metadata=metadata)
+    @singledispatchmethod
+    def _get_time_series_dispatch(
+        self,
+        metadata: TimeSeriesMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        context: Any = None,
+    ) -> TimeSeriesData:
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
-    def remove_time_series(self, metadata: TimeSeriesMetadata, context: Any = None) -> None:
-        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
-        if not fpath.exists():
-            msg = f"No time series with {metadata.time_series_uuid} is stored"
-            raise ISNotStored(msg)
-        fpath.unlink()
-
-    def serialize(
-        self, data: dict[str, Any], dst: Path | str, src: Path | str | None = None
-    ) -> None:
-        # From the shutil documentation: the copying operation will continue if
-        # it encounters existing directories, and files within the dst tree
-        # will be overwritten by corresponding files from the src tree.
-        if src is None:
-            src = self._ts_directory
-        src_path = Path(src)
-        dst_path = Path(dst)
-        # Note that src could be read-only. Don't copy it's permissions.
-        for path in src_path.iterdir():
-            if path.is_file():
-                shutil.copyfile(path, dst_path / path.name)
-            else:
-                shutil.copytree(src, dst_path / path.name, dirs_exist_ok=True)
-        self.add_serialized_data(data)
-        logger.info("Copied time series data to {}", dst)
-
-    @staticmethod
-    def add_serialized_data(data: dict[str, Any]) -> None:
-        data["time_series_storage_type"] = TimeSeriesStorageType.ARROW.value
-
-    def _get_single_time_series(
+    @_get_time_series_dispatch.register(SingleTimeSeriesMetadata)
+    def _(
         self,
         metadata: SingleTimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
+        context: Any = None,
     ) -> SingleTimeSeries:
         fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
         with pa.memory_map(str(fpath), "r") as source:
@@ -161,8 +170,6 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         if len(columns) != 1:
             msg = f"Bug: expected a single column: {columns=}"
             raise Exception(msg)
-        # This should be equal to metadata.time_series_uuid in versions
-        # v0.2.1 or later. Earlier versions used the time series variable name.
         column = columns[0]
         data = base_ts[column][index : index + length]
         if metadata.units is not None:
@@ -178,9 +185,13 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             normalization=metadata.normalization,
         )
 
-    def _get_nonsequential_time_series(
+    @_get_time_series_dispatch.register(NonSequentialTimeSeriesMetadata)
+    def _(
         self,
         metadata: NonSequentialTimeSeriesMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        context: Any = None,
     ) -> NonSequentialTimeSeries:
         fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
         with pa.memory_map(str(fpath), "r") as source:
@@ -207,6 +218,67 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
             timestamps=np_time_array,
             normalization=metadata.normalization,
         )
+
+    @_get_time_series_dispatch.register(DeterministicMetadata)
+    def _(
+        self,
+        metadata: DeterministicMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        context: Any = None,
+    ) -> DeterministicTimeSeriesType:
+        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
+        with pa.memory_map(str(fpath), "r") as source:
+            base_ts = pa.ipc.open_file(source).get_record_batch(0)
+            logger.trace("Reading time series from {}", fpath)
+
+        columns = base_ts.column_names
+        if len(columns) != 1:
+            msg = f"Bug: expected a single column: {columns=}"
+            raise Exception(msg)
+
+        column = columns[0]
+        data = base_ts[column][0]  # Get the nested array
+
+        if metadata.units is not None:
+            np_array = metadata.units.quantity_type(data, metadata.units.units)
+        else:
+            np_array = np.array(data)
+
+        return Deterministic(
+            uuid=metadata.time_series_uuid,
+            name=metadata.name,
+            resolution=metadata.resolution,
+            initial_timestamp=metadata.initial_timestamp,
+            horizon=metadata.horizon,
+            interval=metadata.interval,
+            window_count=metadata.window_count,
+            data=np_array,
+            normalization=metadata.normalization,
+        )
+
+    def remove_time_series(self, metadata: TimeSeriesMetadata, context: Any = None) -> None:
+        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
+        if not fpath.exists():
+            msg = f"No time series with {metadata.time_series_uuid} is stored"
+            raise ISNotStored(msg)
+        fpath.unlink()
+
+    def serialize(
+        self, data: dict[str, Any], dst: Path | str, src: Path | str | None = None
+    ) -> None:
+        # From the shutil documentation: the copying operation will continue if
+        # it encounters existing directories, and files within the dst tree
+        # will be overwritten by corresponding files from the src tree.
+        if src is None:
+            src = self._ts_directory
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        self.add_serialized_data(data)
+        logger.info("Copied time series data to {}", dst)
+
+    @staticmethod
+    def add_serialized_data(data: dict[str, Any]) -> None:
+        data["time_series_storage_type"] = TimeSeriesStorageType.ARROW.value
 
     def _convert_to_record_batch_single_time_series(
         self, time_series_array: NDArray, column: str
