@@ -38,7 +38,7 @@ dependencies = [
 ]
 [project.optional-dependencies]
 chronify = [
-    "chronify ~= 0.2.3",
+    "chronify ~= 0.3.1",
 ]
 dev = [
     "autodoc_pydantic~=2.0",
