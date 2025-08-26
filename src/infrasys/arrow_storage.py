@@ -131,7 +131,14 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         # will be overwritten by corresponding files from the src tree.
         if src is None:
             src = self._ts_directory
-        shutil.copytree(src, dst, dirs_exist_ok=True)
+        src_path = Path(src)
+        dst_path = Path(dst)
+        # Note that src could be read-only. Don't copy it's permissions.
+        for path in src_path.iterdir():
+            if path.is_file():
+                shutil.copyfile(path, dst_path / path.name)
+            else:
+                shutil.copytree(src, dst_path / path.name, dirs_exist_ok=True)
         self.add_serialized_data(data)
         logger.info("Copied time series data to {}", dst)
 
