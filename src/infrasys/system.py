@@ -1584,13 +1584,72 @@ class System:
     def _make_time_series_directory(filename: Path) -> Path:
         return filename.parent / (filename.stem + "_time_series")
 
-    def show_components(self, component_type):
-        # Filtered view of certain concrete types (not really concrete types)
-        # We can implement custom printing if we want
-        # Dan suggest to remove UUID, system.UUID from component.
-        # Nested components gets special handling.
-        # What we do with components w/o names? Use .label for nested components.
-        raise NotImplementedError
+    def show_components(
+        self,
+        component_type: Type[Component],
+        show_uuid: bool = False,
+        show_time_series: bool = False,
+        show_supplemental: bool = False,
+    ) -> None:
+        """Display a table of components of the specified type.
+
+        Parameters
+        ----------
+        component_type : Type[Component]
+            The type of components to display. If component_type is an abstract type,
+            all matching subtypes will be included.
+        show_uuid : bool
+            Whether to include the UUID column in the table. Defaults to False.
+        show_time_series : bool
+            Whether to include the Time Series count column in the table. Defaults to False.
+        show_time_series : bool
+            Whether to include the Supplemental Attributes count column in the table. Defaults to False.
+
+        Examples
+        --------
+        >>> system.show_components(Generator)  # Shows only names
+        >>> system.show_components(Bus, show_uuid=True)
+        >>> system.show_components(Generator, show_time_series=True)
+        >>> system.show_components(Generator, show_supplemental=True)
+        """
+        components = list(self.get_components(component_type))
+
+        if not components:
+            logger.warning(f"No components of type {component_type.__name__} found in the system.")
+            return
+
+        table = Table(
+            title=f"{component_type.__name__}: {len(components)}",
+            show_header=True,
+            title_justify="left",
+            title_style="bold",
+        )
+        table.add_column("Name", min_width=20, justify="left")
+
+        if show_uuid:
+            table.add_column("UUID", min_width=36, justify="left")
+        if show_time_series:
+            table.add_column("Has Time Series", min_width=12, justify="right")
+        if show_supplemental:
+            table.add_column("Has Supplemental Attributes", min_width=12, justify="right")
+
+        sorted_components = sorted(components, key=lambda x: getattr(x, "name", x.label))
+
+        for component in sorted_components:
+            row_data = [component.name]
+
+            if show_uuid:
+                row_data.append(str(component.uuid))
+            if show_time_series:
+                row_data.append(str(len(self.list_time_series_metadata(component))))
+            if show_supplemental:
+                row_data.append(
+                    str(len(self.get_supplemental_attributes_with_component(component)))
+                )
+
+            table.add_row(*row_data)
+
+        _pprint(table)
 
     def info(self):
         info = SystemInfo(system=self)

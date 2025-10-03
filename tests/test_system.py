@@ -742,6 +742,13 @@ def test_system_printing(simple_system_with_time_series):
     simple_system_with_time_series.info()
 
 
+def test_system_show_components(simple_system_with_time_series):
+    simple_system_with_time_series.show_components(SimpleBus)
+    simple_system_with_time_series.show_components(SimpleBus, show_uuid=True)
+    simple_system_with_time_series.show_components(SimpleBus, show_time_series=True)
+    simple_system_with_time_series.show_components(SimpleBus, show_supplemental=True)
+
+
 def test_convert_chronify_to_arrow_in_deserialize(tmp_path):
     system = SimpleSystem(time_series_storage_type=TimeSeriesStorageType.CHRONIFY)
     assert isinstance(system.time_series.storage, ChronifyTimeSeriesStorage)
