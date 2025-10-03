@@ -95,7 +95,7 @@ class CachedTypeHelper:
         if component_type is None:
             component_type = _deserialize_type(*type_key)
             self._observed_types[type_key] = component_type
-            return component_type
+        return component_type
 
 
 def serialize_value(obj: InfraSysBaseModel, *args, **kwargs) -> dict[str, Any]:

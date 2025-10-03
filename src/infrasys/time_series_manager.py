@@ -19,7 +19,6 @@ from .component import Component
 from .exceptions import ISInvalidParameter, ISOperationNotAllowed
 from .h5_time_series_storage import HDF5TimeSeriesStorage
 from .in_memory_time_series_storage import InMemoryTimeSeriesStorage
-from .path_utils import clean_tmp_folder
 from .supplemental_attribute import SupplementalAttribute
 from .time_series_metadata_store import TimeSeriesMetadataStore
 from .time_series_models import (
@@ -38,6 +37,7 @@ from .time_series_models import (
     TimeSeriesStorageType,
 )
 from .time_series_storage_base import TimeSeriesStorageBase
+from .utils.path_utils import clean_tmp_folder
 
 try:
     from .chronify_time_series_storage import ChronifyTimeSeriesStorage
