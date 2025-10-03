@@ -31,7 +31,7 @@ class Component(InfraSysBaseModelWithIdentifers):
     def model_dump_custom(self, *args, **kwargs) -> dict[str, Any]:
         """Custom serialization for this package"""
         refs = {}
-        for x in self.model_fields:
+        for x in type(self).model_fields:
             val = self._model_dump_field(x)
             if val is not None:
                 refs[x] = val

@@ -830,7 +830,7 @@ class NonSequentialTimeSeries(TimeSeriesData):
         NonSequentialTimeSeries
         """
         if normalization is not None:
-            npa = data if isinstance(data, np.ndarray) else np.array(data)
+            npa = data if isinstance(data, np.ndarray) else np.asarray(data)
             data = normalization.normalize_array(npa)
 
         return NonSequentialTimeSeries(
