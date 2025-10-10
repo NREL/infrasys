@@ -2,6 +2,8 @@
 
 import shutil
 import sqlite3
+import tempfile
+import zipfile
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
@@ -22,6 +24,7 @@ from .component_manager import ComponentManager
 from .exceptions import (
     ISConflictingArguments,
     ISFileExists,
+    ISInvalidParameter,
     ISOperationNotAllowed,
 )
 from .migrations.db_migrations import (
@@ -235,6 +238,106 @@ class System:
         return cls.from_dict(
             data, time_series_parent_dir, upgrade_handler=upgrade_handler, **kwargs
         )
+
+    @classmethod
+    def load(
+        cls,
+        zip_path: Path | str,
+        upgrade_handler: Callable | None = None,
+        **kwargs: Any,
+    ) -> "System":
+        """Load a System from a zip archive created by the save() method.
+
+        The zip file will be extracted to a temporary directory, the system will be
+        deserialized, and the temporary files will be cleaned up automatically.
+        Time series storage files are copied to a permanent location during deserialization.
+
+        Parameters
+        ----------
+        zip_path : Path | str
+            Path to the zip file containing the system.
+        upgrade_handler : Callable | None
+            Optional function to handle data format upgrades. Should only be set when the parent
+            package composes this package. If set, it will be called before de-serialization of
+            the components.
+        **kwargs : Any
+            Additional arguments passed to the System constructor. Refer to System constructor
+            for available options. Use `time_series_directory` to specify where time series
+            files should be stored.
+
+        Returns
+        -------
+        System
+            The deserialized system.
+
+        Raises
+        ------
+        ISFileExists
+            Raised if the zip file does not exist.
+        ISInvalidParameter
+            Raised if the zip file is not a valid zip archive or doesn't contain a valid system.
+        FileNotFoundError
+            Raised if there is no JSON file in the zip folder.
+
+        Examples
+        --------
+        >>> system = System.load("my_system.zip")
+        >>> system2 = System.load(Path("archived_systems/system1.zip"))
+        >>> # Specify where time series files should be stored
+        >>> system3 = System.load("my_system.zip", time_series_directory="/path/to/storage")
+
+        See Also
+        --------
+        save : Save a system to a directory or zip file
+        from_json : Load a system from a JSON file
+        """
+        if isinstance(zip_path, str):
+            zip_path = Path(zip_path)
+
+        if not zip_path.exists():
+            msg = f"Zip file does not exist: {zip_path}"
+            raise ISFileExists(msg)
+
+        if not zipfile.is_zipfile(zip_path):
+            msg = f"File is not a valid zip archive: {zip_path}"
+            raise ISInvalidParameter(msg)
+
+        # Create a temporary directory for extraction
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            try:
+                with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                    zip_ref.extractall(temp_path)
+                logger.debug("Extracted {} to temporary directory {}", zip_path, temp_path)
+            except (zipfile.BadZipFile, OSError) as e:
+                msg = f"Failed to extract zip file {zip_path}: {e}"
+                raise ISInvalidParameter(msg) from e
+
+            # We need to find the JSON files since Zips can have different names
+            json_files = list(temp_path.rglob("*.json"))
+
+            if not json_files:
+                msg = f"No JSON file found in zip archive: {zip_path}"
+                raise ISInvalidParameter(msg)
+
+            if len(json_files) > 1:
+                msg = (
+                    f"Multiple JSON files found in zip archive: {zip_path}. "
+                    f"Expected exactly one system JSON file."
+                )
+                raise ISOperationNotAllowed(msg)
+
+            json_file = json_files[0]
+            logger.debug("Found system JSON file: {}", json_file)
+
+            try:
+                system = cls.from_json(json_file, upgrade_handler=upgrade_handler, **kwargs)
+                logger.info("Loaded system from {}", zip_path)
+            except (OSError, KeyError, ValueError, TypeError) as e:
+                msg = f"Failed to deserialize system from {json_file}: {e}"
+                raise ISInvalidParameter(msg) from e
+            return system
 
     def to_records(
         self,

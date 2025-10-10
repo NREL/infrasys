@@ -1,13 +1,15 @@
 import functools
+import shutil
 import sqlite3
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 from functools import singledispatchmethod
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import TYPE_CHECKING, Any, Generator, Optional
 
 import h5py
+from loguru import logger
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
@@ -21,6 +23,9 @@ from infrasys.time_series_models import (
     TimeSeriesStorageType,
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
+
+if TYPE_CHECKING:
+    from .time_series_metadata_store import TimeSeriesMetadataStore
 
 TIME_SERIES_DATA_FORMAT_VERSION = "1.0.0"
 TIME_SERIES_VERSION_KEY = "data_format_version"
@@ -64,6 +69,40 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         self._fpath = self.directory / self.STORAGE_FILE
         self._file_handle = None
         self._check_root()
+
+    @classmethod
+    def deserialize(
+        cls,
+        data: dict[str, Any],
+        time_series_dir: Path,
+        dst_time_series_directory: Path | None,
+        read_only: bool,
+        **kwargs: Any,
+    ) -> tuple["HDF5TimeSeriesStorage", "TimeSeriesMetadataStore"]:
+        """Deserialize HDF5 storage from serialized data."""
+        from .time_series_metadata_store import TimeSeriesMetadataStore
+
+        # Copy the HDF5 file to a temporary or permanent location before the
+        # temp directory is cleaned up
+        if dst_time_series_directory is not None:
+            dst_dir = dst_time_series_directory
+            dst_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            import tempfile
+
+            dst_dir = Path(tempfile.mkdtemp())
+
+        src_h5_file = time_series_dir / cls.STORAGE_FILE
+        dst_h5_file = dst_dir / cls.STORAGE_FILE
+
+        if src_h5_file.exists():
+            shutil.copy2(src_h5_file, dst_h5_file)
+
+            logger.debug("Copied HDF5 file from {} to {}", src_h5_file, dst_h5_file)
+
+        storage = cls(directory=dst_dir, **kwargs)
+        metadata_store = TimeSeriesMetadataStore(storage.get_metadata_store(), initialize=False)
+        return storage, metadata_store
 
     @contextmanager
     def open_time_series_store(self, mode: str = "a") -> Generator[h5py.File, None, None]:
@@ -435,6 +474,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         """
         dst_path = Path(dst) / self.STORAGE_FILE if Path(dst).is_dir() else Path(dst)
         self.output_file = dst_path
+        self._serialize_compression_settings()
         with self.open_time_series_store() as f:
             with h5py.File(dst_path, "a") as dst_file:
                 if self.HDF5_TS_ROOT_PATH in f:

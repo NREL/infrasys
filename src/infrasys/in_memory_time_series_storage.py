@@ -81,6 +81,21 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         msg = "Bug: InMemoryTimeSeriesStorage.serialize should never be called."
         raise Exception(msg)
 
+    @classmethod
+    def deserialize(
+        cls,
+        data: dict[str, Any],
+        time_series_dir: Path,
+        dst_time_series_directory: Path | None,
+        read_only: bool,
+        **kwargs: Any,
+    ) -> tuple["InMemoryTimeSeriesStorage", None]:
+        """Deserialize in-memory storage - should not be called during normal deserialization."""
+        msg = "De-serialization does not support in-memory time series storage."
+        from infrasys.exceptions import ISOperationNotAllowed
+
+        raise ISOperationNotAllowed(msg)
+
     def _get_single_time_series(
         self,
         metadata: SingleTimeSeriesMetadata,
