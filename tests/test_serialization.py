@@ -1,5 +1,6 @@
 import os
 import random
+import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Type
@@ -14,7 +15,7 @@ from typing_extensions import Annotated
 
 from infrasys import Location, NonSequentialTimeSeries, SingleTimeSeries
 from infrasys.component import Component
-from infrasys.exceptions import ISOperationNotAllowed
+from infrasys.exceptions import ISFileExists, ISInvalidParameter, ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower, Distance
 from infrasys.time_series_models import (
@@ -320,6 +321,162 @@ def test_system_save(tmp_path, simple_system_with_time_series):
     assert not os.path.exists(fpath), f"Original folder {fpath} was not deleted sucessfully."
     zip_fpath = f"{fpath}.zip"
     assert os.path.exists(zip_fpath), f"Zip file {zip_fpath} does not exists"
+
+
+def test_system_load(tmp_path, simple_system_with_time_series):
+    """Test loading a system from a zip archive."""
+    simple_system = simple_system_with_time_series
+    custom_folder = "load_test_system"
+    fpath = tmp_path / custom_folder
+    fname = "test_system.json"
+
+    simple_system.save(fpath, filename=fname, zip=True)
+    zip_fpath = f"{fpath}.zip"
+    assert os.path.exists(zip_fpath), f"Zip file {zip_fpath} was not created"
+    assert not os.path.exists(fpath), f"Original folder {fpath} was not deleted"
+
+    loaded_system = SimpleSystem.load(zip_fpath)
+    assert loaded_system is not None
+    assert loaded_system.name == simple_system.name
+    assert loaded_system.description == simple_system.description
+
+    original_buses = list(simple_system.get_components(SimpleBus))
+    loaded_buses = list(loaded_system.get_components(SimpleBus))
+    assert len(loaded_buses) == len(original_buses)
+
+    original_gens = list(simple_system.get_components(SimpleGenerator))
+    loaded_gens = list(loaded_system.get_components(SimpleGenerator))
+    assert len(loaded_gens) == len(original_gens)
+
+    for orig_gen in original_gens:
+        loaded_gen = loaded_system.get_component(SimpleGenerator, orig_gen.name)
+        orig_ts_metadata = simple_system.list_time_series_metadata(orig_gen)
+        loaded_ts_metadata = loaded_system.list_time_series_metadata(loaded_gen)
+        assert len(loaded_ts_metadata) == len(orig_ts_metadata)
+
+
+def test_system_load_errors(tmp_path):
+    """Test error handling in System.load()."""
+    with pytest.raises(ISFileExists, match="Zip file does not exist"):
+        SimpleSystem.load(tmp_path / "nonexistent.zip")
+
+    fake_zip = tmp_path / "fake.zip"
+    fake_zip.write_text("This is not a zip file")
+    with pytest.raises(ISInvalidParameter, match="not a valid zip archive"):
+        SimpleSystem.load(fake_zip)
+
+    empty_zip = tmp_path / "empty.zip"
+    with zipfile.ZipFile(empty_zip, "w") as zf:
+        zf.writestr("readme.txt", "No JSON here")
+    with pytest.raises(ISInvalidParameter, match="No JSON file found"):
+        SimpleSystem.load(empty_zip)
+
+
+@pytest.mark.parametrize("time_series_storage_type", TS_STORAGE_OPTIONS)
+def test_system_save_load_with_storage_backends(tmp_path, time_series_storage_type):
+    """Test save and load methods work correctly with different storage backends."""
+    # Create a system with the specified storage backend
+    system = SimpleSystem(
+        name=f"test_system_{time_series_storage_type}",
+        description=f"Test system with {time_series_storage_type} storage",
+        auto_add_composed_components=True,
+        time_series_storage_type=time_series_storage_type,
+    )
+
+    # Add components
+    bus1 = SimpleBus(name="bus1", voltage=120.0)
+    bus2 = SimpleBus(name="bus2", voltage=240.0)
+    gen1 = SimpleGenerator(name="gen1", available=True, active_power=100.0, rating=150.0, bus=bus1)
+    gen2 = SimpleGenerator(name="gen2", available=True, active_power=200.0, rating=250.0, bus=bus2)
+    system.add_components(bus1, bus2, gen1, gen2)
+
+    # Add time series data
+    length = 24
+    data = list(range(length))
+    start = datetime(year=2024, month=1, day=1)
+    resolution = timedelta(hours=1)
+
+    ts1 = SingleTimeSeries.from_array(data, "max_active_power", start, resolution)
+    ts2 = SingleTimeSeries.from_array([x * 2 for x in data], "max_active_power", start, resolution)
+
+    system.add_time_series(ts1, gen1)
+    system.add_time_series(ts2, gen2)
+
+    save_dir = tmp_path / f"system_{time_series_storage_type}"
+    system.save(save_dir, filename="system.json", zip=True)
+
+    zip_path = f"{save_dir}.zip"
+    assert os.path.exists(zip_path), f"Zip file not created for {time_series_storage_type}"
+    assert not os.path.exists(
+        save_dir
+    ), f"Original directory not deleted for {time_series_storage_type}"
+
+    # Load from zip
+    loaded_system = SimpleSystem.load(zip_path)
+
+    # Verify system metadata
+    assert loaded_system.name == system.name
+    assert loaded_system.description == system.description
+
+    # Verify components
+    loaded_buses = list(loaded_system.get_components(SimpleBus))
+    loaded_gens = list(loaded_system.get_components(SimpleGenerator))
+    assert len(loaded_buses) == 2
+    assert len(loaded_gens) == 2
+
+    for orig_gen in [gen1, gen2]:
+        loaded_gen = loaded_system.get_component(SimpleGenerator, orig_gen.name)
+
+        # Check time series exists
+        orig_ts_metadata = system.list_time_series_metadata(orig_gen)
+        loaded_ts_metadata = loaded_system.list_time_series_metadata(loaded_gen)
+        assert len(loaded_ts_metadata) == len(orig_ts_metadata) == 1
+
+        orig_ts = system.get_time_series(orig_gen, "max_active_power")
+        loaded_ts = loaded_system.get_time_series(loaded_gen, "max_active_power")
+
+        assert len(loaded_ts.data) == len(orig_ts.data) == length
+        assert list(loaded_ts.data) == list(orig_ts.data)
+        assert loaded_ts.initial_timestamp == orig_ts.initial_timestamp
+        assert loaded_ts.resolution == orig_ts.resolution
+
+
+def test_system_save_load_hdf5_backend(tmp_path):
+    """Test save and load methods work correctly with HDF5 storage backend."""
+    system = SimpleSystem(
+        name="test_system_hdf5",
+        description="Test system with HDF5 storage",
+        auto_add_composed_components=True,
+        time_series_storage_type=TimeSeriesStorageType.HDF5,
+    )
+
+    bus1 = SimpleBus(name="bus1", voltage=120.0)
+    gen1 = SimpleGenerator(name="gen1", available=True, active_power=100.0, rating=150.0, bus=bus1)
+    system.add_components(bus1, gen1)
+    length = 24
+    data = list(range(length))
+    start = datetime(year=2024, month=1, day=1)
+    resolution = timedelta(hours=1)
+
+    ts1 = SingleTimeSeries.from_array(data, "active_power", start, resolution)
+    system.add_time_series(ts1, gen1)
+
+    # Save to zip
+    save_dir = tmp_path / "system_hdf5"
+    system.save(save_dir, filename="system.json", zip=True)
+
+    zip_path = f"{save_dir}.zip"
+    assert os.path.exists(zip_path)
+    assert not os.path.exists(save_dir)
+
+    # Load from zip
+    loaded_system = SimpleSystem.load(zip_path)
+    assert loaded_system.name == system.name
+
+    loaded_gen = loaded_system.get_component(SimpleGenerator, gen1.name)
+    loaded_ts = loaded_system.get_time_series(loaded_gen, "active_power")
+    assert len(loaded_ts.data) == length
+    assert list(loaded_ts.data) == data
 
 
 def test_legacy_format():
