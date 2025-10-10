@@ -47,6 +47,38 @@ class TimeSeriesStorageBase(abc.ABC):
     ) -> None:
         """Serialize all time series to the destination directory."""
 
+    @classmethod
+    @abc.abstractmethod
+    def deserialize(
+        cls,
+        data: dict[str, Any],
+        time_series_dir: Path,
+        dst_time_series_directory: Path | None,
+        read_only: bool,
+        **kwargs: Any,
+    ) -> tuple["TimeSeriesStorageBase", Optional[Any]]:
+        """Deserialize time series storage from serialized data.
+
+        Parameters
+        ----------
+        data : dict[str, Any]
+            Serialized storage data
+        time_series_dir : Path
+            Directory containing the serialized time series files
+        dst_time_series_directory : Path | None
+            Destination directory for time series files (None for temp directory)
+        read_only : bool
+            Whether to open in read-only mode
+        **kwargs : Any
+            Additional storage-specific parameters
+
+        Returns
+        -------
+        tuple[TimeSeriesStorageBase, Optional[Any]]
+            A tuple of (storage instance, optional metadata store)
+            The metadata store is only used by HDF5 storage backend
+        """
+
     @contextmanager
     def open_time_series_store(self, mode: str) -> Generator[Any, None, None]:
         """Open a connection to the time series store."""

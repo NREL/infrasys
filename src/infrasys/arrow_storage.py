@@ -55,6 +55,23 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         directory.mkdir(exist_ok=True)
         return cls(directory)
 
+    @classmethod
+    def deserialize(
+        cls,
+        data: dict[str, Any],
+        time_series_dir: Path,
+        dst_time_series_directory: Path | None,
+        read_only: bool,
+        **kwargs: Any,
+    ) -> tuple["ArrowTimeSeriesStorage", None]:
+        """Deserialize Arrow storage from serialized data."""
+        if read_only:
+            storage = cls.create_with_permanent_directory(time_series_dir)
+        else:
+            storage = cls.create_with_temp_directory(base_directory=dst_time_series_directory)
+            storage.serialize({}, storage.get_time_series_directory(), src=time_series_dir)
+        return storage, None
+
     def get_time_series_directory(self) -> Path:
         return self._ts_directory
 

@@ -110,6 +110,33 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         store = Store(engine_name=data["engine_name"], file_path=Path(data["filename"]))
         return cls(store, id_manager, read_only=read_only, uuid_lookup=uuid_lookup)
 
+    @classmethod
+    def deserialize(
+        cls,
+        data: dict[str, Any],
+        time_series_dir: Path,
+        dst_time_series_directory: Path | None,
+        read_only: bool,
+        **kwargs: Any,
+    ) -> tuple["ChronifyTimeSeriesStorage", None]:
+        """Deserialize Chronify storage from serialized data."""
+        # Update the filename in data to point to the extracted location
+        # data["filename"] contains an absolute path from the original save location
+        # We need to replace it with the path in the extracted directory
+        orig_filename = Path(data["filename"])
+        extracted_filename = time_series_dir / orig_filename.name
+        data["filename"] = str(extracted_filename)
+
+        if read_only:
+            storage = cls.from_file(data, read_only=True)
+        else:
+            storage = cls.from_file_to_tmp_file(
+                data,
+                dst_dir=dst_time_series_directory,
+                read_only=read_only,
+            )
+        return storage, None
+
     @staticmethod
     def _deserialize_ids(data: dict[str, Any]) -> tuple[IDManager, dict[UUID, int]]:
         uuid_lookup: dict[UUID, int] = {}

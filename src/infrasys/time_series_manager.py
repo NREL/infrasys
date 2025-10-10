@@ -65,6 +65,16 @@ TIME_SERIES_KWARGS = {
 }
 
 
+TIME_SERIES_REGISTRY: dict[TimeSeriesStorageType, type[TimeSeriesStorageBase]] = {
+    TimeSeriesStorageType.ARROW: ArrowTimeSeriesStorage,
+    TimeSeriesStorageType.HDF5: HDF5TimeSeriesStorage,
+    TimeSeriesStorageType.MEMORY: InMemoryTimeSeriesStorage,
+}
+
+if is_chronify_installed:
+    TIME_SERIES_REGISTRY[TimeSeriesStorageType.CHRONIFY] = ChronifyTimeSeriesStorage
+
+
 def _process_time_series_kwarg(key: str, **kwargs: Any) -> Any:
     return kwargs.get(key, TIME_SERIES_KWARGS[key])
 
@@ -438,7 +448,6 @@ class TimeSeriesManager:
         """Deserialize the class. Must also call add_reference_counts after deserializing
         components.
         """
-        metadata_store = None
         if (
             _process_time_series_kwarg("time_series_storage_type", **kwargs)
             == TimeSeriesStorageType.MEMORY
@@ -452,50 +461,34 @@ class TimeSeriesManager:
             raise FileNotFoundError(msg)
         read_only = _process_time_series_kwarg("time_series_read_only", **kwargs)
         time_series_dir = Path(parent_dir) / data["directory"]
-        storage: TimeSeriesStorageBase
 
         # This term was introduced in v0.3.0. Maintain compatibility with old serialized files.
         ts_type = data.get("time_series_storage_type", TimeSeriesStorageType.ARROW)
-        match ts_type:
-            case TimeSeriesStorageType.CHRONIFY:
-                if not is_chronify_installed:
-                    msg = (
-                        "This system used chronify to manage time series data but the package is "
-                        'not installed. Please install it with `pip install "infrasys[chronify]"`.'
-                    )
-                    raise ImportError(msg)
-                if read_only:
-                    storage = ChronifyTimeSeriesStorage.from_file(
-                        data,
-                        read_only=True,
-                    )
-                else:
-                    storage = ChronifyTimeSeriesStorage.from_file_to_tmp_file(
-                        data,
-                        dst_dir=dst_time_series_directory,
-                        read_only=read_only,
-                    )
-            case TimeSeriesStorageType.ARROW:
-                if read_only:
-                    storage = ArrowTimeSeriesStorage.create_with_permanent_directory(
-                        time_series_dir
-                    )
-                else:
-                    storage = ArrowTimeSeriesStorage.create_with_temp_directory(
-                        base_directory=dst_time_series_directory
-                    )
-                    storage.serialize({}, storage.get_time_series_directory(), src=time_series_dir)
-            case TimeSeriesStorageType.HDF5:
-                storage = HDF5TimeSeriesStorage(directory=time_series_dir, **kwargs)
-                metadata_store = TimeSeriesMetadataStore(
-                    storage.get_metadata_store(), initialize=False
-                )
-            case _:
-                msg = f"time_series_storage_type={ts_type} is not supported"
-                raise NotImplementedError(msg)
 
+        storage_class = TIME_SERIES_REGISTRY.get(ts_type)
+        if storage_class is None:
+            if ts_type == TimeSeriesStorageType.CHRONIFY and not is_chronify_installed:
+                msg = (
+                    "This system used chronify to manage time series data but the package is "
+                    'not installed. Please install it with `pip install "infrasys[chronify]"`.'
+                )
+                raise ImportError(msg)
+
+            msg = f"time_series_storage_type={ts_type} is not supported"
+            raise NotImplementedError(msg)
+
+        storage, metadata_store = storage_class.deserialize(
+            data=data,
+            time_series_dir=time_series_dir,
+            dst_time_series_directory=dst_time_series_directory,
+            read_only=read_only,
+            **kwargs,
+        )
+
+        # Create the manager instance
         mgr = cls(con, storage=storage, metadata_store=metadata_store, initialize=False, **kwargs)
 
+        # Load metadata and handle storage conversion if requested
         mgr.metadata_store._load_metadata_into_memory()
         if (
             "time_series_storage_type" in kwargs
