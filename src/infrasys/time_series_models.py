@@ -400,12 +400,7 @@ class Deterministic(AbstractDeterministic):
 
         # Create a 2D forecast matrix where each row is a forecast window
         # and each column is a time step in the forecast horizon
-        if isinstance(single_time_series.data, pint.Quantity):
-            forecast_matrix = (
-                np.zeros((window_count, horizon_steps)) * single_time_series.data.units
-            )
-        else:
-            forecast_matrix = np.zeros((window_count, horizon_steps))
+        forecast_matrix: NDArray | pint.Quantity = np.zeros((window_count, horizon_steps))
 
         # Fill the forecast matrix with data from the original time series
         original_data = single_time_series.data_array
@@ -415,7 +410,7 @@ class Deterministic(AbstractDeterministic):
             end_idx = start_idx + horizon_steps
             forecast_matrix[window_idx, :] = original_data[start_idx:end_idx]
 
-        # If original data was a pint.Quantity, wrap the result in a pint.Quantity too
+        # If original data was a pint.Quantity, wrap the result in a pint.Quantity
         if isinstance(single_time_series.data, pint.Quantity):
             forecast_matrix = type(single_time_series.data)(
                 forecast_matrix, units=single_time_series.data.units
