@@ -80,7 +80,6 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         **kwargs: Any,
     ) -> tuple["HDF5TimeSeriesStorage", "TimeSeriesMetadataStore"]:
         """Deserialize HDF5 storage from serialized data."""
-        from .time_series_metadata_store import TimeSeriesMetadataStore
 
         # Copy the HDF5 file to a temporary or permanent location before the
         # temp directory is cleaned up

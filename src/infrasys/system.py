@@ -243,6 +243,7 @@ class System:
     def load(
         cls,
         zip_path: Path | str,
+        time_series_directory: Path | str | None = None,
         upgrade_handler: Callable | None = None,
         **kwargs: Any,
     ) -> "System":
@@ -256,6 +257,8 @@ class System:
         ----------
         zip_path : Path | str
             Path to the zip file containing the system.
+        time_series_directory: Path | str
+            Path to the final time series location
         upgrade_handler : Callable | None
             Optional function to handle data format upgrades. Should only be set when the parent
             package composes this package. If set, it will be called before de-serialization of
@@ -296,14 +299,14 @@ class System:
 
         if not zip_path.exists():
             msg = f"Zip file does not exist: {zip_path}"
-            raise ISFileExists(msg)
+            raise FileNotFoundError(msg)
 
         if not zipfile.is_zipfile(zip_path):
             msg = f"File is not a valid zip archive: {zip_path}"
             raise ISInvalidParameter(msg)
 
         # Create a temporary directory for extraction
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(dir=time_series_directory) as temp_dir:
             temp_path = Path(temp_dir)
 
             try:
@@ -331,6 +334,7 @@ class System:
             json_file = json_files[0]
             logger.debug("Found system JSON file: {}", json_file)
 
+            kwargs["time_series_directory"] = time_series_directory
             try:
                 system = cls.from_json(json_file, upgrade_handler=upgrade_handler, **kwargs)
                 logger.info("Loaded system from {}", zip_path)
