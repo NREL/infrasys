@@ -35,22 +35,27 @@ there might be different profiles for different scenarios or model years.
 ## Deterministic Time Series
 
 In addition to `SingleTimeSeries`, infrasys also supports deterministic time series,
-which are used to represent forecasts or scenarios with a known future. There are two main types of
-deterministic time series:
+which are used to represent forecasts or scenarios with a known future.
 
-- {py:class}`infrasys.time_series_models.DeterministicTimeSeries`: Represents a time series where the data is explicitly stored as a 2D array, with each row representing a forecast window and each column representing a time step within that window.
-- {py:class}`infrasys.time_series_models.DeterministicSingleTimeSeries`: Represents a deterministic forecast that wraps a `SingleTimeSeries`. Instead of storing the forecast data explicitly, it provides a view into the existing `SingleTimeSeries` at incrementing offsets. This is useful when you want to create a "perfect forecast" based on historical data or avoid data duplication when there are overlapping forecast windows.
+The {py:class}`infrasys.time_series_models.Deterministic` class represents a time series where 
+the data is explicitly stored as a 2D array, with each row representing a forecast window and 
+each column representing a time step within that window.
 
-### DeterministicTimeSeries
+You can create a Deterministic time series in two ways:
 
-This class is used when you have explicit forecast data available. Each forecast window is stored as a row in a 2D array.
+1. **Explicitly with forecast data** using `Deterministic.from_array()` when you have pre-computed forecast values.
+2. **From a SingleTimeSeries** using `Deterministic.from_single_time_series()` to create a "perfect forecast" based on historical data by extracting overlapping windows.
+
+### Creating Deterministic Time Series with Explicit Data
+
+This approach is used when you have explicit forecast data available. Each forecast window is stored as a row in a 2D array.
 
 Example:
 
 ```python
 import numpy as np
 from datetime import datetime, timedelta
-from infrasys.time_series_models import DeterministicTimeSeries
+from infrasys.time_series_models import Deterministic
 from infrasys.quantities import ActivePower
 
 initial_time = datetime(year=2020, month=9, day=1)
@@ -72,19 +77,23 @@ forecast_data = [
 data = ActivePower(np.array(forecast_data), "watts")
 name = "active_power_forecast"
 ts = DeterministicTimeSeries.from_array(
+# Create the data with units
+data = ActivePower(np.array(forecast_data), "watts")
+name = "active_power_forecast"
+ts = Deterministic.from_array(
     data, name, initial_time, resolution, horizon, interval, window_count
 )
 ```
 
-### DeterministicSingleTimeSeries
+### Creating "Perfect Forecasts" from SingleTimeSeries
 
-This class is useful when you want to create a "perfect forecast" based on historical data or avoid data duplication. It wraps a `SingleTimeSeries` and provides a view into it at incrementing offsets.
+The `from_single_time_series()` classmethod is useful when you want to create a "perfect forecast" based on historical data for testing or validation purposes. It extracts overlapping forecast windows from an existing `SingleTimeSeries`.
 
 Example:
 
 ```python
 from datetime import datetime, timedelta
-from infrasys.time_series_models import DeterministicSingleTimeSeries, SingleTimeSeries
+from infrasys.time_series_models import Deterministic, SingleTimeSeries
 
 initial_timestamp = datetime(year=2020, month=1, day=1)
 name = "active_power"
@@ -96,12 +105,12 @@ ts = SingleTimeSeries.from_array(
 )
 horizon = timedelta(hours=8)
 interval = timedelta(hours=1)
-ts_deterministic = DeterministicSingleTimeSeries.from_single_time_series(
+ts_deterministic = Deterministic.from_single_time_series(
     ts, interval=interval, horizon=horizon
 )
 ```
 
-In this example, `ts_deterministic` provides a forecast for `active_power` by looking at the original `SingleTimeSeries` `ts` at different offsets determined by `interval` and `horizon`.
+In this example, `ts_deterministic` creates a forecast for `active_power` by extracting forecast windows from the original `SingleTimeSeries` `ts` at different offsets determined by `interval` and `horizon`. The forecast data is materialized as a 2D array where each row is a forecast window.
 
 ## Resolution
 

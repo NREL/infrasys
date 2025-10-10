@@ -9,7 +9,6 @@ from infrasys.quantities import ActivePower
 from infrasys.time_series_models import (
     Deterministic,
     DeterministicMetadata,
-    DeterministicSingleTimeSeries,
     SingleTimeSeries,
     TimeSeriesStorageType,
 )
@@ -60,7 +59,7 @@ def test_with_deterministic_time_series_quantity(tmp_path, storage_type):
 
 @pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
 def test_with_deterministic_single_time_series_quantity(tmp_path, storage_type):
-    """Test serialization of DeterministicSingleTimeSeries with a Pint quantity and different storage types."""
+    """Test serialization of Deterministic created from SingleTimeSeries with a Pint quantity and different storage types."""
     system = SimpleSystem(auto_add_composed_components=True, time_series_storage_type=storage_type)
     gen = SimpleGenerator.example()
     system.add_components(gen)
@@ -75,7 +74,7 @@ def test_with_deterministic_single_time_series_quantity(tmp_path, storage_type):
     )
     horizon = timedelta(hours=8)
     interval = timedelta(hours=1)
-    ts_deterministic = DeterministicSingleTimeSeries.from_single_time_series(
+    ts_deterministic = Deterministic.from_single_time_series(
         ts, interval=interval, horizon=horizon
     )
     system.add_time_series(ts_deterministic, gen)
@@ -85,8 +84,8 @@ def test_with_deterministic_single_time_series_quantity(tmp_path, storage_type):
 
     system2 = SimpleSystem.from_json(sys_file)
     gen2 = system2.get_component(SimpleGenerator, gen.name)
-    ts2 = system2.get_time_series(gen2, name=name, time_series_type=DeterministicSingleTimeSeries)
-    assert isinstance(ts_deterministic, DeterministicSingleTimeSeries)
+    ts2 = system2.get_time_series(gen2, name=name, time_series_type=Deterministic)
+    assert isinstance(ts_deterministic, Deterministic)
     assert ts2.horizon == horizon
     assert ts2.initial_timestamp == initial_timestamp
 
@@ -169,7 +168,7 @@ def test_from_single_time_series():
     interval = timedelta(hours=4)
     window_count = 5
 
-    deterministic_ts = DeterministicSingleTimeSeries.from_single_time_series(
+    deterministic_ts = Deterministic.from_single_time_series(
         ts,
         interval=interval,
         horizon=horizon,
@@ -199,9 +198,7 @@ def test_from_single_time_series():
     # Max windows = (total_duration - horizon) // interval + 1
     # For 100 hours with 8 hour horizon and 4 hour interval:
     # (100 - 8) // 4 + 1 = 24 windows
-    auto_window_ts = DeterministicSingleTimeSeries.from_single_time_series(
-        ts, interval=interval, horizon=horizon
-    )
+    auto_window_ts = Deterministic.from_single_time_series(ts, interval=interval, horizon=horizon)
     assert auto_window_ts.window_count == 24
 
     # Verify error when time series is too short
@@ -212,6 +209,6 @@ def test_from_single_time_series():
         initial_timestamp=initial_timestamp,
     )
     with pytest.raises(ValueError):
-        DeterministicSingleTimeSeries.from_single_time_series(
+        Deterministic.from_single_time_series(
             short_ts, interval=interval, horizon=horizon, window_count=5
         )

@@ -285,8 +285,8 @@ class Deterministic(AbstractDeterministic):
 
     See Also
     --------
-    DeterministicSingleTimeSeries : A wrapper that creates a deterministic forecast view
-        based on an existing SingleTimeSeries.
+    from_single_time_series : A classmethod that creates a deterministic forecast from
+        an existing SingleTimeSeries for "perfect forecast" scenarios.
     """
 
     @classmethod
@@ -332,38 +332,6 @@ class Deterministic(AbstractDeterministic):
             window_count=window_count,
         )
 
-
-class DeterministicSingleTimeSeries(AbstractDeterministic):
-    """A deterministic forecast that wraps a SingleTimeSeries.
-
-    This Pydantic model creates a deterministic forecast by deriving forecast windows
-    from an existing SingleTimeSeries. Instead of storing forecast data explicitly, it
-    provides a dynamic view into the original time series by accessing data at incrementing
-    offsets determined by the forecast parameters. This approach minimizes data duplication
-    when forecast windows overlap.
-
-    Parameters
-    ----------
-    single_time_series : SingleTimeSeries
-        The base time series from which to derive the forecast.
-    interval : timedelta
-        The time interval between consecutive forecast windows.
-    horizon : timedelta
-        The duration of each forecast window.
-    name : str, optional
-        The name assigned to the forecast. Defaults to the name of the wrapped SingleTimeSeries.
-    window_count : int, optional
-        The number of forecast windows to generate. If omitted, the maximum number of windows
-        possible will be used based on the length of the base time series.
-
-    See Also
-    --------
-    Deterministic : The model for explicit 2D deterministic forecasts.
-    SingleTimeSeries : The underlying time series model that is wrapped.
-    """
-
-    single_time_series: SingleTimeSeries
-
     @classmethod
     def from_single_time_series(
         cls,
@@ -372,30 +340,34 @@ class DeterministicSingleTimeSeries(AbstractDeterministic):
         horizon: timedelta,
         name: str | None = None,
         window_count: int | None = None,
-    ) -> "DeterministicSingleTimeSeries":
-        """Create a DeterministicSingleTimeSeries from a SingleTimeSeries.
+    ) -> "Deterministic":
+        """Create a Deterministic forecast from a SingleTimeSeries.
+
+        This creates a deterministic forecast by deriving forecast windows from an existing
+        SingleTimeSeries. The forecast data is materialized as a 2D array where each row
+        represents a forecast window and each column represents a time step within the horizon.
 
         Parameters
         ----------
         single_time_series
-            The SingleTimeSeries to wrap
-        name
-            Name assigned to the forecast (defaults to the same name as the SingleTimeSeries)
+            The SingleTimeSeries to use as the data source
         interval
-            Time between forecast windows (e.g., 1h for hourly forecasts)
+            Time between consecutive forecast windows (e.g., 1h for hourly forecasts)
         horizon
             Length of each forecast window (e.g., 6h for 6-hour forecasts)
+        name
+            Name assigned to the forecast (defaults to the same name as the SingleTimeSeries)
         window_count
             Number of forecast windows to provide. If None, maximum possible windows will be used.
 
         Returns
         -------
-        DeterministicSingleTimeSeries
+        Deterministic
 
         Notes
         -----
-        This creates a perfect forecast by wrapping the original SingleTimeSeries
-        and accessing its data at the appropriate offsets for each window.
+        This is useful for creating "perfect forecasts" from historical data or testing
+        forecast workflows with known outcomes.
         """
         # Use defaults if parameters aren't provided
         name = name if name is not None else single_time_series.name
@@ -452,7 +424,6 @@ class DeterministicSingleTimeSeries(AbstractDeterministic):
         # Create a deterministic forecast with the structured forecast windows
         return cls(
             name=name,
-            single_time_series=single_time_series,
             data=forecast_matrix,
             resolution=resolution,
             initial_timestamp=single_time_series.initial_timestamp,
@@ -462,7 +433,7 @@ class DeterministicSingleTimeSeries(AbstractDeterministic):
         )
 
 
-DeterministicTimeSeriesType: TypeAlias = DeterministicSingleTimeSeries | Deterministic
+DeterministicTimeSeriesType: TypeAlias = Deterministic
 
 
 # TODO:
@@ -506,7 +477,6 @@ class TimeSeriesMetadata(InfraSysBaseModelWithIdentifers, abc.ABC):
         "SingleTimeSeriesScalingFactor",
         "NonSequentialTimeSeries",
         "Deterministic",
-        "DeterministicSingleTimeSeries",
     ]
 
     @property
@@ -621,14 +591,14 @@ class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadataBase):
 
 
 class DeterministicMetadata(TimeSeriesMetadata):
-    """Defines the metadata for Deterministic and DeterministicSingleTimeSeries."""
+    """Defines the metadata for Deterministic time series."""
 
     initial_timestamp: datetime
     resolution: timedelta
     interval: timedelta
     horizon: timedelta
     window_count: int
-    type: Literal["Deterministic", "DeterministicSingleTimeSeries"]
+    type: Literal["Deterministic"]
 
     @staticmethod
     def get_time_series_data_type() -> Type[TimeSeriesData]:
@@ -655,13 +625,6 @@ class DeterministicMetadata(TimeSeriesMetadata):
             else None
         )
 
-        # I am not sure if this is the right way to do this.
-        type_str: Literal["Deterministic", "DeterministicSingleTimeSeries"] = (
-            "DeterministicSingleTimeSeries"
-            if isinstance(time_series, DeterministicSingleTimeSeries)
-            else "Deterministic"
-        )
-
         return cls(
             name=time_series.name,
             initial_timestamp=time_series.initial_timestamp,
@@ -673,7 +636,7 @@ class DeterministicMetadata(TimeSeriesMetadata):
             features=features,
             units=units,
             normalization=time_series.normalization,
-            type=type_str,
+            type="Deterministic",
         )
 
     def get_range(
