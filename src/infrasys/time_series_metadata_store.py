@@ -58,9 +58,9 @@ class TimeSeriesMetadataStore:
         columns = [desc[0] for desc in cursor.description]
         rows = [dict(zip(columns, row)) for row in rows]
         for row in rows:
-            assert "features" in row, (
-                f"Bug: Features missing from {TIME_SERIES_ASSOCIATIONS_TABLE} table."
-            )
+            assert (
+                "features" in row
+            ), f"Bug: Features missing from {TIME_SERIES_ASSOCIATIONS_TABLE} table."
             metadata = _deserialize_time_series_metadata(row)
             self._cache_metadata[metadata.uuid] = metadata
         return
@@ -540,6 +540,11 @@ def _make_features_dict(features: dict[str, Any]) -> dict[str, Any]:
 
 def _deserialize_time_series_metadata(data: dict) -> TimeSeriesMetadata:
     time_series_type = data.pop("time_series_type")
+    # NOTE: This is only relevant for compatibility with IS.jl and can be
+    # removed in the future when we have tigther integration
+    if time_series_type == "DeterministicSingleTimeSeries":
+        time_series_type = "Deterministic"
+
     serialized_type = SerializedTypeMetadata.validate_python(
         {
             "module": "infrasys",

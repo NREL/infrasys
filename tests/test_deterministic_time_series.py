@@ -1,18 +1,23 @@
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
 
 import numpy as np
 import pytest
 
 from infrasys.exceptions import ISConflictingArguments
 from infrasys.quantities import ActivePower
+from infrasys.time_series_metadata_store import (
+    TimeSeriesMetadataStore,
+    _deserialize_time_series_metadata,
+)
 from infrasys.time_series_models import (
     Deterministic,
     DeterministicMetadata,
-    DeterministicSingleTimeSeries,
     SingleTimeSeries,
     TimeSeriesStorageType,
 )
+from infrasys.utils.sqlite import create_in_memory_db
 from tests.models.simple_system import SimpleGenerator, SimpleSystem
 
 TS_STORAGE_OPTIONS = (
@@ -60,7 +65,7 @@ def test_with_deterministic_time_series_quantity(tmp_path, storage_type):
 
 @pytest.mark.parametrize("storage_type", TS_STORAGE_OPTIONS)
 def test_with_deterministic_single_time_series_quantity(tmp_path, storage_type):
-    """Test serialization of DeterministicSingleTimeSeries with a Pint quantity and different storage types."""
+    """Test serialization of Deterministic created from SingleTimeSeries with a Pint quantity and different storage types."""
     system = SimpleSystem(auto_add_composed_components=True, time_series_storage_type=storage_type)
     gen = SimpleGenerator.example()
     system.add_components(gen)
@@ -75,7 +80,7 @@ def test_with_deterministic_single_time_series_quantity(tmp_path, storage_type):
     )
     horizon = timedelta(hours=8)
     interval = timedelta(hours=1)
-    ts_deterministic = DeterministicSingleTimeSeries.from_single_time_series(
+    ts_deterministic = Deterministic.from_single_time_series(
         ts, interval=interval, horizon=horizon
     )
     system.add_time_series(ts_deterministic, gen)
@@ -85,8 +90,8 @@ def test_with_deterministic_single_time_series_quantity(tmp_path, storage_type):
 
     system2 = SimpleSystem.from_json(sys_file)
     gen2 = system2.get_component(SimpleGenerator, gen.name)
-    ts2 = system2.get_time_series(gen2, name=name, time_series_type=DeterministicSingleTimeSeries)
-    assert isinstance(ts_deterministic, DeterministicSingleTimeSeries)
+    ts2 = system2.get_time_series(gen2, name=name, time_series_type=Deterministic)
+    assert isinstance(ts_deterministic, Deterministic)
     assert ts2.horizon == horizon
     assert ts2.initial_timestamp == initial_timestamp
 
@@ -169,7 +174,7 @@ def test_from_single_time_series():
     interval = timedelta(hours=4)
     window_count = 5
 
-    deterministic_ts = DeterministicSingleTimeSeries.from_single_time_series(
+    deterministic_ts = Deterministic.from_single_time_series(
         ts,
         interval=interval,
         horizon=horizon,
@@ -199,9 +204,7 @@ def test_from_single_time_series():
     # Max windows = (total_duration - horizon) // interval + 1
     # For 100 hours with 8 hour horizon and 4 hour interval:
     # (100 - 8) // 4 + 1 = 24 windows
-    auto_window_ts = DeterministicSingleTimeSeries.from_single_time_series(
-        ts, interval=interval, horizon=horizon
-    )
+    auto_window_ts = Deterministic.from_single_time_series(ts, interval=interval, horizon=horizon)
     assert auto_window_ts.window_count == 24
 
     # Verify error when time series is too short
@@ -212,6 +215,137 @@ def test_from_single_time_series():
         initial_timestamp=initial_timestamp,
     )
     with pytest.raises(ValueError):
-        DeterministicSingleTimeSeries.from_single_time_series(
+        Deterministic.from_single_time_series(
             short_ts, interval=interval, horizon=horizon, window_count=5
         )
+
+
+def test_deterministic_single_time_series_backwards_compatibility(tmp_path: Any) -> None:
+    """Test compatibility for DeterministicSingleTimeSeries type from IS.jl."""
+    # Simulate metadata that would come from IS.jl with DeterministicSingleTimeSeries
+    # Note: resolution, interval, and horizon are stored as ISO 8601 strings in the DB
+    legacy_metadata_dict: dict[str, Any] = {
+        "metadata_uuid": str(uuid.uuid4()),
+        "time_series_uuid": str(uuid.uuid4()),
+        "time_series_type": "DeterministicSingleTimeSeries",
+        "name": "test_forecast",
+        "initial_timestamp": datetime(2020, 1, 1),
+        "resolution": "PT1H",  # ISO 8601 format for 1 hour
+        "interval": "PT4H",  # ISO 8601 format for 4 hours
+        "horizon": "PT8H",  # ISO 8601 format for 8 hours
+        "window_count": 5,
+        "features": None,
+        "scaling_factor_multiplier": None,
+        "units": None,
+    }
+    metadata = _deserialize_time_series_metadata(legacy_metadata_dict.copy())
+
+    # Verify it was converted to Deterministic
+    assert isinstance(metadata, DeterministicMetadata)
+    assert metadata.type == "Deterministic"
+    assert metadata.name == "test_forecast"
+    assert metadata.initial_timestamp == datetime(2020, 1, 1)
+    assert metadata.resolution == timedelta(hours=1)
+    assert metadata.interval == timedelta(hours=4)
+    assert metadata.horizon == timedelta(hours=8)
+    assert metadata.window_count == 5
+
+    conn = create_in_memory_db()
+    metadata_store = TimeSeriesMetadataStore(conn, initialize=True)
+    cursor = conn.cursor()
+    owner_uuid = str(uuid.uuid4())
+
+    rows: list[dict[str, Any]] = [
+        {
+            "time_series_uuid": legacy_metadata_dict["time_series_uuid"],
+            "time_series_type": legacy_metadata_dict["time_series_type"],  # Legacy type name
+            "initial_timestamp": legacy_metadata_dict["initial_timestamp"].isoformat(),
+            "resolution": legacy_metadata_dict["resolution"],
+            "horizon": legacy_metadata_dict["horizon"],
+            "interval": legacy_metadata_dict["interval"],
+            "window_count": legacy_metadata_dict["window_count"],
+            "length": None,
+            "name": legacy_metadata_dict["name"],
+            "owner_uuid": owner_uuid,
+            "owner_type": "SimpleGenerator",
+            "owner_category": "Component",
+            "features": "[]",  # empty features
+            "units": legacy_metadata_dict["units"],
+            "metadata_uuid": legacy_metadata_dict["metadata_uuid"],
+        }
+    ]
+
+    metadata_store._insert_rows(rows, cursor)  # type: ignore[arg-type]
+    conn.commit()
+
+    metadata_store._load_metadata_into_memory()  # type: ignore[misc]
+
+    loaded_metadata = metadata_store._cache_metadata[metadata.uuid]  # type: ignore[misc]
+    assert isinstance(loaded_metadata, DeterministicMetadata)
+    assert loaded_metadata.type == "Deterministic"
+    assert loaded_metadata.name == "test_forecast"
+    assert loaded_metadata.initial_timestamp == datetime(2020, 1, 1)
+    assert loaded_metadata.resolution == timedelta(hours=1)
+    assert loaded_metadata.interval == timedelta(hours=4)
+    assert loaded_metadata.horizon == timedelta(hours=8)
+    assert loaded_metadata.window_count == 5
+
+
+def test_from_single_time_series_with_quantity():
+    """Test creating Deterministic from SingleTimeSeries with pint Quantity."""
+    initial_timestamp = datetime(year=2020, month=1, day=1)
+    data = ActivePower(np.array(range(100)), "watts")
+    name = "active_power"
+    resolution = timedelta(hours=1)
+
+    ts = SingleTimeSeries.from_array(
+        data=data,
+        name=name,
+        resolution=resolution,
+        initial_timestamp=initial_timestamp,
+    )
+
+    horizon = timedelta(hours=8)
+    interval = timedelta(hours=4)
+    window_count = 5
+
+    deterministic_ts = Deterministic.from_single_time_series(
+        ts,
+        interval=interval,
+        horizon=horizon,
+        window_count=window_count,
+    )
+
+    assert isinstance(deterministic_ts.data, ActivePower)
+    assert deterministic_ts.data.units == "watt"
+
+    expected_shape = (window_count, int(horizon / resolution))
+    assert deterministic_ts.data.shape == expected_shape
+
+    original_data = ts.data_array
+    for w in range(window_count):
+        start_idx = w * int(interval / resolution)
+        end_idx = start_idx + int(horizon / resolution)
+        np.testing.assert_array_equal(
+            deterministic_ts.data[w].magnitude, original_data[start_idx:end_idx]
+        )
+
+
+def test_from_single_time_series_too_short_for_any_window():
+    """Test error when SingleTimeSeries is too short to create even one forecast window."""
+    initial_timestamp = datetime(year=2020, month=1, day=1)
+    data = np.array(range(5))
+    name = "test_ts"
+    resolution = timedelta(hours=1)
+
+    ts = SingleTimeSeries.from_array(
+        data=data,
+        name=name,
+        resolution=resolution,
+        initial_timestamp=initial_timestamp,
+    )
+    horizon = timedelta(hours=10)
+    interval = timedelta(hours=1)
+
+    with pytest.raises(ValueError, match="Cannot create any forecast windows"):
+        Deterministic.from_single_time_series(ts, interval=interval, horizon=horizon)
