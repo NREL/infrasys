@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import singledispatchmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator, Optional
+from typing import Any, Generator, Optional
 
 import h5py
 from loguru import logger
@@ -24,8 +24,7 @@ from infrasys.time_series_models import (
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 
-if TYPE_CHECKING:
-    from .time_series_metadata_store import TimeSeriesMetadataStore
+from .time_series_metadata_store import TimeSeriesMetadataStore
 
 TIME_SERIES_DATA_FORMAT_VERSION = "1.0.0"
 TIME_SERIES_VERSION_KEY = "data_format_version"

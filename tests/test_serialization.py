@@ -15,7 +15,7 @@ from typing_extensions import Annotated
 
 from infrasys import Location, NonSequentialTimeSeries, SingleTimeSeries
 from infrasys.component import Component
-from infrasys.exceptions import ISFileExists, ISInvalidParameter, ISOperationNotAllowed
+from infrasys.exceptions import ISInvalidParameter, ISOperationNotAllowed
 from infrasys.normalization import NormalizationMax
 from infrasys.quantities import ActivePower, Distance
 from infrasys.time_series_models import (
@@ -357,7 +357,7 @@ def test_system_load(tmp_path, simple_system_with_time_series):
 
 def test_system_load_errors(tmp_path):
     """Test error handling in System.load()."""
-    with pytest.raises(ISFileExists, match="Zip file does not exist"):
+    with pytest.raises(FileNotFoundError, match="Zip file does not exist"):
         SimpleSystem.load(tmp_path / "nonexistent.zip")
 
     fake_zip = tmp_path / "fake.zip"
