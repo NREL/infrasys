@@ -136,7 +136,8 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         # Note that src could be read-only. Don't copy it's permissions.
         for path in src_path.iterdir():
             if path.is_file():
-                shutil.copyfile(path, dst_path / path.name)
+                if path.suffix == ".arrow":
+                    shutil.copyfile(path, dst_path / path.name)
             else:
                 shutil.copytree(src, dst_path / path.name, dirs_exist_ok=True)
         self.add_serialized_data(data)
