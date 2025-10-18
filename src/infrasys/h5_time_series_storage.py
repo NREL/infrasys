@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Generator, Optional
 
 import h5py
+import numpy as np
 from loguru import logger
 
 from infrasys.exceptions import ISNotStored
@@ -406,11 +407,15 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             raise ISNotStored(msg)
 
         dataset = root[uuid]["data"]
+        data = dataset[:]
 
-        # index, length = metadata.get_range(start_time=start_time, length=length)
-        # #DeterministicMetadata does not have get_range
-        data = dataset[:]  # Get all data
+        # Check if this is a SingleTimeSeries or multidimensional data
+        if data.ndim == 1:
+            return self._get_deterministic_from_single_time_series(
+                metadata, start_time, length, context
+            )
 
+        # Regular Deterministic with stored multidimensional data
         if metadata.units is not None:
             data = metadata.units.quantity_type(data, metadata.units.units)
 
@@ -423,6 +428,64 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             interval=metadata.interval,
             window_count=metadata.window_count,
             data=data,
+            normalization=metadata.normalization,
+        )
+
+    def _get_deterministic_from_single_time_series(
+        self,
+        metadata: DeterministicMetadata,
+        start_time: Optional[datetime] = None,
+        length: Optional[int] = None,
+        context: Any = None,
+    ) -> DeterministicTimeSeriesType:
+        """Get Deterministic data by slicing from the referenced SingleTimeSeries.
+
+        This method loads the underlying SingleTimeSeries and computes forecast windows
+        on-the-fly without storing a materialized 2D array.
+
+        The time_series_uuid in the metadata points directly to the SingleTimeSeries.
+        """
+        assert context is not None
+
+        root = context[self.HDF5_TS_ROOT_PATH]
+        uuid = str(metadata.time_series_uuid)
+
+        if uuid not in root:
+            msg = f"SingleTimeSeries with {uuid=} not found"
+            raise ISNotStored(msg)
+
+        dataset = root[uuid]["data"]
+        single_ts_data = dataset[:]
+
+        if metadata.units is not None:
+            np_data_array = metadata.units.quantity_type(single_ts_data, metadata.units.units)
+            data_magnitude = np_data_array.magnitude
+        else:
+            np_data_array = single_ts_data
+            data_magnitude = single_ts_data
+
+        horizon_steps = int(metadata.horizon / metadata.resolution)
+        interval_steps = int(metadata.interval / metadata.resolution)
+
+        forecast_matrix = np.zeros((metadata.window_count, horizon_steps))
+
+        for window_idx in range(metadata.window_count):
+            start_idx = window_idx * interval_steps
+            end_idx = start_idx + horizon_steps
+            forecast_matrix[window_idx, :] = data_magnitude[start_idx:end_idx]
+
+        if metadata.units is not None:
+            forecast_matrix = metadata.units.quantity_type(forecast_matrix, metadata.units.units)
+
+        return Deterministic(
+            uuid=metadata.time_series_uuid,
+            name=metadata.name,
+            resolution=metadata.resolution,
+            initial_timestamp=metadata.initial_timestamp,
+            horizon=metadata.horizon,
+            interval=metadata.interval,
+            window_count=metadata.window_count,
+            data=forecast_matrix,
             normalization=metadata.normalization,
         )
 

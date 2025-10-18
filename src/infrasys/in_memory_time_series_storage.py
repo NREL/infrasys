@@ -10,6 +10,9 @@ from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
+    Deterministic,
+    DeterministicMetadata,
+    DeterministicTimeSeriesType,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
     SingleTimeSeries,
@@ -67,6 +70,27 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             return self._get_single_time_series(metadata, start_time, length)
         elif isinstance(metadata, NonSequentialTimeSeriesMetadata):
             return self._get_nonsequential_time_series(metadata)
+        elif isinstance(metadata, DeterministicMetadata):
+            # Check if data exists - if not, it's a DeterministicSingleTimeSeries
+            ts_data = self._arrays.get(metadata.time_series_uuid)
+            if ts_data is None:
+                msg = f"No time series with {metadata.time_series_uuid} is stored"
+                raise ISNotStored(msg)
+
+            # Check dimensions - 1D means SingleTimeSeries, 2D means regular Deterministic
+            import numpy as np
+
+            if isinstance(ts_data, np.ndarray) and ts_data.ndim == 1:
+                # DeterministicSingleTimeSeries
+                return self._get_deterministic_from_single_time_series(
+                    metadata, start_time, length
+                )
+            else:
+                # Regular Deterministic (not implemented for in-memory)
+                msg = (
+                    "Regular Deterministic time series not fully implemented for in-memory storage"
+                )
+                raise NotImplementedError(msg)
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
 
     def remove_time_series(self, metadata: TimeSeriesMetadata, context: Any = None) -> None:
@@ -146,5 +170,63 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             name=metadata.name,
             data=ts_data,
             timestamps=ts_timestamps,
+            normalization=metadata.normalization,
+        )
+
+    def _get_deterministic_from_single_time_series(
+        self,
+        metadata: DeterministicMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+    ) -> DeterministicTimeSeriesType:
+        """Get Deterministic data by slicing from the referenced SingleTimeSeries.
+
+        This method loads the underlying SingleTimeSeries and computes forecast windows
+        on-the-fly without storing a materialized 2D array.
+
+        The time_series_uuid in the metadata points directly to the SingleTimeSeries.
+        """
+        ts_data: NDArray | None
+        ts_data = self._arrays.get(metadata.time_series_uuid)  # type: ignore
+        if ts_data is None:
+            msg = f"No SingleTimeSeries with {metadata.time_series_uuid} is stored"
+            raise ISNotStored(msg)
+
+        # Convert to numpy array with units if needed
+        import numpy as np
+
+        if metadata.units is not None:
+            np_data_array = metadata.units.quantity_type(ts_data, metadata.units.units)
+            # Work with magnitude to avoid unit stripping warnings
+            data_magnitude = np_data_array.magnitude
+        else:
+            np_data_array = ts_data
+            data_magnitude = ts_data
+
+        # Calculate the forecast matrix dimensions
+        horizon_steps = int(metadata.horizon / metadata.resolution)
+        interval_steps = int(metadata.interval / metadata.resolution)
+
+        # Create a 2D forecast matrix where each row is a forecast window
+        forecast_matrix = np.zeros((metadata.window_count, horizon_steps))
+
+        for window_idx in range(metadata.window_count):
+            start_idx = window_idx * interval_steps
+            end_idx = start_idx + horizon_steps
+            forecast_matrix[window_idx, :] = data_magnitude[start_idx:end_idx]
+
+        # If original data was a pint.Quantity, wrap the result
+        if metadata.units is not None:
+            forecast_matrix = metadata.units.quantity_type(forecast_matrix, metadata.units.units)
+
+        return Deterministic(
+            uuid=metadata.time_series_uuid,
+            name=metadata.name,
+            resolution=metadata.resolution,
+            initial_timestamp=metadata.initial_timestamp,
+            horizon=metadata.horizon,
+            interval=metadata.interval,
+            window_count=metadata.window_count,
+            data=forecast_matrix,
             normalization=metadata.normalization,
         )

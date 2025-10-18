@@ -18,6 +18,9 @@ from sqlalchemy import Connection
 from infrasys.exceptions import ISFileExists, ISInvalidParameter
 from infrasys.id_manager import IDManager
 from infrasys.time_series_models import (
+    Deterministic,
+    DeterministicMetadata,
+    DeterministicTimeSeriesType,
     SingleTimeSeries,
     SingleTimeSeriesKey,
     SingleTimeSeriesMetadata,
@@ -203,6 +206,17 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
                 length=length,
                 context=context,
             )
+        elif isinstance(metadata, DeterministicMetadata):
+            # For DeterministicMetadata, we need to check if it's a regular Deterministic
+            # or a DeterministicSingleTimeSeries. We do this by checking the data structure.
+            # Since chronify doesn't easily support checking if data is 2D vs 1D without loading,
+            # we'll load and check the data structure.
+            return self._get_deterministic(
+                metadata=metadata,
+                start_time=start_time,
+                length=length,
+                context=context,
+            )
 
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
@@ -273,6 +287,75 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
             resolution=metadata.resolution,
             initial_timestamp=start_time or metadata.initial_timestamp,
             data=np_array,
+            normalization=metadata.normalization,
+        )
+
+    def _get_deterministic(
+        self,
+        metadata: DeterministicMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        context: Connection | None = None,
+    ) -> DeterministicTimeSeriesType:
+        """Get Deterministic data - either regular or from SingleTimeSeries.
+
+        This method checks if the data is stored as a regular Deterministic (not implemented)
+        or as a DeterministicSingleTimeSeries (references SingleTimeSeries).
+        For now, we assume it's always DeterministicSingleTimeSeries in chronify.
+        """
+        # Load the referenced SingleTimeSeries data using time_series_uuid
+        table_name = f"{_SINGLE_TIME_SERIES_BASE_NAME}_{metadata.time_series_uuid}"
+        db_id = self._get_db_id(metadata.time_series_uuid)
+
+        query = f"""
+            SELECT timestamp, value
+            FROM {table_name}
+            WHERE id = ?
+            ORDER BY timestamp ASC
+        """
+        df = self._store.query(query, params=[db_id], connection=context)  # type: ignore
+
+        if df.empty:
+            msg = f"No SingleTimeSeries with {metadata.time_series_uuid} is stored"
+            from infrasys.exceptions import ISNotStored
+
+            raise ISNotStored(msg)
+
+        # Convert to numpy array with units if needed
+        import numpy as np
+
+        single_ts_data = df["value"].to_numpy()
+
+        if metadata.units is not None:
+            np_data_array = metadata.units.quantity_type(single_ts_data, metadata.units.units)
+        else:
+            np_data_array = single_ts_data
+
+        # Calculate the forecast matrix dimensions
+        horizon_steps = int(metadata.horizon / metadata.resolution)
+        interval_steps = int(metadata.interval / metadata.resolution)
+
+        # Create a 2D forecast matrix where each row is a forecast window
+        forecast_matrix = np.zeros((metadata.window_count, horizon_steps))
+
+        for window_idx in range(metadata.window_count):
+            start_idx = window_idx * interval_steps
+            end_idx = start_idx + horizon_steps
+            forecast_matrix[window_idx, :] = np_data_array[start_idx:end_idx]
+
+        # If original data was a pint.Quantity, wrap the result
+        if metadata.units is not None:
+            forecast_matrix = metadata.units.quantity_type(forecast_matrix, metadata.units.units)
+
+        return Deterministic(
+            uuid=metadata.time_series_uuid,
+            name=metadata.name,
+            resolution=metadata.resolution,
+            initial_timestamp=metadata.initial_timestamp,
+            horizon=metadata.horizon,
+            interval=metadata.interval,
+            window_count=metadata.window_count,
+            data=forecast_matrix,
             normalization=metadata.normalization,
         )
 

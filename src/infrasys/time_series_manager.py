@@ -4,7 +4,7 @@ import atexit
 import sqlite3
 import tempfile
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import singledispatch
 from pathlib import Path
 from tempfile import mkdtemp
@@ -212,6 +212,84 @@ class TimeSeriesManager:
                 time_series,
                 context=_get_data_context(context),
             )
+        return make_time_series_key(metadata)
+
+    def add_deterministic_single_time_series(
+        self,
+        owner: Component | SupplementalAttribute,
+        single_time_series_name: str,
+        interval: timedelta,
+        horizon: timedelta,
+        window_count: int | None = None,
+        context: TimeSeriesStorageContext | None = None,
+        **features: Any,
+    ) -> TimeSeriesKey:
+        """Create a Deterministic view from an existing SingleTimeSeries without copying data.
+
+        This creates metadata that links to an existing SingleTimeSeries and computes forecast
+        windows on-the-fly, avoiding data duplication. This is useful for "perfect forecasts"
+        from historical data or testing scenarios.
+
+        Parameters
+        ----------
+        owner : Component | SupplementalAttribute
+            The component or supplemental attribute to attach this view to
+        single_time_series_name : str
+            Name of the existing SingleTimeSeries to create a view from
+        interval : timedelta
+            Time between consecutive forecast windows
+        horizon : timedelta
+            Length of each forecast window
+        window_count : int | None
+            Number of forecast windows. If None, maximum possible windows will be calculated.
+        context : TimeSeriesStorageContext | None
+            Optional connection to use for the operation
+        **features : Any
+            Additional feature metadata
+
+        Returns
+        -------
+        TimeSeriesKey
+            Key for the created deterministic time series view
+
+        Raises
+        ------
+        ISNotStored
+            Raised if the referenced SingleTimeSeries doesn't exist
+        ISOperationNotAllowed
+            Raised if the manager was created in read-only mode
+        ValueError
+            Raised if the SingleTimeSeries is too short for the requested parameters
+        """
+        self._handle_read_only()
+        context = context or self._context
+
+        # Get the existing SingleTimeSeries metadata
+        single_ts_metadata = self._metadata_store.get_metadata(
+            owner,
+            name=single_time_series_name,
+            time_series_type="SingleTimeSeries",
+        )
+
+        # Load the SingleTimeSeries to create metadata from it
+        single_ts = self._get_by_metadata(single_ts_metadata, context=context)
+
+        if not isinstance(single_ts, SingleTimeSeries):
+            msg = f"Expected SingleTimeSeries but got {type(single_ts)}"
+            raise ValueError(msg)
+
+        # Create the DeterministicMetadata that references the SingleTimeSeries
+        metadata = DeterministicMetadata.from_single_time_series(
+            single_ts,
+            interval=interval,
+            horizon=horizon,
+            window_count=window_count,
+            **features,
+        )
+
+        # Add metadata (no data storage needed since we're just linking)
+        self._metadata_store.add(metadata, owner, connection=_get_metadata_connection(context))
+
         return make_time_series_key(metadata)
 
     def get(

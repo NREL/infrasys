@@ -586,7 +586,16 @@ class SingleTimeSeriesScalingFactorMetadata(SingleTimeSeriesMetadataBase):
 
 
 class DeterministicMetadata(TimeSeriesMetadata):
-    """Defines the metadata for Deterministic time series."""
+    """Defines the metadata for Deterministic time series.
+
+    This metadata can represent either:
+    1. A regular Deterministic forecast with stored 2D data
+    2. A DeterministicSingleTimeSeries that references a SingleTimeSeries (like Julia's approach)
+
+    When the time_series_uuid points to a SingleTimeSeries (no separate Deterministic data file),
+    the data is loaded on-the-fly from that SingleTimeSeries instead of from stored Deterministic data.
+    This is detected by checking if the data file exists or by checking if there's a flag.
+    """
 
     initial_timestamp: datetime
     resolution: timedelta
@@ -631,6 +640,90 @@ class DeterministicMetadata(TimeSeriesMetadata):
             features=features,
             units=units,
             normalization=time_series.normalization,
+            type="Deterministic",
+        )
+
+    @classmethod
+    def from_single_time_series(
+        cls,
+        single_time_series: SingleTimeSeries,
+        interval: timedelta,
+        horizon: timedelta,
+        window_count: int | None = None,
+        **features: Any,
+    ) -> "DeterministicMetadata":
+        """Construct DeterministicMetadata that references a SingleTimeSeries.
+
+        This creates metadata for a DeterministicSingleTimeSeries (Julia-style) that
+        computes forecast windows on-the-fly from an existing SingleTimeSeries without
+        copying data.
+
+        Parameters
+        ----------
+        single_time_series
+            The SingleTimeSeries to reference
+        interval
+            Time between consecutive forecast windows
+        horizon
+            Length of each forecast window
+        window_count
+            Number of forecast windows. If None, maximum possible windows will be calculated.
+        **features
+            Additional feature metadata
+
+        Returns
+        -------
+        DeterministicMetadata
+            Metadata with single_time_series_uuid set to reference the source data
+        """
+        resolution = single_time_series.resolution
+
+        # Calculate maximum possible window count if not provided
+        if window_count is None:
+            total_duration = single_time_series.length * resolution
+            usable_duration = total_duration - horizon
+            max_windows = (usable_duration // interval) + 1
+            window_count = int(max_windows)
+            if window_count < 1:
+                msg = (
+                    f"Cannot create any forecast windows with horizon={horizon} "
+                    f"from time series of length {total_duration}"
+                )
+                raise ValueError(msg)
+
+        # Validate that the base time series is long enough
+        horizon_steps = int(horizon / resolution)
+        interval_steps = int(interval / resolution)
+        total_steps_needed = interval_steps * (window_count - 1) + horizon_steps
+
+        if total_steps_needed > single_time_series.length:
+            msg = (
+                f"Base time series length ({single_time_series.length}) is insufficient "
+                f"for the requested forecast parameters (need {total_steps_needed} points)"
+            )
+            raise ValueError(msg)
+
+        units = (
+            QuantityMetadata(
+                module=type(single_time_series.data).__module__,
+                quantity_type=type(single_time_series.data),
+                units=str(single_time_series.data.units),
+            )
+            if isinstance(single_time_series.data, pint.Quantity)
+            else None
+        )
+
+        return cls(
+            name=single_time_series.name,
+            initial_timestamp=single_time_series.initial_timestamp,
+            resolution=resolution,
+            interval=interval,
+            horizon=horizon,
+            window_count=window_count,
+            time_series_uuid=single_time_series.uuid,  # Points to SingleTimeSeries, not separate data
+            features=features,
+            units=units,
+            normalization=single_time_series.normalization,
             type="Deterministic",
         )
 
@@ -687,7 +780,11 @@ class DeterministicMetadata(TimeSeriesMetadata):
 
 
 TimeSeriesMetadataUnion = Annotated[
-    Union[SingleTimeSeriesMetadata, SingleTimeSeriesScalingFactorMetadata, DeterministicMetadata],
+    Union[
+        SingleTimeSeriesMetadata,
+        SingleTimeSeriesScalingFactorMetadata,
+        DeterministicMetadata,
+    ],
     Field(discriminator="type"),
 ]
 
