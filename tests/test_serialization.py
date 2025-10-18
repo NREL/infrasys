@@ -12,7 +12,7 @@ import pytest
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
 
-from infrasys import Location, SingleTimeSeries, NonSequentialTimeSeries
+from infrasys import Location, SingleTimeSeries, NonSequentialTimeSeries, System
 from infrasys.component import Component
 from infrasys.quantities import Distance, ActivePower
 from infrasys.exceptions import ISOperationNotAllowed
@@ -102,14 +102,42 @@ def test_serialize_single_time_series(tmp_path, time_series_storage_type):
 
     variable_name = "active_power"
     length = 8784
-    df = range(length)
+    data = range(length)
     start = datetime(year=2020, month=1, day=1)
     resolution = timedelta(hours=1)
-    ts = SingleTimeSeries.from_array(df, variable_name, start, resolution)
+    ts = SingleTimeSeries.from_array(data, variable_name, start, resolution)
     system.add_time_series(ts, gen1, gen2, scenario="high", model_year="2030")
     filename = tmp_path / "system.json"
     system.to_json(filename)
-    check_deserialize_with_read_write_time_series(filename)
+    system2 = check_deserialize_with_read_write_time_series(filename)
+    gen1b = system2.get_component(SimpleGenerator, gen1.name)
+    gen2b = system2.get_component(SimpleGenerator, gen2.name)
+    data2 = range(1, length + 1)
+    ts2 = SingleTimeSeries.from_array(data2, variable_name, start, resolution)
+    system2.add_time_series(ts2, gen1b, gen2b, scenario="low", model_year="2030")
+    filename2 = tmp_path / "system2.json"
+    system2.to_json(filename2)
+    system3 = SimpleSystem.from_json(filename2)
+    assert np.array_equal(
+        system3.get_time_series(
+            gen1b,
+            time_series_type=SingleTimeSeries,
+            variable_name=variable_name,
+            scenario="low",
+            model_year="2030",
+        ).data,
+        data2,
+    )
+    assert np.array_equal(
+        system3.get_time_series(
+            gen2b,
+            time_series_type=SingleTimeSeries,
+            variable_name=variable_name,
+            scenario="low",
+            model_year="2030",
+        ).data,
+        data2,
+    )
     check_deserialize_with_read_only_time_series(
         filename, gen1.name, gen2.name, variable_name, ts.data
     )
@@ -174,13 +202,14 @@ def test_serialize_nonsequential_time_series(tmp_path, time_series_storage_type)
     )
 
 
-def check_deserialize_with_read_write_time_series(filename):
+def check_deserialize_with_read_write_time_series(filename) -> System:
     system3 = SimpleSystem.from_json(filename, time_series_read_only=False)
     assert system3.get_time_series_directory() != SimpleSystem._make_time_series_directory(
         filename
     )
     system3_ts_dir = system3.get_time_series_directory()
     assert system3_ts_dir is not None
+    return system3
 
 
 @pytest.mark.parametrize(
