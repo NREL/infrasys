@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, TypeAlias
 from uuid import UUID
 
+import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
 
@@ -71,14 +72,10 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         elif isinstance(metadata, NonSequentialTimeSeriesMetadata):
             return self._get_nonsequential_time_series(metadata)
         elif isinstance(metadata, DeterministicMetadata):
-            # Check if data exists - if not, it's a DeterministicSingleTimeSeries
             ts_data = self._arrays.get(metadata.time_series_uuid)
             if ts_data is None:
                 msg = f"No time series with {metadata.time_series_uuid} is stored"
                 raise ISNotStored(msg)
-
-            # Check dimensions - 1D means SingleTimeSeries, 2D means regular Deterministic
-            import numpy as np
 
             if isinstance(ts_data, np.ndarray) and ts_data.ndim == 1:
                 # DeterministicSingleTimeSeries
@@ -192,22 +189,16 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"No SingleTimeSeries with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
 
-        # Convert to numpy array with units if needed
-        import numpy as np
-
         if metadata.units is not None:
             np_data_array = metadata.units.quantity_type(ts_data, metadata.units.units)
-            # Work with magnitude to avoid unit stripping warnings
             data_magnitude = np_data_array.magnitude
         else:
             np_data_array = ts_data
             data_magnitude = ts_data
 
-        # Calculate the forecast matrix dimensions
         horizon_steps = int(metadata.horizon / metadata.resolution)
         interval_steps = int(metadata.interval / metadata.resolution)
 
-        # Create a 2D forecast matrix where each row is a forecast window
         forecast_matrix = np.zeros((metadata.window_count, horizon_steps))
 
         for window_idx in range(metadata.window_count):
@@ -215,7 +206,6 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             end_idx = start_idx + horizon_steps
             forecast_matrix[window_idx, :] = data_magnitude[start_idx:end_idx]
 
-        # If original data was a pint.Quantity, wrap the result
         if metadata.units is not None:
             forecast_matrix = metadata.units.quantity_type(forecast_matrix, metadata.units.units)
 

@@ -9,6 +9,7 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Generator, Self
 from uuid import UUID
 
+import numpy as np
 import pandas as pd
 import pint
 from chronify import DatetimeRange, Store, TableSchema
@@ -321,9 +322,6 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
 
             raise ISNotStored(msg)
 
-        # Convert to numpy array with units if needed
-        import numpy as np
-
         single_ts_data = df["value"].to_numpy()
 
         if metadata.units is not None:
@@ -331,11 +329,9 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         else:
             np_data_array = single_ts_data
 
-        # Calculate the forecast matrix dimensions
         horizon_steps = int(metadata.horizon / metadata.resolution)
         interval_steps = int(metadata.interval / metadata.resolution)
 
-        # Create a 2D forecast matrix where each row is a forecast window
         forecast_matrix = np.zeros((metadata.window_count, horizon_steps))
 
         for window_idx in range(metadata.window_count):
