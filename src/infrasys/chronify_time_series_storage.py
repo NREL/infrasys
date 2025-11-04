@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from functools import singledispatch
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Generator, Self
+from typing import Any, Generator, Literal, Self
 from uuid import UUID
 
 import numpy as np
@@ -356,7 +356,9 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
         )
 
     @contextmanager
-    def open_time_series_store(self, mode) -> Generator[Connection, None, None]:
+    def open_time_series_store(
+        self, mode: Literal["r", "r+", "a", "w", "w-"] = "a"
+    ) -> Generator[Connection, None, None]:
         with self._store.engine.begin() as conn:
             yield conn
 

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from functools import singledispatch
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import Any, Generator, Optional, Type
+from typing import Any, Generator, Literal, Optional, Type
 
 import h5py
 import numpy as np
@@ -505,7 +505,7 @@ class TimeSeriesManager:
                 self._metadata_store.serialize(temp_file_path)
                 with open(temp_file_path, "rb") as f:
                     binary_data = f.read()
-            with h5py.File(self.storage.output_file, "a") as f_out:
+            with h5py.File(str(self.storage.output_file), "a") as f_out:
                 f_out.create_dataset(
                     self.storage.HDF5_TS_METADATA_ROOT_PATH,
                     data=np.frombuffer(binary_data, dtype=np.uint8),
@@ -576,7 +576,9 @@ class TimeSeriesManager:
         return mgr
 
     @contextmanager
-    def open_time_series_store(self, mode) -> Generator[TimeSeriesStorageContext, None, None]:
+    def open_time_series_store(
+        self, mode: Literal["r", "r+", "a", "w", "w-"] = "a"
+    ) -> Generator[TimeSeriesStorageContext, None, None]:
         """Open a connection to the time series metadata and data stores."""
         with self.storage.open_time_series_store(mode=mode) as context:
             try:

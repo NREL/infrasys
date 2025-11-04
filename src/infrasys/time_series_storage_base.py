@@ -4,7 +4,7 @@ import abc
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any, Generator, Literal, Optional
 
 from infrasys.time_series_models import TimeSeriesData, TimeSeriesMetadata
 
@@ -80,6 +80,8 @@ class TimeSeriesStorageBase(abc.ABC):
         """
 
     @contextmanager
-    def open_time_series_store(self, mode: str) -> Generator[Any, None, None]:
+    def open_time_series_store(
+        self, mode: Literal["r", "r+", "a", "w", "w-"] = "a"
+    ) -> Generator[Any, None, None]:
         """Open a connection to the time series store."""
         yield None

@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import singledispatchmethod
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any, Generator, Literal, Optional
 
 import h5py
 import numpy as np
@@ -24,6 +24,7 @@ from infrasys.time_series_models import (
     TimeSeriesStorageType,
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
+from infrasys.utils.h5_utils import copy_h5_group, extract_h5_dataset_to_bytes, open_h5_file
 
 from .time_series_metadata_store import TimeSeriesMetadataStore
 
@@ -104,12 +105,14 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         return storage, metadata_store
 
     @contextmanager
-    def open_time_series_store(self, mode: str = "a") -> Generator[h5py.File, None, None]:
+    def open_time_series_store(
+        self, mode: Literal["r", "r+", "a", "w", "w-"] = "a"
+    ) -> Generator[h5py.File, None, None]:
         assert self._fpath
         self._file_handle = None
 
         # H5PY ensures closing of the file after the with statement.
-        with h5py.File(self._fpath, mode=mode) as file_handle:
+        with open_h5_file(self._fpath, mode=mode) as file_handle:
             yield file_handle
 
     def get_time_series_directory(self) -> Path:
@@ -317,7 +320,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
             The metadata store
         """
         with self.open_time_series_store() as file_handle:
-            ts_metadata = bytes(file_handle[self.HDF5_TS_METADATA_ROOT_PATH][:])
+            ts_metadata = extract_h5_dataset_to_bytes(file_handle, self.HDF5_TS_METADATA_ROOT_PATH)
             conn = sqlite3.connect(":memory:")
             with tempfile.NamedTemporaryFile(delete=False) as tmp:
                 temp_file_path = tmp.name
@@ -537,14 +540,14 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         self.output_file = dst_path
         self._serialize_compression_settings()
         with self.open_time_series_store() as f:
-            with h5py.File(dst_path, "a") as dst_file:
+            with open_h5_file(dst_path, mode="a") as dst_file:
                 if self.HDF5_TS_ROOT_PATH in f:
-                    h5py.h5o.copy(
-                        f.id,
-                        self.HDF5_TS_ROOT_PATH.encode("utf-8"),
-                        dst_file.id,
-                        self.HDF5_TS_ROOT_PATH.encode("utf-8"),
-                    )
+                    src_group = f[self.HDF5_TS_ROOT_PATH]
+                    if isinstance(src_group, h5py.Group):
+                        if self.HDF5_TS_ROOT_PATH in dst_file:
+                            del dst_file[self.HDF5_TS_ROOT_PATH]
+                        dst_group = dst_file.create_group(self.HDF5_TS_ROOT_PATH)
+                        copy_h5_group(src_group, dst_group)
                     if self.HDF5_TS_METADATA_ROOT_PATH in dst_file:
                         del dst_file[self.HDF5_TS_METADATA_ROOT_PATH]
         data["time_series_storage_file"] = str(dst_path)
