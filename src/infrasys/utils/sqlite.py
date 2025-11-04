@@ -30,5 +30,5 @@ def create_in_memory_db(database: str = ":memory:") -> sqlite3.Connection:
 
 def execute(cursor: sqlite3.Cursor, query: str, params: Sequence[Any] = ()) -> Any:
     """Execute a SQL query."""
-    logger.trace("SQL query: {query} {params=}", query)
+    logger.trace("SQL query: {} {}", query, params)
     return cursor.execute(query, params)
