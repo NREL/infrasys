@@ -13,7 +13,7 @@ from numpy._typing import NDArray
 from pydantic import WithJsonSchema
 from typing_extensions import Annotated
 
-from infrasys import Location, NonSequentialTimeSeries, SingleTimeSeries, System
+from infrasys import Location, SingleTimeSeries, NonSequentialTimeSeries, System
 from infrasys.component import Component
 from infrasys.exceptions import ISInvalidParameter, ISOperationNotAllowed
 from infrasys.quantities import ActivePower, Distance
