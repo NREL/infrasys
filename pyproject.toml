@@ -117,6 +117,7 @@ dev = [
     "pandas-stubs",
     "pyarrow-stubs",
     "pytest-missing-modules>=0.2.1",
+    "h5py-stubs>=0.1.2",
 ]
 docs = [
     "autodoc_pydantic~=2.0",
