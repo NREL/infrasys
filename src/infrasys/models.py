@@ -40,7 +40,7 @@ class InfraSysBaseModelWithIdentifers(InfraSysBaseModel, abc.ABC):
     def assign_new_uuid(self):
         """Generate a new UUID."""
         self.uuid = uuid4()
-        logger.debug("Assigned new UUID for %s: %s", self.label, self.uuid)
+        logger.debug("Assigned new UUID for {}: {}", self.label, self.uuid)
 
     @classmethod
     def example(cls) -> "InfraSysBaseModelWithIdentifers":
