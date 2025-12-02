@@ -1804,6 +1804,8 @@ class SystemInfo:
         system_table.add_row("Data format version", self.system._data_format_version)
         system_table.add_row("Components attached", f"{component_count}")
         system_table.add_row("Time Series attached", f"{time_series_count}")
+        total_suppl_attrs = self.system.get_num_supplemental_attributes()
+        system_table.add_row("Supplemental Attributes attached", f"{total_suppl_attrs}")
         system_table.add_row("Description", self.system.description)
         _pprint(system_table)
 

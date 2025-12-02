@@ -1,10 +1,10 @@
-import logging
 from datetime import datetime, timedelta
 
 import pytest
 from loguru import logger
 
 from infrasys.location import Location
+from infrasys.quantities import Energy
 from infrasys.time_series_models import NonSequentialTimeSeries, SingleTimeSeries
 
 from .models.simple_system import SimpleBus, SimpleGenerator, SimpleSubsystem, SimpleSystem
@@ -51,16 +51,34 @@ def simple_system_with_nonsequential_time_series(simple_system) -> SimpleSystem:
     return simple_system
 
 
-@pytest.fixture(autouse=True)
-def propagate_logs():
+@pytest.fixture
+def simple_system_with_supplemental_attributes(simple_system) -> SimpleSystem:
+    """Creates a system with supplemental attributes."""
+    from infrasys.location import GeographicInfo
+
+    from .test_supplemental_attributes import Attribute
+
+    bus = simple_system.get_component(SimpleBus, "test-bus")
+    gen = simple_system.get_component(SimpleGenerator, "test-gen")
+
+    attr1 = GeographicInfo.example()
+    attr2 = GeographicInfo.example()
+    attr2.geo_json["geometry"]["coordinates"] = [1.0, 2.0]
+
+    attr3 = Attribute(energy=Energy(10.0, "kWh"))
+
+    simple_system.add_supplemental_attribute(bus, attr1)
+    simple_system.add_supplemental_attribute(bus, attr2)
+    simple_system.add_supplemental_attribute(gen, attr3)
+
+    return simple_system
+
+
+@pytest.fixture
+def caplog(caplog):
     """Enable logging for the package"""
-
-    class PropagateHandler(logging.Handler):
-        def emit(self, record):
-            if logging.getLogger(record.name).isEnabledFor(record.levelno):
-                logging.getLogger(record.name).handle(record)
-
     logger.remove()
     logger.enable("infrasys")
-    logger.add(PropagateHandler(), format="{message}")
-    yield
+    handler_id = logger.add(caplog.handler)
+    yield caplog
+    logger.remove(handler_id)
