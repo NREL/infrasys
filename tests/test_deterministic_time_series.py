@@ -72,16 +72,31 @@ def test_with_deterministic_single_time_series_quantity(tmp_path, storage_type):
 
     initial_timestamp = datetime(year=2020, month=1, day=1)
     name = "active_power"
-    ts = SingleTimeSeries.from_array(
-        data=range(8784),
-        name=name,
-        resolution=timedelta(hours=1),
-        initial_timestamp=initial_timestamp,
-    )
     horizon = timedelta(hours=8)
     interval = timedelta(hours=1)
-    ts_deterministic = Deterministic.from_single_time_series(
-        ts, interval=interval, horizon=horizon
+    resolution = timedelta(hours=1)
+
+    # Create deterministic data directly from array
+    # Create forecast windows manually from the time series data
+    horizon_steps = int(horizon / resolution)
+    interval_steps = int(interval / resolution)
+    total_steps = 8784
+    window_count = int((total_steps - horizon_steps) / interval_steps) + 1
+
+    forecast_data = []
+    for window_idx in range(window_count):
+        start_idx = window_idx * interval_steps
+        end_idx = start_idx + horizon_steps
+        forecast_data.append(list(range(start_idx, end_idx)))
+
+    ts_deterministic = Deterministic.from_array(
+        data=np.array(forecast_data),
+        name=name,
+        resolution=resolution,
+        initial_timestamp=initial_timestamp,
+        interval=interval,
+        horizon=horizon,
+        window_count=window_count,
     )
     system.add_time_series(ts_deterministic, gen)
 
@@ -157,69 +172,6 @@ def test_deterministic_metadata_get_range():
         metadata.get_range(start_time=initial_time + timedelta(hours=10), length=10)
 
 
-def test_from_single_time_series():
-    initial_timestamp = datetime(year=2020, month=1, day=1)
-    data = np.array(range(100))
-    name = "test_ts"
-    resolution = timedelta(hours=1)
-
-    ts = SingleTimeSeries.from_array(
-        data=data,
-        name=name,
-        resolution=resolution,
-        initial_timestamp=initial_timestamp,
-    )
-
-    horizon = timedelta(hours=8)
-    interval = timedelta(hours=4)
-    window_count = 5
-
-    deterministic_ts = Deterministic.from_single_time_series(
-        ts,
-        interval=interval,
-        horizon=horizon,
-        window_count=window_count,
-    )
-
-    # Verify properties were correctly set
-    assert deterministic_ts.name == name
-    assert deterministic_ts.resolution == resolution
-    assert deterministic_ts.initial_timestamp == initial_timestamp
-    assert deterministic_ts.horizon == horizon
-    assert deterministic_ts.interval == interval
-    assert deterministic_ts.window_count == window_count
-
-    # Verify data was correctly extracted
-    original_data = ts.data
-    expected_shape = (window_count, int(horizon / resolution))
-    assert deterministic_ts.data.shape == expected_shape
-
-    # Check specific values
-    for w in range(window_count):
-        start_idx = w * int(interval / resolution)
-        end_idx = start_idx + int(horizon / resolution)
-        np.testing.assert_array_equal(deterministic_ts.data[w], original_data[start_idx:end_idx])
-
-    # Verify default window count calculation
-    # Max windows = (total_duration - horizon) // interval + 1
-    # For 100 hours with 8 hour horizon and 4 hour interval:
-    # (100 - 8) // 4 + 1 = 24 windows
-    auto_window_ts = Deterministic.from_single_time_series(ts, interval=interval, horizon=horizon)
-    assert auto_window_ts.window_count == 24
-
-    # Verify error when time series is too short
-    short_ts = SingleTimeSeries.from_array(
-        data=range(10),
-        name=name,
-        resolution=resolution,
-        initial_timestamp=initial_timestamp,
-    )
-    with pytest.raises(ValueError):
-        Deterministic.from_single_time_series(
-            short_ts, interval=interval, horizon=horizon, window_count=5
-        )
-
-
 def test_deterministic_single_time_series_backwards_compatibility(tmp_path: Any) -> None:
     """Test compatibility for DeterministicSingleTimeSeries type from IS.jl."""
     # Simulate metadata that would come from IS.jl with DeterministicSingleTimeSeries
@@ -289,63 +241,3 @@ def test_deterministic_single_time_series_backwards_compatibility(tmp_path: Any)
     assert loaded_metadata.interval == timedelta(hours=4)
     assert loaded_metadata.horizon == timedelta(hours=8)
     assert loaded_metadata.window_count == 5
-
-
-def test_from_single_time_series_with_quantity():
-    """Test creating Deterministic from SingleTimeSeries with pint Quantity."""
-    initial_timestamp = datetime(year=2020, month=1, day=1)
-    data = ActivePower(np.array(range(100)), "watts")
-    name = "active_power"
-    resolution = timedelta(hours=1)
-
-    ts = SingleTimeSeries.from_array(
-        data=data,
-        name=name,
-        resolution=resolution,
-        initial_timestamp=initial_timestamp,
-    )
-
-    horizon = timedelta(hours=8)
-    interval = timedelta(hours=4)
-    window_count = 5
-
-    deterministic_ts = Deterministic.from_single_time_series(
-        ts,
-        interval=interval,
-        horizon=horizon,
-        window_count=window_count,
-    )
-
-    assert isinstance(deterministic_ts.data, ActivePower)
-    assert deterministic_ts.data.units == "watt"
-
-    expected_shape = (window_count, int(horizon / resolution))
-    assert deterministic_ts.data.shape == expected_shape
-
-    original_data = ts.data_array
-    for w in range(window_count):
-        start_idx = w * int(interval / resolution)
-        end_idx = start_idx + int(horizon / resolution)
-        np.testing.assert_array_equal(
-            deterministic_ts.data[w].magnitude, original_data[start_idx:end_idx]
-        )
-
-
-def test_from_single_time_series_too_short_for_any_window():
-    """Test error when SingleTimeSeries is too short to create even one forecast window."""
-    initial_timestamp = datetime(year=2020, month=1, day=1)
-    data = np.array(range(5))
-    name = "test_ts"
-    resolution = timedelta(hours=1)
-
-    ts = SingleTimeSeries.from_array(
-        data=data,
-        name=name,
-        resolution=resolution,
-        initial_timestamp=initial_timestamp,
-    )
-    horizon = timedelta(hours=10)
-    interval = timedelta(hours=1)
-
-    with pytest.raises(ValueError, match="Cannot create any forecast windows"):
-        Deterministic.from_single_time_series(ts, interval=interval, horizon=horizon)

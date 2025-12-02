@@ -332,102 +332,6 @@ class Deterministic(AbstractDeterministic):
             window_count=window_count,
         )
 
-    @classmethod
-    def from_single_time_series(
-        cls,
-        single_time_series: SingleTimeSeries,
-        interval: timedelta,
-        horizon: timedelta,
-        name: str | None = None,
-        window_count: int | None = None,
-    ) -> "Deterministic":
-        """Create a Deterministic forecast from a SingleTimeSeries.
-
-        This creates a deterministic forecast by deriving forecast windows from an existing
-        SingleTimeSeries. The forecast data is materialized as a 2D array where each row
-        represents a forecast window and each column represents a time step within the horizon.
-
-        Parameters
-        ----------
-        single_time_series
-            The SingleTimeSeries to use as the data source
-        interval
-            Time between consecutive forecast windows (e.g., 1h for hourly forecasts)
-        horizon
-            Length of each forecast window (e.g., 6h for 6-hour forecasts)
-        name
-            Name assigned to the forecast (defaults to the same name as the SingleTimeSeries)
-        window_count
-            Number of forecast windows to provide. If None, maximum possible windows will be used.
-
-        Returns
-        -------
-        Deterministic
-
-        Notes
-        -----
-        This is useful for creating "perfect forecasts" from historical data or testing
-        forecast workflows with known outcomes.
-        """
-        # Use defaults if parameters aren't provided
-        name = name if name is not None else single_time_series.name
-        resolution = single_time_series.resolution
-
-        # Calculate maximum possible window count if not provided
-        if window_count is None:
-            total_duration = single_time_series.length * resolution
-            usable_duration = total_duration - horizon
-            max_windows = (usable_duration // interval) + 1
-            window_count = int(max_windows)
-            if window_count < 1:
-                msg = (
-                    f"Cannot create any forecast windows with horizon={horizon} "
-                    f"from time series of length {total_duration}"
-                )
-                raise ValueError(msg)
-
-        # Ensure the base time series is long enough to support the requested forecast windows
-        horizon_steps = int(horizon / resolution)
-        interval_steps = int(interval / resolution)
-        total_steps_needed = interval_steps * (window_count - 1) + horizon_steps
-
-        if total_steps_needed > single_time_series.length:
-            msg = (
-                f"Base time series length ({single_time_series.length}) is insufficient "
-                f"for the requested forecast parameters (need {total_steps_needed} points)"
-            )
-            raise ValueError(msg)
-
-        # Create a 2D forecast matrix where each row is a forecast window
-        # and each column is a time step in the forecast horizon
-        forecast_matrix: NDArray | pint.Quantity = np.zeros((window_count, horizon_steps))
-
-        # Fill the forecast matrix with data from the original time series
-        original_data = single_time_series.data_array
-
-        for window_idx in range(window_count):
-            start_idx = window_idx * interval_steps
-            end_idx = start_idx + horizon_steps
-            forecast_matrix[window_idx, :] = original_data[start_idx:end_idx]
-
-        # If original data was a pint.Quantity, wrap the result in a pint.Quantity
-        if isinstance(single_time_series.data, pint.Quantity):
-            forecast_matrix = type(single_time_series.data)(
-                forecast_matrix, units=single_time_series.data.units
-            )
-
-        # Create a deterministic forecast with the structured forecast windows
-        return cls(
-            name=name,
-            data=forecast_matrix,
-            resolution=resolution,
-            initial_timestamp=single_time_series.initial_timestamp,
-            interval=interval,
-            horizon=horizon,
-            window_count=window_count,
-        )
-
-
 DeterministicTimeSeriesType: TypeAlias = Deterministic
 
 
@@ -643,90 +547,6 @@ class DeterministicMetadata(TimeSeriesMetadata):
             type="Deterministic",
         )
 
-    @classmethod
-    def from_single_time_series(
-        cls,
-        single_time_series: SingleTimeSeries,
-        interval: timedelta,
-        horizon: timedelta,
-        window_count: int | None = None,
-        **features: Any,
-    ) -> "DeterministicMetadata":
-        """Construct DeterministicMetadata that references a SingleTimeSeries.
-
-        This creates metadata for a DeterministicSingleTimeSeries (Julia-style) that
-        computes forecast windows on-the-fly from an existing SingleTimeSeries without
-        copying data.
-
-        Parameters
-        ----------
-        single_time_series
-            The SingleTimeSeries to reference
-        interval
-            Time between consecutive forecast windows
-        horizon
-            Length of each forecast window
-        window_count
-            Number of forecast windows. If None, maximum possible windows will be calculated.
-        **features
-            Additional feature metadata
-
-        Returns
-        -------
-        DeterministicMetadata
-            Metadata with single_time_series_uuid set to reference the source data
-        """
-        resolution = single_time_series.resolution
-
-        # Calculate maximum possible window count if not provided
-        if window_count is None:
-            total_duration = single_time_series.length * resolution
-            usable_duration = total_duration - horizon
-            max_windows = (usable_duration // interval) + 1
-            window_count = int(max_windows)
-            if window_count < 1:
-                msg = (
-                    f"Cannot create any forecast windows with horizon={horizon} "
-                    f"from time series of length {total_duration}"
-                )
-                raise ValueError(msg)
-
-        # Validate that the base time series is long enough
-        horizon_steps = int(horizon / resolution)
-        interval_steps = int(interval / resolution)
-        total_steps_needed = interval_steps * (window_count - 1) + horizon_steps
-
-        if total_steps_needed > single_time_series.length:
-            msg = (
-                f"Base time series length ({single_time_series.length}) is insufficient "
-                f"for the requested forecast parameters (need {total_steps_needed} points)"
-            )
-            raise ValueError(msg)
-
-        units = (
-            QuantityMetadata(
-                module=type(single_time_series.data).__module__,
-                quantity_type=type(single_time_series.data),
-                units=str(single_time_series.data.units),
-            )
-            if isinstance(single_time_series.data, pint.Quantity)
-            else None
-        )
-
-        return cls(
-            name=single_time_series.name,
-            initial_timestamp=single_time_series.initial_timestamp,
-            resolution=resolution,
-            interval=interval,
-            horizon=horizon,
-            window_count=window_count,
-            time_series_uuid=single_time_series.uuid,  # Points to SingleTimeSeries, not separate data
-            features=features,
-            units=units,
-            normalization=single_time_series.normalization,
-            type="Deterministic",
-        )
-
     def get_range(
         self, start_time: datetime | None = None, length: int | None = None
     ) -> tuple[int, int]:
@@ -742,7 +562,7 @@ class DeterministicMetadata(TimeSeriesMetadata):
             index = 0
         else:
             if start_time < self.initial_timestamp:
-                msg = "{start_time=} is less than {self.initial_timestamp=}"
+                msg = f"{start_time=} is less than {self.initial_timestamp=}"
                 raise ISConflictingArguments(msg)
 
             last_valid_time = (
