@@ -749,8 +749,6 @@ def test_system_show_components(simple_system_with_time_series):
     simple_system_with_time_series.show_components(SimpleBus, show_supplemental=True)
 
 
-
-
 def test_system_info_renders_supplemental_attributes_table(
     simple_system_with_supplemental_attributes,
     capsys,
@@ -820,8 +818,6 @@ def test_many_supplemental_attributes(simple_system):
 
     simple_system.info()  # Should not crash
     assert simple_system.get_num_supplemental_attributes() == 50
-
-
 
 
 def test_convert_chronify_to_arrow_in_deserialize(tmp_path):
