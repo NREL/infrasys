@@ -2,7 +2,7 @@
 
 import sqlite3
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from loguru import logger
 
@@ -23,8 +23,9 @@ class ManagedConnection(sqlite3.Connection):
     def __enter__(self) -> "ManagedConnection":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(self, exc_type, exc, tb) -> Literal[False]:
         super().__exit__(exc_type, exc, tb)
+        return False
 
     def __del__(self) -> None:
         self.close()
@@ -46,7 +47,7 @@ def restore(dst_con: sqlite3.Connection, filename: Path | str) -> None:
     logger.info("Restored the database from {}.", filename)
 
 
-def create_in_memory_db(database: str = ":memory:") -> sqlite3.Connection:
+def create_in_memory_db(database: str = ":memory:") -> ManagedConnection:
     """Create an in-memory database."""
     return sqlite3.connect(database, factory=ManagedConnection)
 

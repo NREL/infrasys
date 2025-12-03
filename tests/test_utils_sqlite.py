@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gc
-import sqlite3
 from pathlib import Path
 
 from infrasys.utils.sqlite import (
@@ -45,7 +44,8 @@ def test_backup_and_restore(tmp_path: Path) -> None:
 
 
 def test_connection_auto_close_on_gc() -> None:
-    con = create_in_memory_db()
+    con: ManagedConnection | None = create_in_memory_db()
+    assert con is not None
     assert con.__dict__.get("_closed", False) is False
     # Explicitly invoke cleanup to exercise __del__ path.
     con.__del__()  # type: ignore[operator]
