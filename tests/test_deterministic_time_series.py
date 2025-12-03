@@ -14,7 +14,6 @@ from infrasys.time_series_metadata_store import (
 from infrasys.time_series_models import (
     Deterministic,
     DeterministicMetadata,
-    SingleTimeSeries,
     TimeSeriesStorageType,
 )
 from infrasys.utils.sqlite import create_in_memory_db

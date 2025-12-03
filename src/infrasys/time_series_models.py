@@ -332,6 +332,7 @@ class Deterministic(AbstractDeterministic):
             window_count=window_count,
         )
 
+
 DeterministicTimeSeriesType: TypeAlias = Deterministic
 
 
