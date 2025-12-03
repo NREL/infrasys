@@ -221,7 +221,7 @@ class SupplementalAttributeAssociationsStore:
         rows = execute(cur, "SELECT CHANGES() AS changes").fetchall()
         assert len(rows) == 1, rows
         row = rows[0]
-        logger.debug("Deleted %s rows from the time series metadata table", row[0])
+        logger.debug("Deleted {} rows from the time series metadata table", row[0])
         self._con.commit()
         return row[0]
 

@@ -749,6 +749,81 @@ def test_system_show_components(simple_system_with_time_series):
     simple_system_with_time_series.show_components(SimpleBus, show_supplemental=True)
 
 
+
+
+def test_system_info_renders_supplemental_attributes_table(
+    simple_system_with_supplemental_attributes,
+    capsys,
+):
+    """Test supplemental attributes appear in System table."""
+    simple_system_with_supplemental_attributes.info()
+
+    output = capsys.readouterr().out
+
+    assert "Supplemental Attributes attached" in output
+    assert "3" in output  # Total count
+
+
+def test_system_info_no_table_when_empty(simple_system_with_time_series, capsys):
+    """Test supplemental attributes shows 0 when none exist."""
+    simple_system_with_time_series.info()
+
+    output = capsys.readouterr().out
+    assert "Supplemental Attributes attached" in output
+
+
+def test_system_info_table_content_accuracy(
+    simple_system_with_supplemental_attributes,
+    capsys,
+):
+    """Test supplemental attributes shows correct count."""
+    system = simple_system_with_supplemental_attributes
+
+    assert system.get_num_supplemental_attributes() == 3
+
+    system.info()
+    output = capsys.readouterr().out
+
+    assert "Supplemental Attributes attached" in output
+    assert "3" in output
+
+
+def test_single_attribute_type(simple_system):
+    """Test with only one attribute type."""
+    from infrasys.location import GeographicInfo
+
+    bus = simple_system.get_component(SimpleBus, "test-bus")
+    attr = GeographicInfo.example()
+    simple_system.add_supplemental_attribute(bus, attr)
+
+    simple_system.info()  # Should not crash
+
+    counts = simple_system.get_supplemental_attribute_counts_by_type()
+    assert len(counts) == 1
+    assert counts[0]["type"] == "GeographicInfo"
+
+
+def test_many_supplemental_attributes(simple_system):
+    """Test with 50 attributes."""
+    from infrasys.location import GeographicInfo
+
+    components = []
+    for i in range(10):
+        bus = SimpleBus(name=f"bus-{i}", voltage=1.1)
+        simple_system.add_component(bus)
+        components.append(bus)
+
+    for i in range(50):
+        attr = GeographicInfo.example()
+        attr.geo_json["properties"]["name"] = f"Location-{i}"
+        simple_system.add_supplemental_attribute(components[i % 10], attr)
+
+    simple_system.info()  # Should not crash
+    assert simple_system.get_num_supplemental_attributes() == 50
+
+
+
+
 def test_convert_chronify_to_arrow_in_deserialize(tmp_path):
     system = SimpleSystem(time_series_storage_type=TimeSeriesStorageType.CHRONIFY)
     assert isinstance(system.time_series.storage, ChronifyTimeSeriesStorage)
