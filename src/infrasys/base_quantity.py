@@ -36,7 +36,6 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
         return core_schema.with_info_after_validator_function(
             cls._validate,
             core_schema.any_schema(),
-            field_name=handler.field_name,
             serialization=core_schema.plain_serializer_function_ser_schema(
                 cls._serialize,
                 info_arg=True,
