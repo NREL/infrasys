@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta
+
 import pytest
 
-from infrasys import GeographicInfo, SupplementalAttribute
+from infrasys import GeographicInfo, SingleTimeSeries, SupplementalAttribute
 from infrasys.exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
 from infrasys.quantities import Energy
 from infrasys.system import System
@@ -146,3 +148,20 @@ def test_attribute_with_basequantity(tmp_path):
     gen2 = system2.get_component(SimpleGenerator, "gen1")
     attr2: Attribute = system.get_supplemental_attributes_with_component(gen2)[0]
     assert attr1 == attr2
+
+
+def test_supplemental_attributes_with_time_series():
+    bus = SimpleBus(name="test-bus", voltage=1.1)
+    gen = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
+    attr1 = Attribute(energy=Energy(10.0, "kWh"))
+    system = SimpleSystem(auto_add_composed_components=True)
+    data = range(100)
+    start = datetime(year=2020, month=1, day=1)
+    resolution = timedelta(hours=1)
+    ts = SingleTimeSeries.from_array(data, "active_power", start, resolution)
+    system.add_component(gen)
+    system.add_supplemental_attribute(gen, attr1)
+    system.add_time_series(ts, attr1)
+
+    # Assert that we can run this
+    system.info()
