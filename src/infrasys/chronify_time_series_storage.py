@@ -378,6 +378,13 @@ class ChronifyTimeSeriesStorage(TimeSeriesStorageBase):
             raise Exception(msg)
         return db_id
 
+    def close(self) -> None:
+        """Dispose of the underlying store/engine."""
+        try:
+            self._store.dispose()
+        except Exception:
+            logger.debug("Error disposing chronify store", exc_info=True)
+
 
 @singledispatch
 def _get_table_name(time_series) -> str:

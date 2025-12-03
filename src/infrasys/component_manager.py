@@ -400,6 +400,13 @@ class ComponentManager:
             )
             raise ISOperationNotAllowed(msg)
 
+    def close(self) -> None:
+        """Release resources held by the component manager."""
+        try:
+            self._associations.close()
+        except Exception:
+            logger.debug("Error closing component associations", exc_info=True)
+
     def raise_if_attached(self, component: Component):
         """Raise an exception if this component is attached to a system."""
         if component.uuid in self._components_by_uuid:

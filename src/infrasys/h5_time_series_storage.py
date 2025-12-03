@@ -24,6 +24,7 @@ from infrasys.time_series_models import (
 )
 from infrasys.time_series_storage_base import TimeSeriesStorageBase
 from infrasys.utils.h5_utils import copy_h5_group, extract_h5_dataset_to_bytes, open_h5_file
+from infrasys.utils.sqlite import create_in_memory_db
 
 from .time_series_metadata_store import TimeSeriesMetadataStore
 
@@ -320,7 +321,7 @@ class HDF5TimeSeriesStorage(TimeSeriesStorageBase):
         """
         with self.open_time_series_store() as file_handle:
             ts_metadata = extract_h5_dataset_to_bytes(file_handle, self.HDF5_TS_METADATA_ROOT_PATH)
-            conn = sqlite3.connect(":memory:")
+            conn = create_in_memory_db(":memory:")
             with tempfile.NamedTemporaryFile(delete=False) as tmp:
                 temp_file_path = tmp.name
                 tmp.write(ts_metadata)

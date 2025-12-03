@@ -123,11 +123,45 @@ class System:
         self._supplemental_attr_mgr = (
             supplemental_attribute_manager or SupplementalAttributeManager(self._con)
         )
+        self._closed = False
 
         self._data_format_version: Optional[str] = None
         # Note to devs: if you add new fields, add support in to_json/from_json as appropriate.
 
         # TODO: add pretty printing of components and time series
+
+    def close(self) -> None:
+        """Close open resources such as SQLite connections."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._component_mgr.close()
+        except Exception:
+            logger.debug("Error closing component manager", exc_info=True)
+
+        try:
+            self._time_series_mgr.close()
+        except Exception:
+            logger.debug("Error closing time series manager", exc_info=True)
+
+        if self._con is not None:
+            try:
+                self._con.close()
+            except Exception:
+                logger.debug("Error closing system SQLite connection", exc_info=True)
+
+    def __enter__(self) -> "System":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            logger.debug("Error closing system in destructor", exc_info=True)
 
     @property
     def auto_add_composed_components(self) -> bool:

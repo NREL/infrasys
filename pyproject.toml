@@ -56,10 +56,16 @@ files = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = "src"
-minversion = "6.0"
-addopts = "-ra"
+pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--cov=infrasys",
+    "--cov-report=term-missing:skip-covered",
+]
+filterwarnings = [
+    "ignore::duckdb_engine.DuckDBEngineWarning",
+]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.

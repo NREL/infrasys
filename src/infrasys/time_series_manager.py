@@ -100,6 +100,18 @@ class TimeSeriesManager:
 
         # TODO: create parsing mechanism? CSV, CSV + JSON
 
+    def close(self) -> None:
+        """Release resources held by the storage backend."""
+        storage = getattr(self, "_storage", None)
+        for attr in ("close", "dispose"):
+            func = getattr(storage, attr, None)
+            if callable(func):
+                try:
+                    func()
+                except Exception:
+                    logger.debug("Error closing time series storage", exc_info=True)
+                break
+
     @staticmethod
     def create_new_storage(permanent: bool = False, **kwargs):  # noqa: C901
         base_directory: Path | None = _process_time_series_kwarg("time_series_directory", **kwargs)

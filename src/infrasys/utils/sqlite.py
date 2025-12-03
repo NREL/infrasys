@@ -7,6 +7,29 @@ from typing import Any, Sequence
 from loguru import logger
 
 
+class ManagedConnection(sqlite3.Connection):
+    """SQLite connection that auto-closes on garbage collection."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._closed = False
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        super().close()
+
+    def __enter__(self) -> "ManagedConnection":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        super().__exit__(exc_type, exc, tb)
+
+    def __del__(self) -> None:
+        self.close()
+
+
 def backup(src_con: sqlite3.Connection, filename: Path | str) -> None:
     """Backup a database to a file."""
     with sqlite3.connect(filename) as dst_con:
@@ -25,7 +48,7 @@ def restore(dst_con: sqlite3.Connection, filename: Path | str) -> None:
 
 def create_in_memory_db(database: str = ":memory:") -> sqlite3.Connection:
     """Create an in-memory database."""
-    return sqlite3.connect(database)
+    return sqlite3.connect(database, factory=ManagedConnection)
 
 
 def execute(cursor: sqlite3.Cursor, query: str, params: Sequence[Any] = ()) -> Any:
