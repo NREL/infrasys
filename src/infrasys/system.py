@@ -1790,6 +1790,7 @@ class SystemInfo:
             component_type_count,
             time_series_type_count,
         ) = self.extract_system_counts()
+        owner_type_count = self._get_owner_type_counts(component_type_count)
 
         # System table
         system_table = Table(
@@ -1834,7 +1835,7 @@ class SystemInfo:
             title_justify="left",
             title_style="bold",
         )
-        time_series_table.add_column("Component Type", min_width=20)
+        time_series_table.add_column("Owner Type", min_width=20)
         time_series_table.add_column("Time Series Type", justify="right")
         time_series_table.add_column("Initial time", justify="right")
         time_series_table.add_column("Resolution", justify="right")
@@ -1847,14 +1848,26 @@ class SystemInfo:
             time_series_start_time,
             time_series_resolution,
         ), time_series_count in sorted(time_series_type_count.items(), key=itemgetter(slice(4))):
+            owner_count = owner_type_count.get(component_type, 0)
             time_series_table.add_row(
                 f"{component_type}",
                 f"{time_series_type}",
                 f"{time_series_start_time}",
                 f"{from_iso_8601(time_series_resolution)}",
-                f"{component_type_count[component_type]}",
+                f"{owner_count}",
                 f"{time_series_count}",
             )
 
         if time_series_table.rows:
             _pprint(time_series_table)
+
+    def _get_owner_type_counts(self, component_type_count: dict[str, int]) -> dict[str, int]:
+        """Combine component and supplemental attribute counts by type for summary tables."""
+        owner_type_count = dict(component_type_count)
+        supplemental_attribute_counts: dict[str, int] = defaultdict(int)
+
+        for attribute in self.system._supplemental_attr_mgr.iter_all():
+            supplemental_attribute_counts[type(attribute).__name__] += 1
+
+        owner_type_count.update(supplemental_attribute_counts)
+        return owner_type_count
