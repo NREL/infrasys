@@ -1,4 +1,3 @@
-import sqlite3
 from typing import Optional, Type
 from uuid import UUID
 
@@ -6,7 +5,7 @@ from loguru import logger
 
 from infrasys.component import Component
 from infrasys.utils.classes import get_all_concrete_subclasses
-from infrasys.utils.sqlite import execute
+from infrasys.utils.sqlite import create_in_memory_db, execute
 
 
 class ComponentAssociations:
@@ -18,7 +17,8 @@ class ComponentAssociations:
     def __init__(self) -> None:
         # This uses a different database because it is not persisted when the system
         # is saved to files. It will be rebuilt during de-serialization.
-        self._con = sqlite3.connect(":memory:")
+        self._con = create_in_memory_db(":memory:")
+        self._closed = False
         self._create_metadata_table()
 
     def _create_metadata_table(self):
@@ -110,6 +110,15 @@ class ComponentAssociations:
         params = [str(component.uuid), str(component.uuid)]
         execute(self._con.cursor(), query, params)
         logger.debug("Removed all associations with component {}", component.label)
+
+    def close(self) -> None:
+        """Close the backing SQLite connection."""
+        if self._closed:
+            return
+        try:
+            self._con.close()
+        finally:
+            self._closed = True
 
     def _insert_rows(self, rows: list[tuple]) -> None:
         cur = self._con.cursor()
