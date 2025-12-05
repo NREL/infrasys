@@ -9,14 +9,11 @@ from typing import Any, Iterable, Optional, Sequence
 from uuid import UUID
 
 import orjson
-from loguru import logger
 
 from infrasys.utils.sqlite import backup, execute
 
 from . import (
-    KEY_VALUE_STORE_TABLE,
     TIME_SERIES_ASSOCIATIONS_TABLE,
-    TS_METADATA_FORMAT_VERSION,
     Component,
 )
 from .exceptions import ISAlreadyAttached, ISNotStored, ISOperationNotAllowed
@@ -31,6 +28,7 @@ from .time_series_models import (
 )
 from .utils.metadata_utils import (
     create_associations_table,
+    create_key_value_store,
     get_horizon,
     get_initial_timestamp,
     get_interval,
@@ -46,8 +44,7 @@ class TimeSeriesMetadataStore:
         self._con = con
         if initialize:
             assert create_associations_table(connection=self._con)
-            self._create_key_value_store()
-            self._create_indexes()
+            create_key_value_store(connection=self._con)
         self._cache_metadata: dict[UUID, TimeSeriesMetadata] = {}
 
     def _load_metadata_into_memory(self):
@@ -64,38 +61,6 @@ class TimeSeriesMetadataStore:
             metadata = _deserialize_time_series_metadata(row)
             self._cache_metadata[metadata.uuid] = metadata
         return
-
-    def _create_key_value_store(self):
-        schema = ["key TEXT PRIMARY KEY", "value JSON NOT NULL"]
-        schema_text = ",".join(schema)
-        cur = self._con.cursor()
-        execute(cur, f"CREATE TABLE {KEY_VALUE_STORE_TABLE}({schema_text})")
-
-        rows = [("version", TS_METADATA_FORMAT_VERSION)]
-        placeholder = ",".join(["?"] * len(rows[0]))
-        query = f"INSERT INTO {KEY_VALUE_STORE_TABLE}(key, value) VALUES({placeholder})"
-        cur.executemany(query, rows)
-        self._con.commit()
-        logger.debug("Created metadata table")
-
-    def _create_indexes(self) -> None:
-        # Index strategy:
-        # 1. Optimize for these user queries with indexes:
-        #    1a. all time series attached to one component
-        #    1b. time series for one component + variable_name + type
-        #    1c. time series for one component with all user attributes
-        # 2. Optimize for checks at system.add_time_series. Use all fields.
-        # 3. Optimize for returning all metadata for a time series UUID.
-        cur = self._con.cursor()
-        execute(
-            cur,
-            f"CREATE INDEX by_c_vn_tst_hash ON {TIME_SERIES_ASSOCIATIONS_TABLE} "
-            f"(owner_uuid, time_series_type, name, resolution, features)",
-        )
-        execute(
-            cur,
-            f"CREATE INDEX by_ts_uuid ON {TIME_SERIES_ASSOCIATIONS_TABLE} (time_series_uuid)",
-        )
 
     def add(
         self,

@@ -7,51 +7,24 @@ from uuid import UUID
 
 from loguru import logger
 
-from infrasys import Component
+from infrasys import Component, SUPPLEMENTAL_ATTRIBUTE_ASSOCIATIONS_TABLE
 from infrasys.exceptions import ISAlreadyAttached
 from infrasys.supplemental_attribute import SupplementalAttribute
 from infrasys.utils.sqlite import execute
+from infrasys.utils.metadata_utils import (
+    create_supplemental_attribute_associations_table,
+)
 
-TABLE_NAME = "supplemental_attribute_associations"
+TABLE_NAME = SUPPLEMENTAL_ATTRIBUTE_ASSOCIATIONS_TABLE
 
 
 class SupplementalAttributeAssociationsStore:
     """Stores supplemental attribute associations in a SQLite database."""
 
-    TABLE_NAME = TABLE_NAME
-
     def __init__(self, con: sqlite3.Connection, initialize: bool = True):
         self._con = con
         if initialize:
-            self._create_association_table()
-            self._create_indexes()
-
-    def _create_association_table(self):
-        schema = [
-            "id INTEGER PRIMARY KEY",
-            "attribute_uuid TEXT",
-            "attribute_type TEXT",
-            "component_uuid TEXT",
-            "component_type TEXT",
-        ]
-        schema_text = ",".join(schema)
-        cur = self._con.cursor()
-        execute(cur, f"CREATE TABLE {self.TABLE_NAME}({schema_text})")
-        self._con.commit()
-        logger.debug("Created in-memory time series metadata table")
-
-    def _create_indexes(self) -> None:
-        cur = self._con.cursor()
-        execute(
-            cur,
-            f"CREATE INDEX by_attribute ON {self.TABLE_NAME} "
-            f"(attribute_uuid, component_uuid, component_type)",
-        )
-        execute(
-            cur,
-            f"CREATE INDEX by_component ON {self.TABLE_NAME} "
-            f"(component_uuid, attribute_uuid, attribute_type)",
-        )
+            create_supplemental_attribute_associations_table(self._con, table_name=TABLE_NAME)
 
     _ADD_ASSOCIATION_QUERY = f"""
         SELECT id FROM {TABLE_NAME}
@@ -83,7 +56,7 @@ class SupplementalAttributeAssociationsStore:
         )
 
         placeholder = ",".join(itertools.repeat("?", len(row)))
-        query = f"INSERT INTO {self.TABLE_NAME} VALUES ({placeholder})"
+        query = f"INSERT INTO {TABLE_NAME} VALUES ({placeholder})"
         execute(cur, query, params=row)
         self._con.commit()
 
@@ -215,7 +188,7 @@ class SupplementalAttributeAssociationsStore:
     #    logger.debug("Deleted %s supplemental attribute associations", num_deleted)
 
     def _remove_associations(self, where_clause: str, params: Sequence[Any]) -> int:
-        query = f"DELETE FROM {self.TABLE_NAME} {where_clause}"
+        query = f"DELETE FROM {TABLE_NAME} {where_clause}"
         cur = self._con.cursor()
         execute(cur, query, params)
         rows = execute(cur, "SELECT CHANGES() AS changes").fetchall()
