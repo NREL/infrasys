@@ -186,15 +186,6 @@ def create_associations_table(
     cur = connection.cursor()
     execute(cur, f"CREATE TABLE {table_name}({schema_text})")
     logger.debug("Created time series associations table")
-    execute(
-        cur,
-        f"""
-        CREATE UNIQUE INDEX IF NOT EXISTS {table_name}_owner_name_type_features_unique
-        ON {table_name} (
-            owner_uuid, owner_type, owner_category, name, time_series_type, features
-        )
-        """,
-    )
     if with_index:
         create_indexes(connection, table_name)
 
