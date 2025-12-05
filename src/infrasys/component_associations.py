@@ -3,8 +3,9 @@ from uuid import UUID
 
 from loguru import logger
 
-from infrasys.component import Component
+from infrasys import COMPONENT_ASSOCIATIONS_TABLE, Component
 from infrasys.utils.classes import get_all_concrete_subclasses
+from infrasys.utils.metadata_utils import create_component_associations_table
 from infrasys.utils.sqlite import create_in_memory_db, execute
 
 
@@ -12,36 +13,12 @@ class ComponentAssociations:
     """Stores associations between components. Allows callers to quickly find components composed
     by other components, such as the generator to which a bus is connected."""
 
-    TABLE_NAME = "component_associations"
-
     def __init__(self) -> None:
         # This uses a different database because it is not persisted when the system
         # is saved to files. It will be rebuilt during de-serialization.
         self._con = create_in_memory_db(":memory:")
         self._closed = False
-        self._create_metadata_table()
-
-    def _create_metadata_table(self):
-        schema = [
-            "id INTEGER PRIMARY KEY",
-            "component_uuid TEXT",
-            "component_type TEXT",
-            "attached_component_uuid TEXT",
-            "attached_component_type TEXT",
-        ]
-        schema_text = ",".join(schema)
-        cur = self._con.cursor()
-        execute(cur, f"CREATE TABLE {self.TABLE_NAME}({schema_text})")
-        execute(
-            cur,
-            f"CREATE INDEX by_c_uuid ON {self.TABLE_NAME}(component_uuid)",
-        )
-        execute(
-            cur,
-            f"CREATE INDEX by_a_uuid ON {self.TABLE_NAME}(attached_component_uuid)",
-        )
-        self._con.commit()
-        logger.debug("Created in-memory component associations table")
+        create_component_associations_table(self._con, table_name=COMPONENT_ASSOCIATIONS_TABLE)
 
     def add(self, *components: Component):
         """Store an association between each component and directly attached subcomponents.
@@ -65,7 +42,7 @@ class ComponentAssociations:
 
     def clear(self) -> None:
         """Clear all component associations."""
-        execute(self._con.cursor(), f"DELETE FROM {self.TABLE_NAME}")
+        execute(self._con.cursor(), f"DELETE FROM {COMPONENT_ASSOCIATIONS_TABLE}")
         logger.info("Cleared all component associations.")
 
     def list_child_components(
@@ -80,7 +57,9 @@ class ComponentAssociations:
             res = _make_params_and_where_clause(component_type, "attached_component_type")
             params.extend(res[0])
             where_clause += res[1]
-        query = f"SELECT attached_component_uuid FROM {self.TABLE_NAME} {where_clause}"
+        query = (
+            f"SELECT attached_component_uuid FROM {COMPONENT_ASSOCIATIONS_TABLE} {where_clause}"
+        )
         cur = self._con.cursor()
         return [UUID(x[0]) for x in execute(cur, query, params)]
 
@@ -96,7 +75,7 @@ class ComponentAssociations:
             res = _make_params_and_where_clause(component_type, "component_type")
             params.extend(res[0])
             where_clause += res[1]
-        query = f"SELECT component_uuid FROM {self.TABLE_NAME} {where_clause}"
+        query = f"SELECT component_uuid FROM {COMPONENT_ASSOCIATIONS_TABLE} {where_clause}"
         cur = self._con.cursor()
         return [UUID(x[0]) for x in execute(cur, query, params)]
 
@@ -104,7 +83,7 @@ class ComponentAssociations:
         """Delete all rows with this component."""
         query = f"""
             DELETE
-            FROM {self.TABLE_NAME}
+            FROM {COMPONENT_ASSOCIATIONS_TABLE}
             WHERE component_uuid = ? OR attached_component_uuid = ?
         """
         params = [str(component.uuid), str(component.uuid)]
@@ -123,7 +102,7 @@ class ComponentAssociations:
     def _insert_rows(self, rows: list[tuple]) -> None:
         cur = self._con.cursor()
         placeholder = ",".join(["?"] * len(rows[0]))
-        query = f"INSERT INTO {self.TABLE_NAME} VALUES({placeholder})"
+        query = f"INSERT INTO {COMPONENT_ASSOCIATIONS_TABLE} VALUES({placeholder})"
         try:
             cur.executemany(query, rows)
         finally:

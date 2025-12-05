@@ -6,12 +6,14 @@ import warnings
 from loguru import logger
 
 from infrasys import (
-    KEY_VALUE_STORE_TABLE,
     TIME_SERIES_ASSOCIATIONS_TABLE,
     TIME_SERIES_METADATA_TABLE,
 )
 from infrasys.time_series_metadata_store import make_features_string
-from infrasys.utils.metadata_utils import create_associations_table
+from infrasys.utils.metadata_utils import (
+    create_associations_table,
+    create_key_value_store,
+)
 from infrasys.utils.sqlite import execute
 from infrasys.utils.time_utils import str_timedelta_to_iso_8601
 
@@ -107,9 +109,7 @@ def migrate_legacy_metadata_store(conn: sqlite3.Connection) -> bool:
     )
 
     logger.info("Creating new schema tables.")
-    execute(
-        cursor, f"CREATE TABLE {KEY_VALUE_STORE_TABLE}(key TEXT PRIMARY KEY, VALUE JSON NOT NULL)"
-    )
+    create_key_value_store(connection=conn)
     create_associations_table(connection=conn)
 
     logger.info("Migrating data from legacy schema.")
@@ -200,22 +200,6 @@ def migrate_legacy_metadata_store(conn: sqlite3.Connection) -> bool:
         )
         """,
         sql_data_to_insert,
-    )
-
-    logger.info("Creating indexes on {}.", TIME_SERIES_ASSOCIATIONS_TABLE)
-    execute(
-        cursor,
-        f"""
-        CREATE INDEX IF NOT EXISTS by_c_vn_tst_hash ON {TIME_SERIES_ASSOCIATIONS_TABLE}
-        (owner_uuid, time_series_type, name, resolution, features)
-    """,
-    )
-    execute(
-        cursor,
-        f"""
-        CREATE INDEX IF NOT EXISTS by_ts_uuid ON {TIME_SERIES_ASSOCIATIONS_TABLE}
-        (time_series_uuid)
-    """,
     )
 
     # Dropping legacy table since it is no longer required.
