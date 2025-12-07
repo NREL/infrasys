@@ -16,7 +16,6 @@ def migrate_component_metadata(component_list: list) -> list:
     if not component_list:
         return []
     for component in component_list:
-
         metadata = component[TYPE_METADATA]
         if isinstance(metadata, dict) and "fields" in metadata:
             component[TYPE_METADATA] = metadata["fields"]
