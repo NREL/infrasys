@@ -14,7 +14,7 @@ authors = [
     { name = "Aadil Latif", email = "aadil.latif@nrel.gov" },
     { name = "Daniel Thom", email = "daniel.thom@nrel.gov" },
     { name = "Kapil Duwadi", email = "kapil.duwadi@nrel.gov" },
-    { name = "Pedro Andres Sanchez Perez", email = "pedroandres.sanchezperez@nrel.gov" },
+    { name = "Pedro Andres Sanchez Perez", email = "pesap@users.noreply.github.com" },
     { name = "Tarek Elgindy", email = "tarek.elgindy@nrel.gov" },
 ]
 classifiers = [
@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
@@ -43,7 +44,7 @@ chronify = [
     "chronify ~= 0.3.1",
 ]
 
-[project.urls] 
+[project.urls]
 Documentation = "https://github.com/NREL/infrasys#readme"
 Issues = "https://github.com/NREL/infrasys/issues"
 Source = "https://github.com/NREL/infrasys"
