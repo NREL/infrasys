@@ -37,8 +37,8 @@ there might be different profiles for different scenarios or model years.
 In addition to `SingleTimeSeries`, infrasys also supports deterministic time series,
 which are used to represent forecasts or scenarios with a known future.
 
-The {py:class}`infrasys.time_series_models.Deterministic` class represents a time series where 
-the data is explicitly stored as a 2D array, with each row representing a forecast window and 
+The {py:class}`infrasys.time_series_models.Deterministic` class represents a time series where
+the data is explicitly stored as a 2D array, with each row representing a forecast window and
 each column representing a time step within that window.
 
 You can create a Deterministic time series in two ways:

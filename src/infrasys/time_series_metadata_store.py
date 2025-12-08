@@ -55,9 +55,9 @@ class TimeSeriesMetadataStore:
         columns = [desc[0] for desc in cursor.description]
         rows = [dict(zip(columns, row)) for row in rows]
         for row in rows:
-            assert (
-                "features" in row
-            ), f"Bug: Features missing from {TIME_SERIES_ASSOCIATIONS_TABLE} table."
+            assert "features" in row, (
+                f"Bug: Features missing from {TIME_SERIES_ASSOCIATIONS_TABLE} table."
+            )
             metadata = _deserialize_time_series_metadata(row)
             self._cache_metadata[metadata.uuid] = metadata
         return

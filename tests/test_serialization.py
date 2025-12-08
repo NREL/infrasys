@@ -403,9 +403,9 @@ def test_system_save_load_with_storage_backends(tmp_path, time_series_storage_ty
 
     zip_path = f"{save_dir}.zip"
     assert os.path.exists(zip_path), f"Zip file not created for {time_series_storage_type}"
-    assert not os.path.exists(
-        save_dir
-    ), f"Original directory not deleted for {time_series_storage_type}"
+    assert not os.path.exists(save_dir), (
+        f"Original directory not deleted for {time_series_storage_type}"
+    )
 
     # Load from zip
     loaded_system = SimpleSystem.load(zip_path)

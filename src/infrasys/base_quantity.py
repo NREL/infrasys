@@ -49,15 +49,15 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
         # Type check is more robubst to check that is not an instance of a bare "BaseQuantity"
         if type(field_value) is cls:
             if cls.__base_unit__:
-                assert field_value.check(
-                    cls.__base_unit__
-                ), f"Unit must be compatible with {cls.__base_unit__}"
+                assert field_value.check(cls.__base_unit__), (
+                    f"Unit must be compatible with {cls.__base_unit__}"
+                )
                 return field_value
         if isinstance(field_value, pint.Quantity):
             if cls.__base_unit__:
-                assert field_value.check(
-                    cls.__base_unit__
-                ), f"Unit must be compatible with {cls.__base_unit__}"
+                assert field_value.check(cls.__base_unit__), (
+                    f"Unit must be compatible with {cls.__base_unit__}"
+                )
                 return cls(field_value.magnitude, field_value.units)
         return cls(field_value, cls.__base_unit__)
 
