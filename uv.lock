@@ -142,23 +142,25 @@ wheels = [
 
 [[package]]
 name = "chronify"
-version = "0.3.1"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "duckdb" },
     { name = "duckdb-engine" },
+    { name = "future" },
     { name = "loguru" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pydantic" },
+    { name = "python-dateutil" },
     { name = "pytz" },
     { name = "rich" },
     { name = "sqlalchemy" },
     { name = "tzdata" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f2/32/e43b68e1da0e4b0db04b9456722c88300627f97ee6394f4fa9f27cea3f52/chronify-0.3.1.tar.gz", hash = "sha256:cd2a8828eef0d4fedff20e712226808f4f5b942f08af14dfc00b179900bc2213", size = 156989, upload-time = "2025-08-12T00:17:35.959Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/4d/bbcabd801a1e2a182d3213163866e3944404bc77999a7456d6bc47d22b37/chronify-0.6.0.tar.gz", hash = "sha256:1a48799d30c531538554ed96bc10c330a75d145d09a9be67cfc8b68cf84e3088", size = 210962, upload-time = "2025-12-04T21:22:06.222Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b4/d5/7e15411513d6a9decb30a85a032946f0a4264033afdfb0160e4456f460c5/chronify-0.3.1-py3-none-any.whl", hash = "sha256:c4b64117b48b8e8337ed38f76a04f80aa25be5aed1cc419dcf95918f906496bc", size = 57494, upload-time = "2025-08-12T00:17:34.494Z" },
+    { url = "https://files.pythonhosted.org/packages/00/9a/91c2e4d82f2e4db4d38a7d04d9db33e7d074a681c17e0658ab1f0ab79cb4/chronify-0.6.0-py3-none-any.whl", hash = "sha256:c8da46e7f44ade3cbc5557c76ad2dd477524ce08bcc00174ba506fa7c5ab3290", size = 121073, upload-time = "2025-12-04T21:22:04.418Z" },
 ]
 
 [[package]]
@@ -380,6 +382,15 @@ wheels = [
 ]
 
 [[package]]
+name = "future"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/b2/4140c69c6a66432916b26158687e821ba631a4c9273c474343badf84d3ba/future-1.0.0.tar.gz", hash = "sha256:bd2968309307861edae1458a4f8a4f3598c03be43b97521076aebf5d94c07b05", size = 1228490, upload-time = "2024-02-21T11:52:38.461Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/da/71/ae30dadffc90b9006d77af76b393cb9dfbfc9629f339fc1574a1c52e6806/future-1.0.0-py3-none-any.whl", hash = "sha256:929292d34f5872e70396626ef385ec22355a1fae8ad29e1a734c3e43f9fbc216", size = 491326, upload-time = "2024-02-21T11:52:35.956Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -547,7 +558,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chronify", marker = "extra == 'chronify'", specifier = "~=0.3.1" },
+    { name = "chronify", marker = "extra == 'chronify'", specifier = "~=0.6.0" },
     { name = "h5py", specifier = ">=3.13,<4" },
     { name = "loguru", specifier = ">=0.7,<0.8" },
     { name = "numpy", specifier = ">=2,<3" },
