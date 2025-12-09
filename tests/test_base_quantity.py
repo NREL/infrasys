@@ -63,8 +63,7 @@ def test_base_unit_validation():
     # Check that new classes must define __base_unit__
     with pytest.raises(TypeError):
 
-        class _(BaseQuantity):
-            ...
+        class _(BaseQuantity): ...
 
     test_magnitude = 100
     test_unit = "volt"

@@ -1,48 +1,105 @@
 # infrasys
 
-[![CI](https://github.com/NREL/infrasys/workflows/CI/badge.svg)](https://github.com/NREL/infrasys/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/NREL/infrasys/branch/main/graph/badge.svg)](https://codecov.io/gh/NREL/infrasys)
+[![CI](https://github.com/NREL/infrasys/actions/workflows/ci.yml/badge.svg)](https://github.com/NREL/infrasys/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/NREL/infrasys/branch/main/graph/badge.svg)](https://codecov.io/gh/NREL/infrasys)
+[![PyPI](https://img.shields.io/pypi/v/infrasys.svg)](https://pypi.org/project/infrasys/)
+[![Ruff](https://img.shields.io/badge/Ruff-&gt;=_0.0-blue?logo=ruff&logoColor=white)](https://github.com/charliermarsh/ruff)
+[![Python](https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python)](https://www.python.org/)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
+[![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](LICENSE.txt)
+[![Docs](https://img.shields.io/badge/docs-GitHub-blue)](https://github.com/NREL/infrasys/tree/main/docs)
+[![release-please](https://github.com/NREL/infrasys/actions/workflows/release.yaml/badge.svg)](https://github.com/NREL/infrasys/actions/workflows/release.yaml)
+[![Docs (GitHub Pages)](https://github.com/NREL/infrasys/actions/workflows/gh-pages.yml/badge.svg)](https://github.com/NREL/infrasys/actions/workflows/gh-pages.yml)
 
-This package implements a data store for components and time series in support of Python-based
-modeling packages. While it is designed to support teams modeling transmission and distribution
-systems for electrical grids, it can be used by any package that needs to store components
-(e.g., generators and buses) that have quantities (e.g., power and voltage) which may vary over
-time.
+infrasys is a lightweight data store that keeps track of components, their attributes, and
+time series for energy infrastructure models. The core package is opinionated about validation,
+unit handling, and data migration so that downstream modeling packages can focus on solving
+their domain problems instead of managing persistence concerns.
 
-The package was inspired by
-[InfrastructureSystems.jl](https://github.com/NREL-Sienna/InfrastructureSystems.jl)
+## Highlights
 
-## Benefits
-- Stores components in data structures that provide fast lookup and iteration by type and name.
-- Provides extendable data models that enable validation and unit conversion through
-[pint](https://pint.readthedocs.io/en/stable/).
-- Manages time series data efficiently. Data is only loaded into system memory when needed by
-the user application.
-- Manages serialization and de-serialization of components to JSON, including automatic handling of
-nested objects.
-- Enables data model migration.
+- **Typed components with pint validation:** Base models derive from `pydantic` and use
+  `pint` quantities whenever a physical unit is involved.
+- **Flexible time-series storage:** Arrow, HDF5, Chronify, and in-memory backends are available
+  via `System` configuration to match your compute environment.
+- **Efficient serialization:** Components, supplemental attributes, and nested systems are
+  serialized to JSON with automatic metadata and optional migration hooks.
+- **Designed for extension:** Derive your own `System` classes, override component addition
+  logic, or ship supplemental attributes alongside the core storage.
 
-## Package Developer Guide
-🚧
+## Getting started
 
-## Installation
+### Install
+
+```bash
+pip install git+https://github.com/NREL/infrasys.git@main
+pip install "infrasys[chronify]"  # optional backend for Chronify/duckdb-based storage
 ```
-$ pip install git+ssh://git@github.com/NREL/infrastructure_systems.git@main
+
+Don’t forget to install pre-commit hooks so your push meets project quality checks:
+
+```bash
+pre-commit install
 ```
 
-## Developer installation
-```
-$ pip install -e ".[dev]"
+### Quick example
+
+```python
+from infrasys import Component, System
+from infrasys.location import Location
+
+
+class Bus(Component):
+    voltage: float
+    location: Location | None = None
+
+
+system = System(name="demo-grid")
+bus = Bus(name="bus-1", voltage=1.05, location=Location(x=0.0, y=0.0))
+system.add_components(bus)
+system.to_json("demo-grid/system.json")
 ```
 
-Please install `pre-commit` so that your code is checked before making commits.
+Instantiate a `System`, add a few components, and dump everything to JSON. Time series data
+gets written to a sibling directory alongside the JSON file so you can externalize it with
+`System.to_json(...)` and `System.from_json(...)`.
+
+## Documentation
+
+- **How To guides:** step-by-step recipes in `docs/how_tos`.
+- **Tutorials:** opinionated walkthroughs for custom systems under `docs/tutorials`.
+- **API Reference:** auto-generated reference material lives in `docs/reference`.
+- **Explanation articles:** deeper dives on the storage backends, migrations, and behavior in
+  `docs/explanation`.
+
+To build the docs locally, install `docs` extras and run `make html` from the `docs` directory.
+
+## Development
+
+- Clone this repository and install the dev dependency group before hacking:
+
+```bash
+pip install -e ".[dev]"
 ```
-$ pre-commit install
+
+- Run the test suite and coverage reporting via:
+
+```bash
+pytest
 ```
+
+- Formatting and linting are managed by `ruff` and configured through its `pyproject.toml` section.
+  Keep your hooks healthy by installing them via `pre-commit install` (see Getting started) and running
+  `pre-commit run --all-files` before pushing.
+
+## Support & Contribution
+
+infrasys is being developed under NREL Software Record SWR-24-42. Report issues and feature
+requests at [https://github.com/NREL/infrasys/issues](https://github.com/NREL/infrasys/issues).
+Review the `docs/reference` and `docs/how_tos` material before submitting a change so your
+diff is aligned with the project conventions.
 
 ## License
-infrasys is released under a BSD 3-Clause
-[License](https://github.com/NREL/infrasys/blob/main/LICENSE.txt).
 
-infrasys was developed under software record SWR-24-42 at the National Renewable Energy Laboratory
-([NREL](https://www.nrel.gov)).
+infrasys is released under the BSD 3-Clause License. See
+[LICENSE.txt](LICENSE.txt) for details.
