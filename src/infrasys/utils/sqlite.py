@@ -52,6 +52,19 @@ def create_in_memory_db(database: str = ":memory:") -> ManagedConnection:
     return sqlite3.connect(database, factory=ManagedConnection)
 
 
+def has_table(con: sqlite3.Connection, table: str) -> bool:
+    """Return True if the table exists in the SQLite connection."""
+    try:
+        cur = con.cursor()
+        res = cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        ).fetchone()
+        return res is not None
+    except sqlite3.Error:
+        return False
+
+
 def execute(cursor: sqlite3.Cursor, query: str, params: Sequence[Any] = ()) -> Any:
     """Execute a SQL query."""
     logger.trace("SQL query: {} {}", query, params)

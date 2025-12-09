@@ -14,6 +14,7 @@ import h5py
 import numpy as np
 from loguru import logger
 
+from . import TIME_SERIES_ASSOCIATIONS_TABLE
 from .arrow_storage import ArrowTimeSeriesStorage
 from .component import Component
 from .exceptions import ISInvalidParameter, ISOperationNotAllowed
@@ -38,6 +39,7 @@ from .time_series_models import (
 )
 from .time_series_storage_base import TimeSeriesStorageBase
 from .utils.path_utils import clean_tmp_folder
+from .utils.sqlite import has_table
 
 try:
     from .chronify_time_series_storage import ChronifyTimeSeriesStorage
@@ -496,6 +498,15 @@ class TimeSeriesManager:
             read_only=read_only,
             **kwargs,
         )
+
+        if metadata_store is None or not has_table(
+            metadata_store._con, TIME_SERIES_ASSOCIATIONS_TABLE
+        ):
+            logger.warning(
+                "Time series metadata store missing table %s; using restored metadata database.",
+                TIME_SERIES_ASSOCIATIONS_TABLE,
+            )
+            metadata_store = TimeSeriesMetadataStore(con, initialize=False)
 
         # Create the manager instance
         mgr = cls(con, storage=storage, metadata_store=metadata_store, initialize=False, **kwargs)
