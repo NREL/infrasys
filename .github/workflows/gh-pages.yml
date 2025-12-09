@@ -19,7 +19,7 @@ jobs:
         run: uv sync --group docs
 
       - name: Build Sphinx documentation
-        run: uv run sphinx-build docs/source/ docs/_build/
+        run: uv run sphinx-build docs/ docs/_build/
 
       - name: Deploy on GitHub Pages
         uses: peaceiris/actions-gh-pages@v3.6.1
