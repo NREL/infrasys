@@ -2,9 +2,33 @@
 
 import sqlite3
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from loguru import logger
+
+
+class ManagedConnection(sqlite3.Connection):
+    """SQLite connection that auto-closes on garbage collection."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._closed = False
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        super().close()
+
+    def __enter__(self) -> "ManagedConnection":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> Literal[False]:
+        super().__exit__(exc_type, exc, tb)
+        return False
+
+    def __del__(self) -> None:
+        self.close()
 
 
 def backup(src_con: sqlite3.Connection, filename: Path | str) -> None:
@@ -23,12 +47,25 @@ def restore(dst_con: sqlite3.Connection, filename: Path | str) -> None:
     logger.info("Restored the database from {}.", filename)
 
 
-def create_in_memory_db(database: str = ":memory:") -> sqlite3.Connection:
+def create_in_memory_db(database: str = ":memory:") -> ManagedConnection:
     """Create an in-memory database."""
-    return sqlite3.connect(database)
+    return sqlite3.connect(database, factory=ManagedConnection)
+
+
+def has_table(con: sqlite3.Connection, table: str) -> bool:
+    """Return True if the table exists in the SQLite connection."""
+    try:
+        cur = con.cursor()
+        res = cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        ).fetchone()
+        return res is not None
+    except sqlite3.Error:
+        return False
 
 
 def execute(cursor: sqlite3.Cursor, query: str, params: Sequence[Any] = ()) -> Any:
     """Execute a SQL query."""
-    logger.trace("SQL query: {query} {params=}", query)
+    logger.trace("SQL query: {} {}", query, params)
     return cursor.execute(query, params)

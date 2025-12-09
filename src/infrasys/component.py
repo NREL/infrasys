@@ -31,7 +31,7 @@ class Component(InfraSysBaseModelWithIdentifers):
     def model_dump_custom(self, *args, **kwargs) -> dict[str, Any]:
         """Custom serialization for this package"""
         refs = {}
-        for x in self.model_fields:
+        for x in type(self).model_fields:
             val = self._model_dump_field(x)
             if val is not None:
                 refs[x] = val
@@ -50,8 +50,8 @@ class Component(InfraSysBaseModelWithIdentifers):
             val = [{TYPE_METADATA: serialize_component_reference(x)} for x in val]
         elif isinstance(val, BaseQuantity | pint.Quantity):
             data = val.to_dict()
-            data[TYPE_METADATA] = SerializedTypeMetadata(
-                fields=SerializedQuantityType(
+            data[TYPE_METADATA] = SerializedTypeMetadata.validate_python(
+                SerializedQuantityType(
                     module=val.__module__,
                     type=val.__class__.__name__,
                 ),
@@ -69,8 +69,8 @@ class Component(InfraSysBaseModelWithIdentifers):
 
 def serialize_component_reference(component: Component) -> dict[str, Any]:
     """Make a JSON serializable reference to a component."""
-    return SerializedTypeMetadata(
-        fields=SerializedComponentReference(
+    return SerializedTypeMetadata.validate_python(
+        SerializedComponentReference(
             module=component.__module__,
             type=component.__class__.__name__,
             uuid=component.uuid,

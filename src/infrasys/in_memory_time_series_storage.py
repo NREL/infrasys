@@ -3,17 +3,18 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeAlias
-
-from numpy.typing import NDArray
 from uuid import UUID
+
 from loguru import logger
+from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
-    SingleTimeSeries,
-    SingleTimeSeriesMetadata,
+    DeterministicMetadata,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
+    SingleTimeSeries,
+    SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
 )
@@ -36,7 +37,7 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Any = None,
+        context: Any = None,
     ) -> None:
         if isinstance(time_series, (SingleTimeSeries, NonSequentialTimeSeries)):
             if metadata.time_series_uuid not in self._arrays:
@@ -61,15 +62,24 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Any = None,
+        context: Any = None,
     ) -> TimeSeriesData:
         if isinstance(metadata, SingleTimeSeriesMetadata):
             return self._get_single_time_series(metadata, start_time, length)
         elif isinstance(metadata, NonSequentialTimeSeriesMetadata):
             return self._get_nonsequential_time_series(metadata)
+        elif isinstance(metadata, DeterministicMetadata):
+            ts_data = self._arrays.get(metadata.time_series_uuid)
+            if ts_data is None:
+                msg = f"No time series with {metadata.time_series_uuid} is stored"
+                raise ISNotStored(msg)
+
+            # Deterministic time series with 1D data is not supported
+            msg = "Single-dimensional data is not supported for Deterministic time series"
+            raise ValueError(msg)
         raise NotImplementedError(str(metadata.get_time_series_data_type()))
 
-    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+    def remove_time_series(self, metadata: TimeSeriesMetadata, context: Any = None) -> None:
         time_series = self._arrays.pop(metadata.time_series_uuid, None)
         if time_series is None:
             msg = f"No time series with {metadata.time_series_uuid} is stored"
@@ -80,6 +90,21 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
     ) -> None:
         msg = "Bug: InMemoryTimeSeriesStorage.serialize should never be called."
         raise Exception(msg)
+
+    @classmethod
+    def deserialize(
+        cls,
+        data: dict[str, Any],
+        time_series_dir: Path,
+        dst_time_series_directory: Path | None,
+        read_only: bool,
+        **kwargs: Any,
+    ) -> tuple["InMemoryTimeSeriesStorage", None]:
+        """Deserialize in-memory storage - should not be called during normal deserialization."""
+        msg = "De-serialization does not support in-memory time series storage."
+        from infrasys.exceptions import ISOperationNotAllowed
+
+        raise ISOperationNotAllowed(msg)
 
     def _get_single_time_series(
         self,
@@ -97,16 +122,14 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             index, length = metadata.get_range(start_time=start_time, length=length)
             ts_data = ts_data[index : index + length]
 
-        if metadata.quantity_metadata is not None:
-            ts_data = metadata.quantity_metadata.quantity_type(
-                ts_data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            ts_data = metadata.units.quantity_type(ts_data, metadata.units.units)
         assert ts_data is not None
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             resolution=metadata.resolution,
-            initial_time=start_time or metadata.initial_time,
+            initial_timestamp=start_time or metadata.initial_timestamp,
             data=ts_data,
             normalization=metadata.normalization,
         )
@@ -124,15 +147,13 @@ class InMemoryTimeSeriesStorage(TimeSeriesStorageBase):
             msg = f"No time series timestamps with {metadata.time_series_uuid} is stored"
             raise ISNotStored(msg)
 
-        if metadata.quantity_metadata is not None:
-            ts_data = metadata.quantity_metadata.quantity_type(
-                ts_data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            ts_data = metadata.units.quantity_type(ts_data, metadata.units.units)
         assert ts_data is not None
         assert ts_timestamps is not None
         return NonSequentialTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             data=ts_data,
             timestamps=ts_timestamps,
             normalization=metadata.normalization,

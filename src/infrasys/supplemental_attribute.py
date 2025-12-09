@@ -24,7 +24,7 @@ class SupplementalAttribute(InfraSysBaseModelWithIdentifers):
         """Custom serialization for this package"""
 
         refs = {}
-        for x in self.model_fields:
+        for x in type(self).model_fields:
             val = self._model_dump_field(x)
             if val is not None:
                 refs[x] = val
@@ -36,8 +36,8 @@ class SupplementalAttribute(InfraSysBaseModelWithIdentifers):
         val = getattr(self, field)
         if isinstance(val, BaseQuantity):
             data = val.to_dict()
-            data[TYPE_METADATA] = SerializedTypeMetadata(
-                fields=SerializedQuantityType(
+            data[TYPE_METADATA] = SerializedTypeMetadata.validate_python(
+                SerializedQuantityType(
                     module=val.__module__,
                     type=val.__class__.__name__,
                 ),

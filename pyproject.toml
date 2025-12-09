@@ -1,60 +1,53 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
 
 [project]
 name = "infrasys"
-version = "0.5.2"
+version = "1.0.0rc3"
 description = ''
 readme = "README.md"
 requires-python = ">=3.11, <3.14"
 license = "BSD-3-Clause"
-keywords = []
+keywords = [
+    "infrastructure",
+    "time-series",
+    "energy",
+    "grid",
+    "data-storage",
+]
 authors = [
     { name = "Aadil Latif", email = "aadil.latif@nrel.gov" },
     { name = "Daniel Thom", email = "daniel.thom@nrel.gov" },
     { name = "Kapil Duwadi", email = "kapil.duwadi@nrel.gov" },
-    { name = "Pedro Andres Sanchez Perez", email = "pedroandres.sanchezperez@nrel.gov" },
+    { name = "Pedro Andres Sanchez Perez", email = "pesap@users.noreply.github.com" },
     { name = "Tarek Elgindy", email = "tarek.elgindy@nrel.gov" },
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "loguru~=0.7.2",
+    "h5py>=3.13,<4",
+    "loguru>=0.7,<0.8",
     "numpy >= 2, < 3",
-    "pandas >= 2, < 3",
+    "orjson>=3.11.5,<4",
+    "pandas>=2,<3",
     "pint~=0.23",
-    "pyarrow~=19.0",
-    "pydantic >= 2.7, < 3",
-    "python-dateutil>=2.9.0.post0",
-    "rich~=13.7.1",
+    "pyarrow>=21,<23",
+    "pydantic>=2.12,<3",
+    "python-dateutil>=2.9,<3",
+    "rich>=13.7,<14",
 ]
 [project.optional-dependencies]
 chronify = [
     "chronify ~= 0.3.1",
-]
-dev = [
-    "autodoc_pydantic~=2.0",
-    "furo",
-    "mypy >=1.13, < 2",
-    "myst_parser",
-    "pandas-stubs",
-    "pre-commit",
-    "pyarrow-stubs",
-    "pytest",
-    "pytest-cov",
-    "ruff",
-    "sphinx",
-    "sphinx-click",
-    "sphinx-copybutton",
-    "sphinx-tabs~=3.4",
 ]
 
 [project.urls]
@@ -70,10 +63,16 @@ files = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = "src"
-minversion = "6.0"
-addopts = "-ra"
+pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--cov=infrasys",
+    "--cov-report=term-missing:skip-covered",
+]
+filterwarnings = [
+    "ignore::duckdb_engine.DuckDBEngineWarning",
+]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -121,10 +120,29 @@ docstring-code-line-length = "dynamic"
 [dependency-groups]
 dev = [
     "ipython>=9.1.0",
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "infrasys[chronify]",
+    "ruff",
     "types-python-dateutil>=2.9.0.20241206",
     "mypy >=1.13, < 2",
     "pandas-stubs",
     "pyarrow-stubs",
+    "pytest-missing-modules>=0.2.1",
+    "h5py-stubs>=0.1.2",
+]
+docs = [
+    "autodoc_pydantic~=2.0",
+    "furo",
+    "myst_parser",
+    "ipython>=9.1.0",
+    "types-python-dateutil>=2.9.0.20241206",
+    "pytest-missing-modules>=0.2.1",
+    "sphinx",
+    "sphinx-click",
+    "sphinx-copybutton",
+    "sphinx-tabs~=3.4",
 ]
 
 [tool.ruff.lint.per-file-ignores]

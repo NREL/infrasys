@@ -21,4 +21,3 @@
 .. automodule:: infrasys.quantities
    :members:
 ```
-

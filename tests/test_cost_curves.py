@@ -1,7 +1,8 @@
+from infrasys import Component
 from infrasys.cost_curves import CostCurve, FuelCurve, ProductionVariableCostCurve, UnitSystem
 from infrasys.function_data import LinearFunctionData
 from infrasys.value_curves import InputOutputCurve, LinearCurve
-from infrasys import Component
+
 from .models.simple_system import SimpleSystem
 
 
@@ -13,7 +14,7 @@ class NestedCostCurve(ProductionVariableCostCurve):
     variable: CostCurve | FuelCurve | None = None
 
 
-class TestComponentWithProductionCost(Component):
+class ComponentWithProductionCost(Component):
     cost: NestedCostCurve | None = None
 
 
@@ -85,7 +86,7 @@ def test_value_curve_custom_serialization():
 def test_nested_value_curve_serialization(tmp_path):
     system = SimpleSystem(auto_add_composed_components=True)
     gen_name = "thermal-gen"
-    gen_with_operation_cost = TestComponentWithProductionCost(
+    gen_with_operation_cost = ComponentWithProductionCost(
         name=gen_name,
         cost=NestedCostCurve(
             power_units=UnitSystem.NATURAL_UNITS,
@@ -102,6 +103,6 @@ def test_nested_value_curve_serialization(tmp_path):
 
     # Test deserialization
     deserialized_system = SimpleSystem.from_json(filename)
-    gen_deserialized = deserialized_system.get_component(TestComponentWithProductionCost, gen_name)
+    gen_deserialized = deserialized_system.get_component(ComponentWithProductionCost, gen_name)
     assert gen_deserialized is not None
     assert gen_deserialized.cost == gen_with_operation_cost.cost

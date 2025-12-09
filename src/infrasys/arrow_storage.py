@@ -3,22 +3,26 @@
 import atexit
 import shutil
 from datetime import datetime
+from functools import singledispatchmethod
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any, Optional
-from functools import singledispatchmethod
 
 import numpy as np
-from numpy.typing import NDArray
 import pyarrow as pa
 from loguru import logger
+from numpy.typing import NDArray
 
 from infrasys.exceptions import ISNotStored
 from infrasys.time_series_models import (
-    SingleTimeSeries,
-    SingleTimeSeriesMetadata,
+    AbstractDeterministic,
+    Deterministic,
+    DeterministicMetadata,
+    DeterministicTimeSeriesType,
     NonSequentialTimeSeries,
     NonSequentialTimeSeriesMetadata,
+    SingleTimeSeries,
+    SingleTimeSeriesMetadata,
     TimeSeriesData,
     TimeSeriesMetadata,
     TimeSeriesStorageType,
@@ -51,6 +55,23 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         directory.mkdir(exist_ok=True)
         return cls(directory)
 
+    @classmethod
+    def deserialize(
+        cls,
+        data: dict[str, Any],
+        time_series_dir: Path,
+        dst_time_series_directory: Path | None,
+        read_only: bool,
+        **kwargs: Any,
+    ) -> tuple["ArrowTimeSeriesStorage", None]:
+        """Deserialize Arrow storage from serialized data."""
+        if read_only:
+            storage = cls.create_with_permanent_directory(time_series_dir)
+        else:
+            storage = cls.create_with_temp_directory(base_directory=dst_time_series_directory)
+            storage.serialize({}, storage.get_time_series_directory(), src=time_series_dir)
+        return storage, None
+
     def get_time_series_directory(self) -> Path:
         return self._ts_directory
 
@@ -58,7 +79,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         self,
         metadata: TimeSeriesMetadata,
         time_series: TimeSeriesData,
-        connection: Any = None,
+        context: Any = None,
     ) -> None:
         self._add_time_series(time_series)
 
@@ -99,24 +120,178 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         else:
             logger.debug("{} was already stored", time_series_uuid)
 
+    @_add_time_series.register(AbstractDeterministic)
+    def _(self, time_series):
+        """Store deterministic forecast time series data as a 2D matrix.
+
+        Each row represents a forecast window, and each column represents a time step
+        in the forecast horizon. The data is stored as a single array of arrays.
+        """
+        time_series_uuid = time_series.uuid
+        fpath = self._ts_directory.joinpath(f"{time_series_uuid}{EXTENSION}")
+
+        if not fpath.exists():
+            forecast_data = time_series.data_array
+
+            forecast_list = forecast_data.tolist()
+
+            schema = pa.schema([pa.field(str(time_series_uuid), pa.list_(pa.list_(pa.float64())))])
+
+            arrow_batch = pa.record_batch([pa.array([forecast_list])], schema=schema)
+
+            # Write to disk
+            with pa.OSFile(str(fpath), "wb") as sink:  # type: ignore
+                with pa.ipc.new_file(sink, arrow_batch.schema) as writer:
+                    writer.write(arrow_batch)
+
+            logger.trace("Saving deterministic time series to {}", fpath)
+            logger.debug("Added {} to time series storage", time_series_uuid)
+        else:
+            logger.debug("{} was already stored", time_series_uuid)
+
     def get_time_series(
         self,
         metadata: TimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: Any = None,
-    ) -> Any:
-        if isinstance(metadata, SingleTimeSeriesMetadata):
-            return self._get_single_time_series(
-                metadata=metadata, start_time=start_time, length=length
-            )
+        context: Any = None,
+    ) -> TimeSeriesData:
+        """Return a time series array using the appropriate handler based on metadata type."""
+        return self._get_time_series_dispatch(
+            metadata, start_time=start_time, length=length, context=context
+        )
 
-        elif isinstance(metadata, NonSequentialTimeSeriesMetadata):
-            return self._get_nonsequential_time_series(metadata=metadata)
+    @singledispatchmethod
+    def _get_time_series_dispatch(
+        self,
+        metadata: TimeSeriesMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        context: Any = None,
+    ) -> TimeSeriesData:
         msg = f"Bug: need to implement get_time_series for {type(metadata)}"
         raise NotImplementedError(msg)
 
-    def remove_time_series(self, metadata: TimeSeriesMetadata, connection: Any = None) -> None:
+    @_get_time_series_dispatch.register(SingleTimeSeriesMetadata)
+    def _(
+        self,
+        metadata: SingleTimeSeriesMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        context: Any = None,
+    ) -> SingleTimeSeries:
+        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
+        with pa.memory_map(str(fpath), "r") as source:
+            base_ts = pa.ipc.open_file(source).get_record_batch(0)
+            logger.trace("Reading time series from {}", fpath)
+        index, length = metadata.get_range(start_time=start_time, length=length)
+        columns = base_ts.column_names
+        if len(columns) != 1:
+            msg = f"Bug: expected a single column: {columns=}"
+            raise Exception(msg)
+        # This should be equal to metadata.time_series_uuid in versions
+        # v0.2.1 or later. Earlier versions used the time series variable name.
+        column = columns[0]
+        data = base_ts[column][index : index + length]
+        if metadata.units is not None:
+            np_data_array = metadata.units.quantity_type(data, metadata.units.units)
+        else:
+            np_data_array = np.array(data)
+        return SingleTimeSeries(
+            uuid=metadata.time_series_uuid,
+            name=metadata.name,
+            resolution=metadata.resolution,
+            initial_timestamp=start_time or metadata.initial_timestamp,
+            data=np_data_array,
+        )
+
+    @_get_time_series_dispatch.register(NonSequentialTimeSeriesMetadata)
+    def _(
+        self,
+        metadata: NonSequentialTimeSeriesMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        context: Any = None,
+    ) -> NonSequentialTimeSeries:
+        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
+        with pa.memory_map(str(fpath), "r") as source:
+            base_ts = pa.ipc.open_file(source).get_record_batch(0)
+            logger.trace("Reading time series from {}", fpath)
+        columns = base_ts.column_names
+        if len(columns) != 2:
+            msg = f"Bug: expected two columns: {columns=}"
+            raise Exception(msg)
+        data_column, timestamps_column = columns[0], columns[1]
+        data, timestamps = (
+            base_ts[data_column],
+            base_ts[timestamps_column],
+        )
+        if metadata.units is not None:
+            np_data_array = metadata.units.quantity_type(data, metadata.units.units)
+        else:
+            np_data_array = np.array(data)
+        np_time_array = np.array(timestamps).astype("O")  # convert to datetime object
+        return NonSequentialTimeSeries(
+            uuid=metadata.time_series_uuid,
+            name=metadata.name,
+            data=np_data_array,
+            timestamps=np_time_array,
+            normalization=metadata.normalization,
+        )
+
+    @_get_time_series_dispatch.register(DeterministicMetadata)
+    def _(
+        self,
+        metadata: DeterministicMetadata,
+        start_time: datetime | None = None,
+        length: int | None = None,
+        context: Any = None,
+    ) -> DeterministicTimeSeriesType:
+        # Load deterministic data from file
+        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
+
+        if not fpath.exists():
+            msg = f"No time series with {metadata.time_series_uuid} is stored"
+            raise ISNotStored(msg)
+
+        # Regular Deterministic with stored 2D data - check if it's actually a nested array
+        with pa.memory_map(str(fpath), "r") as source:
+            base_ts = pa.ipc.open_file(source).get_record_batch(0)
+            logger.trace("Reading time series from {}", fpath)
+
+        columns = base_ts.column_names
+        if len(columns) != 1:
+            msg = f"Bug: expected a single column: {columns=}"
+            raise Exception(msg)
+
+        column = columns[0]
+
+        # Check if this is a nested array (Deterministic) or flat array (SingleTimeSeries used for Deterministic)
+        data = base_ts[column]
+        if isinstance(data, pa.ListArray):
+            # Regular Deterministic with 2D data stored as nested arrays
+            data = data[0]  # Get the nested array
+            if metadata.units is not None:
+                np_array = metadata.units.quantity_type(data, metadata.units.units)
+            else:
+                np_array = np.array(data)
+
+            return Deterministic(
+                uuid=metadata.time_series_uuid,
+                name=metadata.name,
+                resolution=metadata.resolution,
+                initial_timestamp=metadata.initial_timestamp,
+                horizon=metadata.horizon,
+                interval=metadata.interval,
+                window_count=metadata.window_count,
+                data=np_array,
+                normalization=metadata.normalization,
+            )
+        else:
+            msg = f"Unsupported metadata type for Deterministic: {type(metadata)}"
+            raise ValueError(msg)
+
+    def remove_time_series(self, metadata: TimeSeriesMetadata, context: Any = None) -> None:
         fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
         if not fpath.exists():
             msg = f"No time series with {metadata.time_series_uuid} is stored"
@@ -152,6 +327,7 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         metadata: SingleTimeSeriesMetadata,
         start_time: datetime | None = None,
         length: int | None = None,
+        context: Any = None,
     ) -> SingleTimeSeries:
         fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
         with pa.memory_map(str(fpath), "r") as source:
@@ -162,54 +338,18 @@ class ArrowTimeSeriesStorage(TimeSeriesStorageBase):
         if len(columns) != 1:
             msg = f"Bug: expected a single column: {columns=}"
             raise Exception(msg)
-        # This should be equal to metadata.time_series_uuid in versions
-        # v0.2.1 or later. Earlier versions used the time series variable name.
         column = columns[0]
         data = base_ts[column][index : index + length]
-        if metadata.quantity_metadata is not None:
-            np_array = metadata.quantity_metadata.quantity_type(
-                data, metadata.quantity_metadata.units
-            )
+        if metadata.units is not None:
+            np_array = metadata.units.quantity_type(data, metadata.units.units)
         else:
             np_array = np.array(data)
         return SingleTimeSeries(
             uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
+            name=metadata.name,
             resolution=metadata.resolution,
-            initial_time=start_time or metadata.initial_time,
+            initial_timestamp=start_time or metadata.initial_timestamp,
             data=np_array,
-            normalization=metadata.normalization,
-        )
-
-    def _get_nonsequential_time_series(
-        self,
-        metadata: NonSequentialTimeSeriesMetadata,
-    ) -> NonSequentialTimeSeries:
-        fpath = self._ts_directory.joinpath(f"{metadata.time_series_uuid}{EXTENSION}")
-        with pa.memory_map(str(fpath), "r") as source:
-            base_ts = pa.ipc.open_file(source).get_record_batch(0)
-            logger.trace("Reading time series from {}", fpath)
-        columns = base_ts.column_names
-        if len(columns) != 2:
-            msg = f"Bug: expected two columns: {columns=}"
-            raise Exception(msg)
-        data_column, timestamps_column = columns[0], columns[1]
-        data, timestamps = (
-            base_ts[data_column],
-            base_ts[timestamps_column],
-        )
-        if metadata.quantity_metadata is not None:
-            np_data_array = metadata.quantity_metadata.quantity_type(
-                data, metadata.quantity_metadata.units
-            )
-        else:
-            np_data_array = np.array(data)
-        np_time_array = np.array(timestamps).astype("O")  # convert to datetime object
-        return NonSequentialTimeSeries(
-            uuid=metadata.time_series_uuid,
-            variable_name=metadata.variable_name,
-            data=np_data_array,
-            timestamps=np_time_array,
             normalization=metadata.normalization,
         )
 

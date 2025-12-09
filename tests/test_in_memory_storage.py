@@ -1,16 +1,19 @@
-from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
-from .models.simple_system import SimpleSystem, SimpleBus, SimpleGenerator
-from infrasys.time_series_models import (
-    SingleTimeSeries,
-    NonSequentialTimeSeries,
-    TimeSeriesStorageType,
-)
-from infrasys.exceptions import ISAlreadyAttached
-from infrasys.arrow_storage import ArrowTimeSeriesStorage
-from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
+
 import numpy as np
 import pytest
+
+from infrasys.arrow_storage import ArrowTimeSeriesStorage
+from infrasys.chronify_time_series_storage import ChronifyTimeSeriesStorage
+from infrasys.exceptions import ISAlreadyAttached
+from infrasys.in_memory_time_series_storage import InMemoryTimeSeriesStorage
+from infrasys.time_series_models import (
+    NonSequentialTimeSeries,
+    SingleTimeSeries,
+    TimeSeriesStorageType,
+)
+
+from .models.simple_system import SimpleBus, SimpleGenerator, SimpleSystem
 
 
 @pytest.mark.parametrize(
@@ -64,8 +67,8 @@ def test_convert_storage_single_time_series(
     test_time_series_data = SingleTimeSeries(
         data=np.arange(24),
         resolution=timedelta(hours=1),
-        initial_time=datetime(2020, 1, 1),
-        variable_name="load",
+        initial_timestamp=datetime(2020, 1, 1),
+        name="load",
     )
     system.add_time_series(test_time_series_data, test_generator)
     with pytest.raises(ISAlreadyAttached):
@@ -75,9 +78,7 @@ def test_convert_storage_single_time_series(
 
     assert isinstance(system._time_series_mgr._storage, new_stype)
 
-    ts2 = system.get_time_series(
-        test_generator, time_series_type=SingleTimeSeries, variable_name="load"
-    )
+    ts2 = system.get_time_series(test_generator, time_series_type=SingleTimeSeries, name="load")
     assert np.array_equal(ts2.data_array, test_time_series_data.data_array)
 
 
@@ -117,7 +118,7 @@ def test_convert_storage_nonsequential_time_series(
     test_time_series_data = NonSequentialTimeSeries(
         data=np.arange(24),
         timestamps=timestamps,
-        variable_name="load",
+        name="load",
     )
     system.add_time_series(test_time_series_data, test_generator)
     with pytest.raises(ISAlreadyAttached):
@@ -126,7 +127,7 @@ def test_convert_storage_nonsequential_time_series(
 
     assert isinstance(system._time_series_mgr._storage, new_stype)
     ts2 = system.get_time_series(
-        test_generator, time_series_type=NonSequentialTimeSeries, variable_name="load"
+        test_generator, time_series_type=NonSequentialTimeSeries, name="load"
     )
     assert np.array_equal(ts2.data_array, test_time_series_data.data_array)
     assert np.array_equal(ts2.timestamps, test_time_series_data.timestamps)

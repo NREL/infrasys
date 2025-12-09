@@ -1,52 +1,66 @@
 """Defines a System"""
 
-from contextlib import contextmanager
-import json
 import shutil
 import sqlite3
-from operator import itemgetter
+import tempfile
+import zipfile
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime
+from operator import itemgetter
 from pathlib import Path
-from typing import Any, Callable, Generator, Iterable, Optional, Type, TypeVar
+from typing import Any, Callable, Generator, Iterable, Literal, Optional, Type, TypeAlias, TypeVar
 from uuid import UUID, uuid4
 
+import orjson
 from loguru import logger
 from rich import print as _pprint
 from rich.table import Table
 
-from infrasys.exceptions import (
-    ISFileExists,
-    ISConflictingArguments,
-    ISOperationNotAllowed,
-)
-from infrasys.models import make_label
-from infrasys.component import (
+from .component import (
     Component,
 )
-from infrasys.component_manager import ComponentManager
-from infrasys.serialization import (
+from .component_manager import ComponentManager
+from .exceptions import (
+    ISConflictingArguments,
+    ISFileExists,
+    ISInvalidParameter,
+    ISOperationNotAllowed,
+)
+from .migrations.db_migrations import (
+    metadata_store_needs_migration,
+    migrate_legacy_metadata_store,
+)
+from .migrations.metadata_migration import (
+    component_needs_metadata_migration,
+    migrate_component_metadata,
+)
+from .models import make_label
+from .serialization import (
+    TYPE_METADATA,
     CachedTypeHelper,
-    SerializedTypeMetadata,
     SerializedBaseType,
     SerializedComponentReference,
     SerializedQuantityType,
     SerializedType,
-    TYPE_METADATA,
+    SerializedTypeMetadata,
 )
-from infrasys.supplemental_attribute import SupplementalAttribute
-from infrasys.time_series_manager import TimeSeriesManager, TIME_SERIES_KWARGS
-from infrasys.time_series_models import (
-    DatabaseConnection,
+from .supplemental_attribute import SupplementalAttribute
+from .supplemental_attribute_manager import SupplementalAttributeManager
+from .time_series_manager import TIME_SERIES_KWARGS, TimeSeriesManager
+from .time_series_models import (
+    SingleTimeSeries,
     TimeSeriesData,
     TimeSeriesKey,
     TimeSeriesMetadata,
+    TimeSeriesStorageContext,
 )
-from infrasys.supplemental_attribute_manager import SupplementalAttributeManager
-from infrasys.utils.sqlite import backup, create_in_memory_db, restore
+from .utils.sqlite import backup, create_in_memory_db, restore
+from .utils.time_utils import from_iso_8601
 
 T = TypeVar("T", bound="Component")
 U = TypeVar("U", bound="SupplementalAttribute")
+FileMode: TypeAlias = Literal["r", "r+", "a"]
 
 
 class System:
@@ -109,11 +123,45 @@ class System:
         self._supplemental_attr_mgr = (
             supplemental_attribute_manager or SupplementalAttributeManager(self._con)
         )
+        self._closed = False
 
         self._data_format_version: Optional[str] = None
         # Note to devs: if you add new fields, add support in to_json/from_json as appropriate.
 
         # TODO: add pretty printing of components and time series
+
+    def close(self) -> None:
+        """Close open resources such as SQLite connections."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._component_mgr.close()
+        except Exception:
+            logger.debug("Error closing component manager", exc_info=True)
+
+        try:
+            self._time_series_mgr.close()
+        except Exception:
+            logger.debug("Error closing time series manager", exc_info=True)
+
+        if self._con is not None:
+            try:
+                self._con.close()
+            except Exception:
+                logger.debug("Error closing system SQLite connection", exc_info=True)
+
+    def __enter__(self) -> "System":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            logger.debug("Error closing system in destructor", exc_info=True)
 
     @property
     def auto_add_composed_components(self) -> bool:
@@ -190,11 +238,14 @@ class System:
             data["system"] = system_data
 
         backup(self._con, time_series_dir / self.DB_FILENAME)
-        self._time_series_mgr.serialize(system_data["time_series"], time_series_dir)
+        self._time_series_mgr.serialize(
+            system_data["time_series"], time_series_dir, db_name=self.DB_FILENAME
+        )
 
-        with open(filename, "w", encoding="utf-8") as f_out:
-            json.dump(data, f_out, indent=indent)
-            logger.info("Wrote system data to {}", filename)
+        data_dump = orjson.dumps(data)
+        with open(filename, "wb") as f_out:
+            f_out.write(data_dump)
+        logger.info("Wrote system data to {}", filename)
 
     @classmethod
     def from_json(
@@ -215,12 +266,116 @@ class System:
         --------
         >>> system = System.from_json("systems/system1.json")
         """
-        with open(filename, encoding="utf-8") as f_in:
-            data = json.load(f_in)
+        with open(filename, "rb") as f_in:
+            data = orjson.loads(f_in.read())
         time_series_parent_dir = Path(filename).parent
         return cls.from_dict(
             data, time_series_parent_dir, upgrade_handler=upgrade_handler, **kwargs
         )
+
+    @classmethod
+    def load(
+        cls,
+        zip_path: Path | str,
+        time_series_directory: Path | str | None = None,
+        upgrade_handler: Callable | None = None,
+        **kwargs: Any,
+    ) -> "System":
+        """Load a System from a zip archive created by the save() method.
+
+        The zip file will be extracted to a temporary directory, the system will be
+        deserialized, and the temporary files will be cleaned up automatically.
+        Time series storage files are copied to a permanent location during deserialization.
+
+        Parameters
+        ----------
+        zip_path : Path | str
+            Path to the zip file containing the system.
+        time_series_directory: Path | str
+            Path to the final time series location
+        upgrade_handler : Callable | None
+            Optional function to handle data format upgrades. Should only be set when the parent
+            package composes this package. If set, it will be called before de-serialization of
+            the components.
+        **kwargs : Any
+            Additional arguments passed to the System constructor. Refer to System constructor
+            for available options. Use `time_series_directory` to specify where time series
+            files should be stored.
+
+        Returns
+        -------
+        System
+            The deserialized system.
+
+        Raises
+        ------
+        ISFileExists
+            Raised if the zip file does not exist.
+        ISInvalidParameter
+            Raised if the zip file is not a valid zip archive or doesn't contain a valid system.
+        FileNotFoundError
+            Raised if there is no JSON file in the zip folder.
+
+        Examples
+        --------
+        >>> system = System.load("my_system.zip")
+        >>> system2 = System.load(Path("archived_systems/system1.zip"))
+        >>> # Specify where time series files should be stored
+        >>> system3 = System.load("my_system.zip", time_series_directory="/path/to/storage")
+
+        See Also
+        --------
+        save : Save a system to a directory or zip file
+        from_json : Load a system from a JSON file
+        """
+        if isinstance(zip_path, str):
+            zip_path = Path(zip_path)
+
+        if not zip_path.exists():
+            msg = f"Zip file does not exist: {zip_path}"
+            raise FileNotFoundError(msg)
+
+        if not zipfile.is_zipfile(zip_path):
+            msg = f"File is not a valid zip archive: {zip_path}"
+            raise ISInvalidParameter(msg)
+
+        # Create a temporary directory for extraction
+        with tempfile.TemporaryDirectory(dir=time_series_directory) as temp_dir:
+            temp_path = Path(temp_dir)
+
+            try:
+                with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                    zip_ref.extractall(temp_path)
+                logger.debug("Extracted {} to temporary directory {}", zip_path, temp_path)
+            except (zipfile.BadZipFile, OSError) as e:
+                msg = f"Failed to extract zip file {zip_path}: {e}"
+                raise ISInvalidParameter(msg) from e
+
+            # We need to find the JSON files since Zips can have different names
+            json_files = list(temp_path.rglob("*.json"))
+
+            if not json_files:
+                msg = f"No JSON file found in zip archive: {zip_path}"
+                raise ISInvalidParameter(msg)
+
+            if len(json_files) > 1:
+                msg = (
+                    f"Multiple JSON files found in zip archive: {zip_path}. "
+                    f"Expected exactly one system JSON file."
+                )
+                raise ISOperationNotAllowed(msg)
+
+            json_file = json_files[0]
+            logger.debug("Found system JSON file: {}", json_file)
+
+            kwargs["time_series_directory"] = time_series_directory
+            try:
+                system = cls.from_json(json_file, upgrade_handler=upgrade_handler, **kwargs)
+                logger.info("Loaded system from {}", zip_path)
+            except (OSError, KeyError, ValueError, TypeError) as e:
+                msg = f"Failed to deserialize system from {json_file}: {e}"
+                raise ISInvalidParameter(msg) from e
+            return system
 
     def to_records(
         self,
@@ -301,6 +456,10 @@ class System:
         )
         con = create_in_memory_db()
         restore(con, ts_path / data["time_series"]["directory"] / System.DB_FILENAME)
+
+        if metadata_store_needs_migration(con):
+            migrate_legacy_metadata_store(con)
+
         time_series_manager = TimeSeriesManager.deserialize(
             con, data["time_series"], ts_path, **ts_kwargs
         )
@@ -329,6 +488,9 @@ class System:
                     system.data_format_version,
                 )
         system.deserialize_system_attributes(system_data)
+
+        if component_needs_metadata_migration(system_data["components"][0]):
+            system_data["components"] = migrate_component_metadata(system_data["components"])
         system._deserialize_components(system_data["components"])
         system._deserialize_supplemental_attributes(system_data["supplemental_attributes"])
         logger.info("Deserialized system {}", system.label)
@@ -847,8 +1009,8 @@ class System:
                 self.remove_time_series(
                     component,
                     time_series_type=metadata.get_time_series_data_type(),
-                    variable_name=metadata.variable_name,
-                    **metadata.user_attributes,
+                    name=metadata.name,
+                    **metadata.features,
                 )
         self._component_mgr.remove(component, cascade_down=cascade_down, force=force)
 
@@ -918,8 +1080,8 @@ class System:
                 self.remove_time_series(
                     attribute,
                     time_series_type=metadata.get_time_series_data_type(),
-                    variable_name=metadata.variable_name,
-                    **metadata.user_attributes,
+                    name=metadata.name,
+                    **metadata.features,
                 )
         return self._supplemental_attr_mgr.remove(attribute)
 
@@ -961,8 +1123,8 @@ class System:
         self,
         time_series: TimeSeriesData,
         *owners: Component | SupplementalAttribute,
-        connection: DatabaseConnection | None = None,
-        **user_attributes: Any,
+        context: TimeSeriesStorageContext | None = None,
+        **features: Any,
     ) -> TimeSeriesKey:
         """Store a time series array for one or more components or supplemental attributes.
 
@@ -972,7 +1134,7 @@ class System:
             Time series data to store.
         owners : Component | SupplementalAttribute
             Add the time series to all of these components or supplemental attributes.
-        user_attributes : Any
+        features : Any
             Key/value pairs to store with the time series data. Must be JSON-serializable.
 
         Returns
@@ -994,7 +1156,7 @@ class System:
         >>> gen2 = system.get_component(Generator, "gen2")
         >>> ts = SingleTimeSeries.from_array(
             data=[0.86, 0.78, 0.81, 0.85, 0.79],
-            variable_name="active_power",
+            name="active_power",
             start_time=datetime(year=2030, month=1, day=1),
             resolution=timedelta(hours=1),
         )
@@ -1003,8 +1165,8 @@ class System:
         return self._time_series_mgr.add(
             time_series,
             *owners,
-            connection=connection,
-            **user_attributes,
+            context=context,
+            **features,
         )
 
     def copy_time_series(
@@ -1042,12 +1204,12 @@ class System:
     def get_time_series(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
+        name: str | None = None,
         time_series_type: Type[TimeSeriesData] | None = None,
         start_time: datetime | None = None,
         length: int | None = None,
-        connection: DatabaseConnection | None = None,
-        **user_attributes: str,
+        context: TimeSeriesStorageContext | None = None,
+        **features: str,
     ) -> Any:
         """Return a time series array.
 
@@ -1055,7 +1217,7 @@ class System:
         ----------
         component : Component
             Component to which the time series must be attached.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
             Required if the other inputs will match more than one time series.
         time_series_type : Type[TimeSeriesData] | None
@@ -1065,9 +1227,9 @@ class System:
             If not None, take a slice of the time series starting at this time.
         length : int | None
             If not None, take a slice of the time series with this length.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
-        connection
+        context: TimeSeriesStorageContext
             Optional, connection returned by :meth:`open_time_series_store`
 
         Raises
@@ -1095,12 +1257,12 @@ class System:
         """
         return self._time_series_mgr.get(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
-            connection=connection,
-            **user_attributes,
+            context=context,
+            **features,
         )
 
     def get_time_series_by_key(
@@ -1112,9 +1274,9 @@ class System:
     def has_time_series(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: Optional[str] = None,
-        time_series_type: Type[TimeSeriesData] | None = None,
-        **user_attributes: str,
+        name: Optional[str] = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **features: str,
     ) -> bool:
         """Return True if the component has time series matching the inputs.
 
@@ -1122,28 +1284,28 @@ class System:
         ----------
         component : Component
             Component to check for matching time series.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData]
             Optional, search for time series with this type.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
         """
         return self.time_series.has_time_series(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
 
     def list_time_series(
         self,
         component: Component,
-        variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] | None = None,
+        name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
         start_time: datetime | None = None,
         length: int | None = None,
-        **user_attributes: Any,
+        **features: Any,
     ) -> list[TimeSeriesData]:
         """Return all time series that match the inputs.
 
@@ -1151,7 +1313,7 @@ class System:
         ----------
         component : Component
             Component to which the time series must be attached.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData] | None
             Optional, search for time series with this type.
@@ -1159,7 +1321,7 @@ class System:
             If not None, take a slice of the time series starting at this time.
         length : int | None
             If not None, take a slice of the time series with this length.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
 
         Examples
@@ -1170,19 +1332,19 @@ class System:
         """
         return self._time_series_mgr.list_time_series(
             component,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
             start_time=start_time,
             length=length,
-            **user_attributes,
+            **features,
         )
 
     def list_time_series_keys(
         self,
         owner: Component | SupplementalAttribute,
-        variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] | None = None,
-        **user_attributes: Any,
+        name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **features: Any,
     ) -> list[TimeSeriesKey]:
         """Return all time series keys that match the inputs.
 
@@ -1190,11 +1352,11 @@ class System:
         ----------
         owner : Component | SupplementalAttribute
             Component to which the time series must be attached.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData] | None
             Optional, search for time series with this type.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
 
         Examples
@@ -1205,17 +1367,17 @@ class System:
         """
         return self.time_series.list_time_series_keys(
             owner,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
 
     def list_time_series_metadata(
         self,
         component: Component,
-        variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] | None = None,
-        **user_attributes: Any,
+        name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **features: Any,
     ) -> list[TimeSeriesMetadata]:
         """Return all time series metadata that match the inputs.
 
@@ -1223,11 +1385,11 @@ class System:
         ----------
         component : Component
             Component to which the time series must be attached.
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
         time_series_type : Type[TimeSeriesData] | None
             Optional, search for time series with this type.
-        user_attributes : str
+        features : str
             Optional, search for time series with these attributes.
 
         Examples
@@ -1238,17 +1400,17 @@ class System:
         """
         return self.time_series.list_time_series_metadata(
             component,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
 
     def remove_time_series(
         self,
         *owners: Component | SupplementalAttribute,
-        variable_name: str | None = None,
-        time_series_type: Type[TimeSeriesData] | None = None,
-        **user_attributes: Any,
+        name: str | None = None,
+        time_series_type: Type[TimeSeriesData] = SingleTimeSeries,
+        **features: Any,
     ) -> None:
         """Remove all time series arrays attached to the components or supplemental attributes
         matching the inputs.
@@ -1257,11 +1419,11 @@ class System:
         ----------
         owners
             Affected components or supplemental attributes
-        variable_name : str | None
+        name : str | None
             Optional, search for time series with this name.
-        time_series_type : Type[TimeSeriesData] | None
-            Optional, only remove time series with this type.
-        user_attributes : str
+        time_series_type : Type[TimeSeriesData]
+            Optional, search for time series with this type.
+        features : str
             Optional, search for time series with these attributes.
 
         Raises
@@ -1278,13 +1440,15 @@ class System:
         """
         return self._time_series_mgr.remove(
             *owners,
-            variable_name=variable_name,
+            name=name,
             time_series_type=time_series_type,
-            **user_attributes,
+            **features,
         )
 
     @contextmanager
-    def open_time_series_store(self) -> Generator[DatabaseConnection, None, None]:
+    def open_time_series_store(
+        self, mode: FileMode = "r+"
+    ) -> Generator[TimeSeriesStorageContext, None, None]:
         """Open a connection to the time series store. This can improve performance when
         reading or writing many time series arrays for specific backends (chronify and HDF5).
         It will also rollback any changes if an exception is raised.
@@ -1298,10 +1462,10 @@ class System:
         Examples
         --------
         >>> with system.open_time_series_store() as conn:
-        ...     system.add_time_series(ts1, gen1, connection=conn)
-        ...     system.add_time_series(ts2, gen1, connection=conn)
+        ...     system.add_time_series(ts1, gen1)
+        ...     system.add_time_series(ts2, gen1)
         """
-        with self._time_series_mgr.open_time_series_store() as conn:
+        with self._time_series_mgr.open_time_series_store(mode=mode) as conn:
             yield conn
 
     def serialize_system_attributes(self) -> dict[str, Any]:
@@ -1435,9 +1599,9 @@ class System:
         for component_dict in components:
             component = self._try_deserialize_component(component_dict, cached_types)
             if component is None:
-                metadata = SerializedTypeMetadata(**component_dict[TYPE_METADATA])
-                assert isinstance(metadata.fields, SerializedBaseType)
-                component_type = cached_types.get_type(metadata.fields)
+                metadata = SerializedTypeMetadata.validate_python(component_dict[TYPE_METADATA])
+                assert isinstance(metadata, SerializedBaseType)
+                component_type = cached_types.get_type(metadata)
                 skipped_types[component_type].append(component_dict)
             else:
                 deserialized_types.add(type(component))
@@ -1479,8 +1643,8 @@ class System:
         if values is None:
             return None
 
-        metadata = SerializedTypeMetadata(**component[TYPE_METADATA])
-        component_type = cached_types.get_type(metadata.fields)
+        metadata = SerializedTypeMetadata.validate_python(component[TYPE_METADATA])
+        component_type = cached_types.get_type(metadata)
         actual_component = component_type(**values)
         self._components.add(actual_component, deserialization_in_progress=True)
         return actual_component
@@ -1491,16 +1655,14 @@ class System:
         values = {}
         for field, value in component.items():
             if isinstance(value, dict) and TYPE_METADATA in value:
-                metadata = SerializedTypeMetadata(**value[TYPE_METADATA])
-                if isinstance(metadata.fields, SerializedComponentReference):
-                    composed_value = self._deserialize_composed_value(
-                        metadata.fields, cached_types
-                    )
+                metadata = SerializedTypeMetadata.validate_python(value[TYPE_METADATA])
+                if isinstance(metadata, SerializedComponentReference):
+                    composed_value = self._deserialize_composed_value(metadata, cached_types)
                     if composed_value is None:
                         return None
                     values[field] = composed_value
-                elif isinstance(metadata.fields, SerializedQuantityType):
-                    quantity_type = cached_types.get_type(metadata.fields)
+                elif isinstance(metadata, SerializedQuantityType):
+                    quantity_type = cached_types.get_type(metadata)
                     values[field] = quantity_type(value=value["value"], units=value["units"])
                 else:
                     msg = f"Bug: unhandled type: {field=} {value=}"
@@ -1510,11 +1672,11 @@ class System:
                 and value
                 and isinstance(value[0], dict)
                 and TYPE_METADATA in value[0]
-                and value[0][TYPE_METADATA]["fields"]["serialized_type"]
+                and value[0][TYPE_METADATA]["serialized_type"]
                 == SerializedType.COMPOSED_COMPONENT.value
             ):
-                metadata = SerializedTypeMetadata(**value[0][TYPE_METADATA])
-                assert isinstance(metadata.fields, SerializedComponentReference)
+                metadata = SerializedTypeMetadata.validate_python(value[0][TYPE_METADATA])
+                assert isinstance(metadata, SerializedComponentReference)
                 composed_values = self._deserialize_composed_list(value, cached_types)
                 if composed_values is None:
                     return None
@@ -1537,11 +1699,11 @@ class System:
     ) -> list[Any] | None:
         deserialized_components = []
         for component in components:
-            metadata = SerializedTypeMetadata(**component[TYPE_METADATA])
-            assert isinstance(metadata.fields, SerializedComponentReference)
-            component_type = cached_types.get_type(metadata.fields)
+            metadata = SerializedTypeMetadata.validate_python(component[TYPE_METADATA])
+            assert isinstance(metadata, SerializedComponentReference)
+            component_type = cached_types.get_type(metadata)
             if cached_types.allowed_to_deserialize(component_type):
-                deserialized_components.append(self._components.get_by_uuid(metadata.fields.uuid))
+                deserialized_components.append(self._components.get_by_uuid(metadata.uuid))
             else:
                 return None
         return deserialized_components
@@ -1552,8 +1714,8 @@ class System:
         """Deserialize supplemental_attributes from dictionaries and add them to the system."""
         cached_types = CachedTypeHelper()
         for sa_dict in supplemental_attributes:
-            metadata = SerializedTypeMetadata(**sa_dict[TYPE_METADATA])
-            supplemental_attribute_type = cached_types.get_type(metadata.fields)
+            metadata = SerializedTypeMetadata.validate_python(sa_dict[TYPE_METADATA])
+            supplemental_attribute_type = cached_types.get_type(metadata)
             values = self._deserialize_fields(sa_dict, cached_types)
             attr = supplemental_attribute_type(**values)
             self._supplemental_attr_mgr.add(None, attr, deserialization_in_progress=True)
@@ -1563,13 +1725,72 @@ class System:
     def _make_time_series_directory(filename: Path) -> Path:
         return filename.parent / (filename.stem + "_time_series")
 
-    def show_components(self, component_type):
-        # Filtered view of certain concrete types (not really concrete types)
-        # We can implement custom printing if we want
-        # Dan suggest to remove UUID, system.UUID from component.
-        # Nested components gets special handling.
-        # What we do with components w/o names? Use .label for nested components.
-        raise NotImplementedError
+    def show_components(
+        self,
+        component_type: Type[Component],
+        show_uuid: bool = False,
+        show_time_series: bool = False,
+        show_supplemental: bool = False,
+    ) -> None:
+        """Display a table of components of the specified type.
+
+        Parameters
+        ----------
+        component_type : Type[Component]
+            The type of components to display. If component_type is an abstract type,
+            all matching subtypes will be included.
+        show_uuid : bool
+            Whether to include the UUID column in the table. Defaults to False.
+        show_time_series : bool
+            Whether to include the Time Series count column in the table. Defaults to False.
+        show_time_series : bool
+            Whether to include the Supplemental Attributes count column in the table. Defaults to False.
+
+        Examples
+        --------
+        >>> system.show_components(Generator)  # Shows only names
+        >>> system.show_components(Bus, show_uuid=True)
+        >>> system.show_components(Generator, show_time_series=True)
+        >>> system.show_components(Generator, show_supplemental=True)
+        """
+        components = list(self.get_components(component_type))
+
+        if not components:
+            logger.warning(f"No components of type {component_type.__name__} found in the system.")
+            return
+
+        table = Table(
+            title=f"{component_type.__name__}: {len(components)}",
+            show_header=True,
+            title_justify="left",
+            title_style="bold",
+        )
+        table.add_column("Name", min_width=20, justify="left")
+
+        if show_uuid:
+            table.add_column("UUID", min_width=36, justify="left")
+        if show_time_series:
+            table.add_column("Has Time Series", min_width=12, justify="right")
+        if show_supplemental:
+            table.add_column("Has Supplemental Attributes", min_width=12, justify="right")
+
+        sorted_components = sorted(components, key=lambda x: getattr(x, "name", x.label))
+
+        for component in sorted_components:
+            row_data = [component.name]
+
+            if show_uuid:
+                row_data.append(str(component.uuid))
+            if show_time_series:
+                row_data.append(str(len(self.list_time_series_metadata(component))))
+            if show_supplemental:
+                row_data.append(
+                    str(len(self.get_supplemental_attributes_with_component(component)))
+                )
+
+            table.add_row(*row_data)
+
+        _pprint(table)
 
     def info(self):
         info = SystemInfo(system=self)
@@ -1603,6 +1824,7 @@ class SystemInfo:
             component_type_count,
             time_series_type_count,
         ) = self.extract_system_counts()
+        owner_type_count = self._get_owner_type_counts(component_type_count)
 
         # System table
         system_table = Table(
@@ -1617,6 +1839,8 @@ class SystemInfo:
         system_table.add_row("Data format version", self.system._data_format_version)
         system_table.add_row("Components attached", f"{component_count}")
         system_table.add_row("Time Series attached", f"{time_series_count}")
+        total_suppl_attrs = self.system.get_num_supplemental_attributes()
+        system_table.add_row("Supplemental Attributes attached", f"{total_suppl_attrs}")
         system_table.add_row("Description", self.system.description)
         _pprint(system_table)
 
@@ -1645,7 +1869,7 @@ class SystemInfo:
             title_justify="left",
             title_style="bold",
         )
-        time_series_table.add_column("Component Type", min_width=20)
+        time_series_table.add_column("Owner Type", min_width=20)
         time_series_table.add_column("Time Series Type", justify="right")
         time_series_table.add_column("Initial time", justify="right")
         time_series_table.add_column("Resolution", justify="right")
@@ -1658,14 +1882,26 @@ class SystemInfo:
             time_series_start_time,
             time_series_resolution,
         ), time_series_count in sorted(time_series_type_count.items(), key=itemgetter(slice(4))):
+            owner_count = owner_type_count.get(component_type, 0)
             time_series_table.add_row(
                 f"{component_type}",
                 f"{time_series_type}",
                 f"{time_series_start_time}",
-                f"{time_series_resolution}",
-                f"{component_type_count[component_type]}",
+                f"{from_iso_8601(time_series_resolution)}",
+                f"{owner_count}",
                 f"{time_series_count}",
             )
 
         if time_series_table.rows:
             _pprint(time_series_table)
+
+    def _get_owner_type_counts(self, component_type_count: dict[str, int]) -> dict[str, int]:
+        """Combine component and supplemental attribute counts by type for summary tables."""
+        owner_type_count = dict(component_type_count)
+        supplemental_attribute_counts: dict[str, int] = defaultdict(int)
+
+        for attribute in self.system._supplemental_attr_mgr.iter_all():
+            supplemental_attribute_counts[type(attribute).__name__] += 1
+
+        owner_type_count.update(supplemental_attribute_counts)
+        return owner_type_count

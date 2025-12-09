@@ -36,7 +36,6 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
         return core_schema.with_info_after_validator_function(
             cls._validate,
             core_schema.any_schema(),
-            field_name=handler.field_name,
             serialization=core_schema.plain_serializer_function_ser_schema(
                 cls._serialize,
                 info_arg=True,
@@ -50,15 +49,15 @@ class BaseQuantity(ureg.Quantity):  # type: ignore
         # Type check is more robubst to check that is not an instance of a bare "BaseQuantity"
         if type(field_value) is cls:
             if cls.__base_unit__:
-                assert field_value.check(
-                    cls.__base_unit__
-                ), f"Unit must be compatible with {cls.__base_unit__}"
+                assert field_value.check(cls.__base_unit__), (
+                    f"Unit must be compatible with {cls.__base_unit__}"
+                )
                 return field_value
         if isinstance(field_value, pint.Quantity):
             if cls.__base_unit__:
-                assert field_value.check(
-                    cls.__base_unit__
-                ), f"Unit must be compatible with {cls.__base_unit__}"
+                assert field_value.check(cls.__base_unit__), (
+                    f"Unit must be compatible with {cls.__base_unit__}"
+                )
                 return cls(field_value.magnitude, field_value.units)
         return cls(field_value, cls.__base_unit__)
 

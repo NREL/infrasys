@@ -1,4 +1,6 @@
-from infrasys.utils.path_utils import delete_if_exists
+import os
+
+from infrasys.utils.path_utils import clean_tmp_folder, delete_if_exists
 
 
 def test_delete_if_exists(tmp_path) -> None:
@@ -14,3 +16,12 @@ def test_delete_if_exists(tmp_path) -> None:
         assert path.exists()
         assert delete_if_exists(path)
         assert not path.exists()
+
+
+def test_clean_tmp_folder(tmp_path) -> None:
+    nested = tmp_path / "keep_me" / "child"
+    nested.mkdir(parents=True)
+    (nested / "file.txt").write_text("data")
+
+    clean_tmp_folder(tmp_path / "keep_me")
+    assert not os.path.exists(tmp_path / "keep_me")
