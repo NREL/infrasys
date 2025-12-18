@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/NREL/infrasys/compare/v1.0.0...v1.0.1) (2025-12-18)
+
+
+### Bug Fixes
+
+* **h5:** compression settings where not being copied correctly. ([#130](https://github.com/NREL/infrasys/issues/130)) ([34dc36d](https://github.com/NREL/infrasys/commit/34dc36dfd1a0fd2be98c01ac9857a672a42a8d19))
+
 ## [1.0.0](https://github.com/NREL/infrasys/compare/v1.0.0...v1.0.0) (2025-12-09)
 
 
