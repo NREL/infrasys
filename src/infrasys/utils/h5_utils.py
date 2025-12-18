@@ -44,9 +44,11 @@ def copy_h5_group(src_group: h5py.Group, dst_group: h5py.Group) -> None:
             # Recursively copy group
             dst_subgroup = dst_group.create_group(key)
             copy_h5_group(src_item, dst_subgroup)
-            # Copy group attributes
-            for attr_key, attr_val in src_item.attrs.items():
-                dst_subgroup.attrs[attr_key] = attr_val
+
+    # Copy attributes for the source group into the destination group, this ensures metadata
+    # such as compression settings on the storage root are preserved.
+    for attr_key, attr_val in src_group.attrs.items():
+        dst_group.attrs[attr_key] = attr_val
 
 
 def extract_h5_dataset_to_bytes(group: h5py.Group | h5py.File, dataset_path: str) -> bytes:

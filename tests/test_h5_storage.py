@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pytest
 
@@ -119,6 +120,37 @@ def test_h5py_serialization(tmp_path, system_with_h5_storage):
     gen2 = system.get_component(SimpleGenerator, name="gen1")
     time_series = system_deserialized.get_time_series(gen2)
     assert np.array_equal(time_series.data, ts.data)
+
+
+def test_h5_serialization_preserves_compression_settings(tmp_path, system_with_h5_storage):
+    system = system_with_h5_storage
+
+    bus = SimpleBus(name="test", voltage=1.1)
+    gen = SimpleGenerator(name="gen1", active_power=1.0, rating=1.0, bus=bus, available=True)
+
+    system.add_component(gen)
+
+    ts = SingleTimeSeries.from_array(
+        data=range(100),
+        name="active_power",
+        initial_timestamp=datetime(year=2020, month=1, day=1),
+        resolution=timedelta(hours=1),
+    )
+    system.add_time_series(ts, gen, scenario="one", model_year="2030")
+
+    fpath = tmp_path / Path("compression.json")
+    system.to_json(fpath)
+    storage_dir = tmp_path / f"{fpath.stem}_time_series"
+    storage_file = storage_dir / system._time_series_mgr.storage.STORAGE_FILE
+    assert storage_file.exists()
+
+    with h5py.File(storage_file, "r") as file_handle:
+        root = file_handle[HDF5TimeSeriesStorage.HDF5_TS_ROOT_PATH]
+        attrs = root.attrs
+        assert not attrs["compression_enabled"]
+        assert attrs["compression_type"] == "DEFLATE"
+        assert attrs["compression_level"] == 5
+        assert attrs["compression_shuffle"]
 
 
 def test_h5_context_manager(system_with_h5_storage):
